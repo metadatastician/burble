@@ -29,7 +29,7 @@ name = "burble"
 # VeriSimDB — Persistent store (internal network only, not exposed)
 # =============================================================================
 [services.verisimdb]
-build = { context = "../../nextgen-databases/verisimdb", dockerfile = "Containerfile" }
+image = "ghcr.io/hyperpolymath/verisimdb:latest"
 restart = "unless-stopped"
 networks = ["burble-internal"]
 healthcheck = { test = "wget -q --spider http://localhost:8080/health || exit 1", interval = "30s", timeout = "5s", retries = 3 }
