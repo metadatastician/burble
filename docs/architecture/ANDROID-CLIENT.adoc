@@ -1,0 +1,435 @@
+// SPDX-License-Identifier: PMPL-1.0-or-later
+// SPDX-FileCopyrightText: 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+= Burble Android Client — Design Plan
+:toc: preamble
+:toclevels: 3
+:icons: font
+
+[NOTE]
+====
+*Status:* Design only — no code yet. Phase 0 is ready to start (four files in this repo, mergeable as a single PR). This document is the authoritative plan; if it disagrees with a memory pointer or chat scrollback, this file wins.
+
+*Authored:* 2026-05-13.
+====
+
+== TL;DR
+
+Burble's first native Android client lives in `client/android/`, parallel to `client/web/` and `client/desktop/`. It exercises Gabeldorsche-era Bluetooth surfaces (LE Audio BAP/PBP, LE COC, Channel Sounding, extended advertising) that web and desktop can't reach. The neurosymbolic AI sibling repo `neurophone` consumes Burble's BLE advertisements as a *presence sensor only* (no mic, no voice), feeding its existing sensor → LSM → ESN → bridge pipeline.
+
+Two repos, no third. Burble owns the wire protocol, the Android voice client, and the server bridge. Neurophone owns one extra Rust crate and one Kotlin package — purely sensor-class.
+
+== Two-repo layout
+
+[cols="2,1,3",options="header"]
+|===
+| Concern | Repo | Where
+
+| Native Burble voice client (mic, Opus, WebRTC, LE Audio)
+| *burble*
+| `client/android/` — new, sibling to `client/web/`, `client/desktop/`, `client/lib/`
+
+| Bluetooth presence/proximity signal (sensor-class)
+| *neurophone*
+| `crates/bt-presence/` + `android/app/.../bluetooth/`
+
+| Wire contract (advertisement schema, knock packet)
+| *burble* (authority)
+| `.machine_readable/6a2/{nearby-presence,ble-spa-knock}.a2ml`, `src/Burble/ABI/{NearbyPresence,BleSpa}.idr`, `client/lib/src/extensions/NeurophonePresence.affine`
+
+| Server-side bridge (presence event forwarding)
+| *burble*
+| `server/lib/burble/bridges/neurophone.ex` — pattern matches `mumble.ex`/`discord.ex`/`matrix.ex`
+|===
+
+Rationale: nothing to share beyond a schema, and burble already has the schema-owning machinery. IDApTIK/PanLL precedent — `client/lib/src/extensions/IDApTIKVoice.affine` — is the exact pattern. A third repo would just be an unbuilt house.
+
+== Defaults
+
+[cols="2,2,3",options="header"]
+|===
+| Decision | Value | Why
+
+| `libwebrtc` source
+| `io.getstream:stream-webrtc-android`
+| Active fork, AAR published, Apache-2.0, tracks upstream M-130s closely; google-webrtc abandoned 2022, LiveKit too opinionated.
+
+| `minSdk`
+| *35* (Android 15)
+| `DistanceMeasurementSession` (Channel Sounding) is API 35+. Reno 13 ships ColorOS 15. For a from-scratch native client, apologizing for Bluedroid-era devices is incoherent.
+
+| `targetSdk`
+| 36
+| Track current.
+
+| Smoke-test device
+| Oppo Reno 13 (Dimensity 8350, ColorOS 15)
+| Sole physical device. Phase 5 CS surface compiles but gracefully no-ops on hardware without BT 6.0 CS — no Pixel 9 added.
+
+| Audio offload
+| *Make full use*
+| `USAGE_VOICE_COMMUNICATION` + `CONTENT_TYPE_SPEECH` + `PERFORMANCE_MODE_LOW_LATENCY`. Never pull LC3 into the app — codec stays in the BT controller. Dimensity 8350 has *partial* offload — verify via runtime `OffloadProbe`, never promise.
+
+| Audio DSP
+| *Zig* (named `BurbleAudioDspNative.kt`)
+| WebRTC APM disabled. Soft-fallback exists but named-and-shamed — see <<audio-pipeline>>.
+
+| BLE advertising
+| *BLE-SPA only*
+| No legacy continuous-advertise mode. See <<ble-spa>>.
+
+| In-car HMI floor
+| MAP 1.4 + AVRCP 1.6 (+ LE Audio MCP/MCS/TMAP equivalents)
+| Modern metadata surfaces — `MessagingStyle`, `MediaSession`, `MediaBrowserServiceCompat`.
+
+| Bluetooth profile floors
+| LE Audio Unicast (BAP), Broadcast (PBP), Isochronous Channels, L2CAP CoC, EATT, extended advertising
+| The GD-only modern surfaces — the entire thesis of going native is reaching these.
+|===
+
+== Repository structure (file-by-file)
+
+=== Burble: new `client/android/`
+
+[source]
+----
+burble/client/android/
+├── settings.gradle.kts
+├── build.gradle.kts                       # AGP 8.7+, Kotlin 2.1, NDK 27
+├── gradle.properties                      # Java 17 toolchain
+├── app/
+│   ├── build.gradle.kts                   # minSdk 35, targetSdk 36
+│   └── src/main/
+│       ├── AndroidManifest.xml            # BLUETOOTH_CONNECT/SCAN/ADVERTISE,
+│       │                                  # RECORD_AUDIO, MODIFY_AUDIO_SETTINGS,
+│       │                                  # FOREGROUND_SERVICE_MICROPHONE,
+│       │                                  # FOREGROUND_SERVICE_CONNECTED_DEVICE,
+│       │                                  # POST_NOTIFICATIONS
+│       ├── res/xml/automotive_app_desc.xml   # Android Auto declaration
+│       ├── java/nexus/jewell/burble/
+│       │   ├── MainActivity.kt
+│       │   ├── BurbleNative.kt            # JNI surface
+│       │   ├── BurbleVoiceService.kt      # foregroundServiceType=microphone
+│       │   ├── audio/
+│       │   │   ├── BurbleAudioDsp.kt              # interface
+│       │   │   ├── BurbleAudioDspNative.kt        # Zig path (canonical)
+│       │   │   ├── BurbleAudioDspSoftFallback.kt  # WebRTC APM (named-and-shamed)
+│       │   │   ├── BurbleAudioDspSelector.kt
+│       │   │   ├── ZigDspBoundary.kt              # JNI shim, frame buffers
+│       │   │   ├── OffloadProbe.kt                # runtime offload telemetry
+│       │   │   ├── AudioRouter.kt                 # AudioManager + AudioDeviceCallback
+│       │   │   ├── LeAudioRouter.kt               # BluetoothLeAudio + BluetoothLeBroadcast
+│       │   │   └── ScoFallback.kt                 # HFP/A2DP fallback for non-LEA
+│       │   ├── bt/
+│       │   │   ├── LeCocSignaling.kt              # L2CAP CoC out-of-band SDP
+│       │   │   ├── BurbleAdvertiser.kt            # BluetoothLeAdvertiser, ext adv
+│       │   │   ├── BurbleScanner.kt               # ScanFilter on Burble UUID
+│       │   │   ├── NearbyDirectory.kt             # discover → handshake → CoC
+│       │   │   ├── BleSpaKnocker.kt               # one-shot SPA advertisement
+│       │   │   ├── BleSpaResponder.kt             # listens, verifies via Zig, replies
+│       │   │   ├── BleSpaState.kt                 # IDLE → KNOCKING → AWAITING → PAIRED
+│       │   │   └── NonceLog.kt                    # SQLite nonce-burnt ledger, prune > 5m
+│       │   ├── webrtc/
+│       │   │   ├── PeerConnection.kt
+│       │   │   └── E2eeInsertableStreams.kt       # X25519+AES-GCM parity with web
+│       │   ├── hmi/
+│       │   │   ├── BurbleMediaSession.kt          # MediaSessionCompat + MediaMetadata
+│       │   │   ├── BurbleMessagingNotifier.kt     # MessagingStyle → MAP 1.4
+│       │   │   └── BurbleMediaBrowserService.kt   # MediaBrowserServiceCompat → AVRCP 1.6
+│       │   └── ui/
+│       │       ├── theme/                         # palette from brand/
+│       │       └── screens/                       # rooms, settings, devices, nearby
+│       └── res/
+├── crates/                                # workspace, separate from burble/server
+│   ├── Cargo.toml
+│   ├── burble-android-jni/                # cdylib loaded by BurbleNative.kt
+│   │   ├── Cargo.toml
+│   │   └── src/
+│   │       ├── lib.rs
+│   │       ├── audio_capture.rs           # JNI → ffi/zig audio.zig
+│   │       ├── audio_render.rs
+│   │       └── reference_queue.rs         # AEC reference delay alignment
+│   ├── burble-core/                       # shared with desktop eventually
+│   │   └── src/{opus.rs, ptp.rs, e2ee.rs}
+│   └── burble-bt/                         # LE Audio + COC helpers via NDK BLE
+│       └── src/{coc.rs, lea.rs, ranging.rs}
+└── docs/
+    └── BLUETOOTH.adoc                     # GD-feature inventory + fallback matrix
+----
+
+=== Burble: extensions to existing tree (Phase 0 only)
+
+[source]
+----
+burble/
+├── .machine_readable/6a2/
+│   ├── nearby-presence.a2ml               # NEW — wire format for BLE adv payload
+│   ├── ble-spa-knock.a2ml                 # NEW — SPA knock packet format
+│   └── audio-pipeline.a2ml                # NEW — Zig=intended, soft-fallback=deprecated
+├── src/Burble/ABI/
+│   ├── NearbyPresence.idr                 # NEW — Idris2 type for adv payload
+│   ├── BleSpa.idr                         # NEW — knock payload + state machine proof
+│   └── AudioPipeline.idr                  # NEW — Native vs Fallback type-level distinction
+├── client/lib/src/extensions/
+│   ├── NeurophonePresence.affine          # NEW — AffineScript consumer signatures
+│   └── NeurophonePresence.res             # NEW — ReScript shim (transitional)
+├── server/lib/burble/bridges/
+│   └── neurophone.ex                      # NEW — GenServer per-room, opt-in
+└── ffi/zig/src/coprocessor/
+    ├── audio.zig                          # EXTEND — add aec_48k_10ms, ns_48k_10ms,
+    │                                      # agc_48k_10ms, adaptive_delay_estimator
+    └── firewall.zig                       # EXTEND — add ble_spa_verify(hmac, nonce, secret)
+----
+
+=== Neurophone: presence sensor (Phase 2 work, scaffolded in Phase 0 as stubs)
+
+[source]
+----
+neurophone/
+├── crates/bt-presence/                    # NEW crate, android target only
+│   ├── Cargo.toml
+│   └── src/
+│       ├── lib.rs                         # BtPresenceReading public struct
+│       ├── ble_scan.rs                    # JNI wrappers around BluetoothLeScanner
+│       ├── burble_filter.rs               # ScanFilter on Burble UUID, decode payload
+│       └── decay.rs                       # RSSI → presence score with exponential decay
+├── crates/sensors/src/
+│   └── bt_presence.rs                     # register BtPresenceReading as sensor variant
+├── crates/bridge/src/
+│   └── encode.rs                          # extend Bridge context: "3 known peers nearby"
+├── crates/neurophone-android/src/lib.rs   # add JNI: bt_scan_event, bt_lost
+└── android/app/src/main/
+    ├── AndroidManifest.xml                # add BLUETOOTH_SCAN (neverForLocation), BLUETOOTH_CONNECT
+    ├── java/ai/neurophone/
+    │   ├── NativeLib.kt                   # add btScanEvent, btLost
+    │   ├── bluetooth/
+    │   │   ├── BurbleNeighborScanner.kt   # BluetoothLeScanner on Burble UUID
+    │   │   ├── PresenceCollector.kt       # debounce, push into NativeLib
+    │   │   └── ConsentGate.kt             # toggle defaults OFF, separate from main sensors
+    │   └── NeurophoneService.kt           # start/stop scanner alongside accel
+    └── res/values/strings.xml             # consent copy
+----
+
+[[audio-pipeline]]
+== Audio pipeline — Zig DSP intent baked structurally
+
+=== Decision
+
+Zig is *the* audio engine. WebRTC's APM is disabled (`AudioProcessing.setEnabled(false)`). The Zig coprocessor sits between AAudio and WebRTC's Opus encoder. The WebRTC-DSP path exists but is named, scoped, and tracked-for-removal — not as a peer choice.
+
+=== Why intent must be structural, not stated
+
+A runtime flag `burble.audio.dsp = zig | webrtc` is a hedge that becomes load-bearing. Six months in, the fallback becomes "the safe option" by default and Zig becomes the experimental one. That's how the canonical path gets quietly retired without anyone deciding to retire it.
+
+Instead:
+
+[cols="1,2",options="header"]
+|===
+| Mechanism | What it enforces
+
+| Naming: `Native` vs `SoftFallback`
+| Not `zig` vs `webrtc`. Config says `burble.audio.dsp = native \| soft-fallback`. Anyone reading config or logs knows which path is canonical.
+
+| Module: `BurbleAudioDspSoftFallback.kt`
+| File name itself signals lesser status. File header: `// REMOVAL TARGET: v1.4 — delete when auto-fallback rate < 1% over 30 days`.
+
+| No user-facing toggle
+| The flag is dev-build only. Production users get Native, full stop. If Native fails, that's a P0 bug, not a "fallback engaged" event.
+
+| Idris2 type-level distinction
+| In `src/Burble/ABI/AudioPipeline.idr`, `Native` is the well-typed normal inhabitant. `SoftFallback` is reachable only via `Fallback : ErrorRecovery -> AudioPipeline`. The type system treats fallback as a *recovery state*, not a normal state.
+
+| Avow attestation
+| Hash-chain logs `audio_dsp_mode` per session — surrender becomes audit-visible, never silent.
+
+| A2ML manifest
+| `audio-pipeline.a2ml` declares `native` as `intended`, `soft-fallback` as `status: deprecated-on-arrival` with removal target. CI antipattern check reads this file to flag new code adding peer-status DSP implementations.
+
+| READINESS gate
+| Phase 1 exit criterion: ≥ 95% of telemetry-eligible sessions on `BurbleAudioDspNative` over rolling 7-day window. Below 95% = Phase 1 not done.
+
+| Surrender is a public act
+| If Zig genuinely fails: PR titled `feat(audio): retire native Zig DSP path` (not "fix"), README/EXPLAINME claims walked back in same PR, A2ML `intended` field flipped as explicit reversal record. Avow chain preserves the historical sessions where Zig did work.
+|===
+
+=== Pipeline
+
+[source]
+----
+CAPTURE PATH
+   BT mic (LEA, LC3 offloaded by controller)
+        ↓  AAudio PCM 48kHz mono LE16
+   AudioRecord  →  ByteBuffer (direct, SIMD-aligned)
+        ↓  JNI (zero-copy, 10ms frames = 480 samples)
+   Zig coprocessor:  AEC → NS → AGC → HPF
+        ↓  same ByteBuffer in-place
+   BurbleAudioDspNative  (extends AudioDeviceModule, WebRTC APM disabled)
+        ↓
+   WebRTC Opus encoder  →  network
+
+RENDER PATH
+   network  →  WebRTC Opus decoder
+        ↓  PCM 48kHz mono
+   BurbleAudioDspNative
+        ↓  JNI
+   Zig:  capture reference frame for AEC + optional spatial mix
+        ↓
+   AudioTrack (AAudio, LOW_LATENCY, VOICE_COMMUNICATION)
+        ↓  controller offloads LC3 encode
+   BT speaker
+----
+
+=== Boundary concerns to resolve before Phase 1
+
+. *AEC adaptive delay estimation.* Does Zig's existing AEC have it? If not: port WebRTC AEC3's delay block to Zig, or hybrid (WebRTC AEC + Zig NS/AGC). Inspect `ffi/zig/src/coprocessor/audio.zig` first.
+. *Reference signal timing under offload.* With controller-side LC3 encode, app-side PCM tap precedes BT-link delay. Echo path includes 20–60ms BT delay. Delay estimator must handle this, not just AAudio acoustic latency.
+. *Benchmark transfer.* Verify Zig speedup claims (26,350× LZ4 / 62× AEC) hold at 48kHz mono PCM 10ms frames. Current numbers in `EXPLAINME.adoc` may have been measured at different params; flag for honest follow-up.
+. *Frame size.* WebRTC uses 10ms frames (480 samples @ 48kHz). Zig AEC must accept this size or chunk internally. The Mumble bridge ships 60ms Opus — Zig must handle finer granularity here.
+. *JNI hot-path cost.* 100 crossings/sec per direction (capture + render @ 10ms). Cache method IDs via `JNI_OnLoad`, direct `ByteBuffer` (no `byte[]` copy), Rust uses `jni::objects::JByteBuffer.as_ptr()`. Budget: < 50 µs/frame combined.
+. *Memory ownership.* Java allocates one direct `ByteBuffer` per direction at session start; Rust takes `*mut u8`; Zig writes in-place. No frame-time allocation.
+
+[[ble-spa]]
+== BLE-SPA — Single Packet Authorisation over BLE advertising
+
+=== Decision
+
+BLE-SPA is *the* design. There is no legacy continuous-advertise mode in Burble Android. Same intent-structure rigor as the Zig DSP call: don't ship inferior option as peer choice.
+
+=== Rationale
+
+Standard BLE proximity discovery has both devices broadcasting continuously (~20 mA each, visible to anyone). Burble translates burble's existing IP-layer SPA (port 7373 + UDP 9 `--bolt` knock) down to the BLE adv layer. Devices stay in passive scan (~3 mA) and broadcast nothing until an authenticated knock is observed.
+
+[source]
+----
+Standard BLE proximity discovery:
+  Phone A:  continuously advertise "I'm here, room X"   ←  ~20 mA, visible to anyone
+  Phone B:  continuously scan for advertisers           ←  ~10 mA
+
+BLE-SPA:
+  Phone A:  passive scan only (no advertising)          ←  ~3 mA, invisible
+  Phone B:  passive scan only                           ←  ~3 mA, invisible
+  →  A sees nothing. B sees nothing. Neither is discoverable.
+
+When user opens app or accepts an invite:
+  App emits a one-shot SPA "knock" advertisement:
+    [magic "BRBL"] [hmac_sha256(timestamp ‖ room_secret ‖ nonce)[0..12]] [pub_short]
+  Knock broadcast for ~2 seconds, then stops.
+
+  Any peer in range with matching room_secret:
+    - verifies HMAC in Zig firewall.zig (single-use nonce, ±30s clock skew)
+    - if valid, responds with directed advertisement (only to knocker's MAC)
+    - both sides now know each other; opens L2CAP CoC
+----
+
+=== Properties
+
+[cols="3,1,1",options="header"]
+|===
+| Property | Standard BLE | Burble BLE-SPA
+
+| Passive scanners see the device
+| Yes
+| No
+
+| Bystander can fingerprint by MAC randomization quirks (Wisks paper, USENIX 2024)
+| Yes
+| No — no advertising
+
+| Eavesdropper can record presence over time
+| Yes
+| No
+
+| Replay attack on the knock
+| —
+| HMAC with timestamp + nonce, ±30s window, one-shot per nonce
+
+| Requires special hardware
+| No
+| No — standard `BluetoothLeAdvertiser` / `BluetoothLeScanner` APIs, payload differs
+
+| Idle battery
+| Significant
+| Near-zero (~3 mA passive scan)
+|===
+
+=== Toggle states (two-position)
+
+* *Off* (default): no BLE activity when app closed.
+* *Discoverable*: BLE-SPA mode. Foreground service with `FOREGROUND_SERVICE_CONNECTED_DEVICE`, persistent notification.
+
+No third "always-advertise" option ships. If a legitimate interop need surfaces, that's a feature request to evaluate, not a quietly-available fallback.
+
+=== Room secret derivation
+
+`room_secret` derives from the existing room invite token (same one that authorizes WebSocket signaling join). Having an invite = having BLE-discoverability for that room. Single capability, no extra credential management.
+
+[[in-car-hmi]]
+== In-car HMI — MAP 1.4 + AVRCP 1.6
+
+Apps don't implement MAP or AVRCP at the wire level — the Android Bluetooth stack does. The app populates the right metadata surfaces and the OS forwards via profile:
+
+* *MAP 1.4* → expose room chat via `NotificationCompat.MessagingStyle` (`Person`, conversation title, IM-type marking). System BT stack forwards to MAP-client devices (cars, watches). MAP 1.4 adds IM-type message kind, structured bodies, CDMA-SMS handling — populating `MessagingStyle` correctly unlocks all of that.
+* *AVRCP 1.6* → expose room state via `MediaSession` with full `MediaMetadata` (album art = room icon, title = room name, artist = current speaker, playback state). 1.6 adds Cover Art and browsable folders — `MediaBrowserService` lets head units browse rooms from the steering-wheel HMI.
+
+On the LE Audio path the equivalents are *MCP/MCS* (GATT-based media control) and *TMAP* (Telephony and Media Audio Profile). API 35 exposes these via `BluetoothLeAudio` and the system handles GATT — same app-level surface (`MediaSession` + `MessagingStyle`), different transport underneath.
+
+Pre-render room icon bitmaps at *200×200* to fit AVRCP 1.6's thumbnail constraint cleanly. Larger images get downscaled by the stack with variable quality.
+
+== Phased delivery
+
+[cols="1,2,2,3",options="header"]
+|===
+| Phase | Burble | Neurophone | Visible outcome
+
+| *0 — Spec* (~1 week)
+| A2ML manifests + Idris2 types + `.affine` signatures + stub `bridges/neurophone.ex`
+| —
+| Protocol exists. PR mergeable in burble alone.
+
+| *1 — Android MVP* (~3–4 weeks)
+| `client/android/` skeleton: Compose UI, WebRTC, foreground service, LEA routing, `BurbleAudioDspNative`, MediaSession + MessagingStyle. No CoC yet.
+| —
+| First Android binary. Burble works on Android with LEA headsets instead of SCO. In-car HMI lights up.
+
+| *2 — Presence sensor* (~1–2 weeks)
+| —
+| `crates/bt-presence/` + scanner + JNI + consent gate. *Reads* burble's adv payload.
+| Neurophone gains "nearby Burble peers" as a sensor input. No burble-side coupling.
+
+| *3 — CoC peer-to-peer + BLE-SPA* (~2–3 weeks)
+| LE CoC signaling, BLE-SPA knock/respond, internet-less room
+| —
+| Two phones, no wifi → working voice call. Headline demo.
+
+| *4 — Bridge* (~1 week)
+| `bridges/neurophone.ex` round-trip + tests; opt-in by room admin.
+| —
+| Burble servers can expose presence events to neurophone instances.
+
+| *5 — Broadcast + ranging* (later)
+| LE Audio Broadcast (PBP), Channel Sounding (graceful no-op on hardware without BT 6.0 CS)
+| Optional ranging consumer for proximity-gated context
+| "Tour-guide mode"; software-side spatial audio gain curves stay on existing RSSI on Reno 13.
+|===
+
+== Open questions (carry to Phase 1)
+
+. Zig AEC adaptive delay support (port WebRTC AEC3's delay block or hybrid).
+. Reference signal capture timing under audio offload.
+. Verify Zig benchmark claims at 48kHz mono PCM 10ms frames.
+. libwebrtc AAR's `JavaAudioDeviceModule` SCO-vs-LEA default behaviour — likely needs `BurbleAudioDeviceModule` subclass to force `setCommunicationDevice` path.
+. Background advertising lifecycle UX: persistent notification copy for "Discoverable" state.
+
+== Cross-references
+
+* link:ARCHITECTURE.adoc[ARCHITECTURE.adoc] — overall control + media plane, supervision tree.
+* link:THREAT-MODEL.adoc[THREAT-MODEL.adoc] — security model; BLE-SPA extends the SDP perimeter to the radio layer.
+* link:../developer/ABI-FFI-README.adoc[ABI/FFI README] — Idris2 + Zig pattern this plan follows.
+* `../../server/lib/burble/bridges/mumble.ex` — bridge pattern that `neurophone.ex` mirrors.
+* `../../client/lib/src/extensions/IDApTIKVoice.affine` — extension pattern that `NeurophonePresence.affine` mirrors.
+* `../../src/Burble/ABI/MediaPipeline.idr` — Idris2 pattern that `AudioPipeline.idr` follows.
+
+== Memory pointer
+
+This document is the authoritative plan. The Claude memory entry
+`~/.claude/projects/C--Users-USER/memory/project_burble_neurophone_bt.md`
+points here as the source of truth. If they disagree, this file wins; update the memory entry to match.
