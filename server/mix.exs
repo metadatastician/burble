@@ -161,7 +161,11 @@ defmodule Burble.MixProject do
       # Authentication
       {:bcrypt_elixir, "~> 3.2"},
       {:guardian, "~> 2.3"},
-      {:jose, "~> 1.11"},
+      # Pinned to 1.11.9 (last release before jose started using OTP 26's
+      # dynamic() type in src/json/jose_json.erl). Loosen to "~> 1.11"
+      # once this host moves to OTP 26+. Guardian's transitive constraint
+      # is "~> 1.11.9" so this is the floor of that range.
+      {:jose, "~> 1.11.9 and < 1.11.11", override: true},
 
       # Persistent store — VeriSimDB client SDK.
       # For Hex: {:verisim_client, "~> 0.1"}
@@ -183,16 +187,19 @@ defmodule Burble.MixProject do
       # Rate limiting
       {:hammer, "~> 6.2"},
 
-      # QUIC transport (optional — falls back to WebSocket when unavailable).
-      # Git dep (not hex) so the full repo — including build.sh and the msquic
-      # submodule — is fetched.  The hex tarball strips build.sh, causing the
-      # Makefile build-nif target to fail with "No such file or directory".
-      {:quicer, github: "emqx/quic", tag: "0.2.15", submodules: true, optional: true},
-
-      # LMDB playout buffer (optional — falls back to ETS when unavailable).
-      # elmdb = Erlang NIF, ex_lmdb = Elixir wrapper.
-      {:elmdb, "~> 0.4", optional: true},
-      {:ex_lmdb, "~> 0.1", optional: true},
+      # Optional NIF-backed dependencies — disabled in this build because
+      # Mix's :optional flag is a parent-application hint, not a skip-if-
+      # missing-system-deps flag, and our current host doesn't satisfy
+      # their build requirements. Re-enable individually once prerequisites
+      # are in place; runtime code already handles their absence.
+      #
+      #   quicer  — needs msquic (Microsoft QUIC C library)
+      #   elmdb   — links liberl_interface which was dropped in OTP 23+
+      #   ex_lmdb — depends on elmdb
+      #
+      # {:quicer, github: "emqx/quic", tag: "0.2.15", submodules: true, optional: true},
+      # {:elmdb, "~> 0.4", optional: true},
+      # {:ex_lmdb, "~> 0.1", optional: true},
 
       # Media plane — ex_webrtc SFU (audio-only, Opus)
       {:ex_webrtc, "~> 0.16"},
