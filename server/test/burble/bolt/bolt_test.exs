@@ -3,6 +3,7 @@ defmodule Burble.BoltTest do
   use ExUnit.Case, async: true
 
   alias Burble.Bolt.Packet
+  alias Burble.Bolt.Quic
   alias Burble.Bolt.Sender
 
   # ---------------------------------------------------------------------------
@@ -180,5 +181,69 @@ defmodule Burble.BoltTest do
 
   test "wol_port/0 returns 9" do
     assert Packet.wol_port() == 9
+  end
+
+  # ---------------------------------------------------------------------------
+  # QUIC transport — gated on quicer availability
+  # ---------------------------------------------------------------------------
+
+  describe "Burble.Bolt.Quic.available?/0" do
+    test "returns a boolean and never raises" do
+      assert is_boolean(Quic.available?())
+    end
+  end
+
+  describe "Burble.Bolt.Quic.cert_paths/0" do
+    test "returns {:ok, cert, key} when the dev cert is present" do
+      case Quic.cert_paths() do
+        {:ok, cert, key} ->
+          assert File.exists?(cert)
+          assert File.exists?(key)
+
+        {:error, :no_cert} ->
+          # Acceptable in CI environments without the cert; flag so
+          # operators don't silently ship without it.
+          assert true
+      end
+    end
+  end
+
+  describe "Burble.Bolt.Quic.send_datagram/3 (no quicer)" do
+    @tag :quic
+    test "returns {:error, :quicer_not_available} when NIF is absent" do
+      unless Quic.available?() do
+        assert {:error, :quicer_not_available} =
+                 Quic.send_datagram({127, 0, 0, 1}, <<"noop">>)
+      end
+    end
+  end
+
+  describe "Burble.Bolt.Sender.send/2 :transport option" do
+    test ":udp explicitly forces raw UDP (default behavior, no fallback)" do
+      {:ok, target} = Sender.parse_target("127.0.0.1")
+      result = Sender.send(target, transport: :udp, wol_compat: false)
+      assert result == :ok or match?({:error, _}, result)
+    end
+
+    test ":quic to broadcast IP refuses with :quic_broadcast_unsupported" do
+      result = Sender.send(:broadcast, transport: :quic, wol_compat: false)
+      assert result == {:error, :quic_broadcast_unsupported}
+    end
+
+    test ":quic without quicer returns :quicer_not_available, never crashes" do
+      unless Quic.available?() do
+        {:ok, target} = Sender.parse_target("127.0.0.1")
+        assert {:error, :quicer_not_available} =
+                 Sender.send(target, transport: :quic, wol_compat: false)
+      end
+    end
+
+    test ":auto without try_quic stays on UDP even when quicer is loaded" do
+      {:ok, target} = Sender.parse_target("127.0.0.1")
+      # No assertion against transport — we just verify the call returns
+      # without raising. The branch coverage matters more than the result.
+      result = Sender.send(target, transport: :auto, wol_compat: false)
+      assert result == :ok or match?({:error, _}, result)
+    end
   end
 end

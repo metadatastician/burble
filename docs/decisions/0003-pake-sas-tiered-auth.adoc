@@ -1,0 +1,183 @@
+= Architecture Decision Record: 0003-pake-sas-tiered-auth
+// SPDX-License-Identifier: PMPL-1.0-or-later
+// Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+
+== 3. Tiered Caller-Identity Authentication via PAKE + SAS
+
+Date: 2026-05-13
+
+== Status
+
+Proposed
+
+== Context
+
+Burble currently has no documented position on caller-identity authentication
+for voice connections. The threat model in `docs/architecture/THREAT-MODEL.adoc`
+covers supply-chain and build-time threats but does not address runtime caller
+authentication. The four topology modes described in `docs/architecture/ARCHITECTURE.adoc`
+imply a P2P architecture with no central authority, but leave the trust model
+underspecified for the user-to-user layer.
+
+This gap manifests concretely in the `client/web/p2p-voice.html` flow:
+
+* In **relay-assisted mode**, anyone who guesses or learns the room name can
+  join the call. There is no per-caller authentication.
+* In **manual SDP exchange mode**, the SDP blob acts as a de-facto capability
+  but must be passed out-of-band (email, chat) and provides no protection
+  against MITM during transit.
+
+A separate but related issue is the user experience itself: the manual paste
+flow imposes copy-paste of multi-kilobyte SDP blobs through a side channel,
+which defeats the "voice first, friction last" product promise.
+
+The design space is open. WebRTC's DTLS-SRTP already provides cryptographic
+key agreement (ECDHE / X25519) for the media transport; the gap is at the
+*identity* and *authorization* layer above it.
+
+== Decision
+
+Burble will adopt a **three-tier caller authentication model** with two
+cryptographic primitives composed together: **PAKE** (Password-Authenticated
+Key Exchange) and **SAS** (Short Authentication String).
+
+=== Tier definitions
+
+[cols="1,2,2,2"]
+|===
+| Tier | Endpoints | Authentication | Persistence
+
+| **Tier 1** — Native ↔ Native
+| Both ends running Burble native client
+| Long-lived X25519 identity pubkey per user, published via NAPTR/SRV at `user@domain`. Sender-pubkey-signed Bolt magic-packet (UDP/7373) for ringing. Noise / WG-style handshake establishes session.
+| Persistent pairing by default — once exchanged, identities are in each peer's address book until explicitly revoked.
+
+| **Tier 2** — Native ↔ Browser (returning)
+| Native client on one side, browser on the other; recipient has opted into pairing on a prior call
+| PAKE (SPAKE2 or OPAQUE) bootstrap with passphrase shared via side channel. SAS confirmation phrase displayed for verification.
+| Recipient-opt-in pairing. Native side stores recipient's session pubkey; browser side may or may not persist (see consequences).
+
+| **Tier 3** — Native ↔ Browser (one-shot)
+| Native client on one side, browser on the other; no pairing
+| PAKE bootstrap with passphrase shared via side channel. SAS confirmation phrase. **No key persistence.**
+| One-shot. Every call requires a fresh passphrase. Same recipient calling again is treated as a new caller.
+|===
+
+=== Cryptographic primitives
+
+* **PAKE** — `SPAKE2-EE` (Elligator-Edition) or `OPAQUE` for passphrase-to-session-key derivation. The passphrase is communicated out-of-band (voice, SMS, in-person, sticky note). PAKE proves both parties know the passphrase without revealing it to any relay. The relay observes only the protocol messages; the passphrase is never transmitted.
+* **SAS** — A 4-to-6 word phrase (or numeric code) derived deterministically from the DTLS/Noise session exporter. Both sides display the same SAS. Post-connect, one party reads it aloud and the other confirms. Detects MITM by direct human comparison.
+* **Identity keys (Tier 1)** — X25519 (Curve25519) for ECDHE; Ed25519 for identity signatures. Aligns with WireGuard and Noise Protocol conventions.
+
+=== Tiebreakers (proposed defaults — open during prototype)
+
+These were left as design tiebreakers in the originating conversation
+(Jonathan + Joshua + Claude, 2026-05-13) and are captured here as **proposed
+defaults**, to be negotiated during implementation:
+
+. **Browser-side persistence in Tier 2.**
+.. *Proposed default:* the browser side is **never long-term paired**. Only the native side remembers. The browser side gets a slightly faster handshake on subsequent calls (no re-derivation of identity material) but still types the passphrase. This sidesteps the IndexedDB-fragility problem (incognito mode, cleared cookies, device switching) and avoids implying a security guarantee the browser cannot reliably honour.
+.. *Alternative considered:* exportable key blob the user manually stashes. Provides cross-device portability but adds friction.
+
+. **Who chooses to upgrade Tier 3 → Tier 2.**
+.. *Proposed default:* the **recipient** toggles "remember this caller" after a successful call. Rationale: the recipient has more context about whether they expect this caller to call back.
+.. *Alternative considered:* the sender encodes a one-shot vs. pairable flag at link creation. More controlled but less aligned with the recipient's actual social context.
+
+. **SAS in paired-call flows.**
+.. *Proposed default:* SAS is **always displayed** as a quiet sidebar element, non-blocking. Paired peers technically don't need SAS to prevent MITM (stored keys preclude it in steady state), but the option being there matters for the threat model and for users with elevated-threat contexts.
+
+== Consequences
+
+=== Positive
+
+* **Closes a documented gap.** Burble currently states no position on caller authentication; this gives the implementation a clear contract to build to.
+* **Honours the P2P-first vision.** No central authority required at any tier. NAPTR/DNSSEC at Tier 1, PAKE passphrase at Tier 2/3 — both work in fully decentralised topology modes.
+* **Defence-in-depth.** PAKE + SAS layered: PAKE prevents passive link-leakers from connecting at all; SAS gives a human-detectable second check even if PAKE's passphrase is compromised.
+* **PAKE composes cleanly with Tier 1.** A successful Tier 2/3 call can store the recipient's session pubkey and graduate them to Tier 1 on next contact — a one-time onboarding ritual replaces forever-Tier-2 friction.
+* **Stateless relay.** The signaling relay never observes the passphrase. Subpoena-resistant by construction.
+* **Aligns with `Burble.Bolt` design.** The bolt magic-packet protocol is already pubkey-authenticated in intent (see `server/lib/burble/bolt/`); this ADR extends that authentication model to the voice setup layer.
+
+=== Negative
+
+* **Side-channel requirement for Tier 2/3.** The passphrase must be conveyed out-of-band. This is acceptable for "voice call setup" (a voice/text side channel is usually available) but is the central friction cost of the design.
+* **Browser-side limitations.** Tier 2/3 browser parties have weak persistent identity. The proposed default (browser never long-paired) accepts this honestly rather than masking it; some users may find re-PAKE-each-device unintuitive.
+* **Implementation surface area.** SPAKE2/OPAQUE need to be implemented or imported on both native (Elixir/Rust) and browser (JS) ends. SAS derivation needs care to ensure both sides compute identical phrases. Mature crates exist (e.g., `spake2` in Rust, `spake2-js`) but require careful selection and audit.
+* **No solution to social-engineering attacks within the side channel.** If an attacker controls both the user's email and SMS, they can intercept the passphrase too. The design assumes the side channel has at least transient confidentiality.
+
+=== Neutral
+
+* **Tier 1 maturity dependency.** Tier 1 depends on NAPTR/SRV publishing, the bolt protocol being deployed, and a native client. As of this ADR, those are roadmap. Tier 2/3 can be prototyped and shipped independently as a first phase.
+* **WebTransport upgrade path.** `server/lib/burble/transport/quic.ex` is currently a no-op placeholder. When WebTransport replaces WebRTC for server-relayed paths, the PAKE+SAS layer sits above the transport and is unaffected.
+
+== Current implementation status vs design intent
+
+This ADR is **specification-only**. As of writing:
+
+[cols="2,1,3"]
+|===
+| Component | Status | Note
+
+| `client/web/p2p-voice.html` PAKE bootstrap
+| Not implemented
+| Prototype branch planned.
+
+| SAS derivation from DTLS exporter
+| Not implemented
+| Will use `pc.getStats()` + DTLS-Exporter where available, fall back to fingerprint-based SAS.
+
+| Tier 1 NAPTR pubkey publishing
+| Not implemented
+| `server/lib/burble/bolt/naptr.ex` resolves NAPTR for endpoint discovery; extending it to also publish/consume identity pubkeys is in the bolt roadmap.
+
+| Native Bolt listener
+| Listener present (`server/lib/burble/bolt/listener.ex`), QUIC branch absent
+| Raw UDP only; QUIC datagram branch behind optional `:quicer` dep.
+
+| Recipient "remember this caller" UI
+| Not implemented
+| Tier 2 graduation path.
+
+| Pairing revocation
+| Not implemented
+| Required for production; specified here as part of the design.
+|===
+
+== Implementation roadmap
+
+Captured here from the originating working session so the next contributor
+has a coherent picture:
+
+. **Cloudflare Worker signaling relay deploy** — `signaling/worker.js` exists; needs deploy + KV namespace + optional `relay.jewell.nexus` CNAME. Required for any Tier 2/3 call.
+. **Fill in `guix.scm` and `flake.nix`** — currently template files; precondition for any reproducible deployment claim.
+. **Burble Elixir release build** — `mix deps.get && mix compile && mix release`; gates the native (Tier 1) listener.
+. **WSL2 mirrored networking** — done (see Burble session memory, 2026-05-13); WSL listeners reachable on host LAN IP.
+. **Router port-forward UDP 7373** + **WoL-compat UDP 9** — for Bolt reachability from the public internet.
+. **Cloudflare DDNS** — track public IP into a `bolt.jewell.nexus` A record.
+. **NAPTR + SRV at `jewell.nexus`** — `BURBLE+bolt` service tag pointing at bolt-listening host; `_burble._bolt._udp` SRV record alongside.
+. **PAKE+SAS prototype branch on `p2p-voice.html`** — proof-of-concept for the design before committing to the rest of the stack.
+. **End-to-end Bolt test** — Joshua's machine → host rings.
+. **VeriSimDB persistence** — clone `hyperpolymath/verisimdb` (public) and build from source; image at `ghcr.io/hyperpolymath/verisimdb:latest` is private (403). Optional for Bolt-only minimal listener.
+
+== Deployment
+
+Per the estate-wide deployment policy, all Burble components ship via the
+Guix channel defined in `.guix-channel` and `guix.scm`, with `flake.nix` as
+the Nix fallback. The PAKE/SAS dependencies (SPAKE2 implementation, identity
+key management, SAS phrase derivation) will be added to the package
+manifests when the prototype graduates from branch to mainline.
+
+NOTE: As of this ADR's drafting, `guix.scm` and `flake.nix` are still
+template files with placeholder values. Materialising them is a precondition
+for any deployment claim made downstream of this ADR.
+
+== References
+
+* link:0001-adopt-rsr-standard.adoc[ADR-0001: Adopt RSR Standard]
+* link:0002-indieweb-native-optional-integration.adoc[ADR-0002: IndieWeb Native Optional Integration]
+* link:../architecture/ARCHITECTURE.adoc[Architecture overview]
+* link:../architecture/THREAT-MODEL.adoc[Threat model]
+* `server/lib/burble/bolt/` — Burble Bolt protocol (related identity layer)
+* `client/web/p2p-voice.html` — current P2P signaling implementation
+* IETF RFC 9382 (SPAKE2)
+* https://magic-wormhole.readthedocs.io/[Magic Wormhole] — reference UX for short-passphrase PAKE
+* Signal's Safety Numbers — reference for the SAS pattern

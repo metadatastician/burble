@@ -15,7 +15,7 @@
 defmodule Burble.Bolt.Sender do
   require Logger
 
-  alias Burble.Bolt.Packet
+  alias Burble.Bolt.{Packet, Quic}
 
   @bolt_port Packet.port()
   @wol_port  Packet.wol_port()
@@ -43,6 +43,17 @@ defmodule Burble.Bolt.Sender do
   - `:request_ack`  — ask recipient to bolt back as acknowledgement
   - `:wol_compat`   — also send to WoL port 9 (default: true)
   - `:naptr_routed` — mark packet as NAPTR-resolved (for recipient info)
+  - `:transport`    — `:auto` (default), `:udp`, or `:quic`:
+      * `:auto` tries QUIC when `Burble.Bolt.Quic.available?/0` is true
+        AND the caller opted in via `:try_quic` (default `false`);
+        otherwise UDP. This keeps cold bolts cheap (no QUIC handshake
+        burned on senders that have no reason to expect a listener).
+      * `:udp` forces raw UDP (legacy behavior, always supported).
+      * `:quic` forces QUIC and reports `{:error, …}` on failure rather
+        than falling through to UDP — useful for tests and for callers
+        that know the recipient supports it.
+  - `:try_quic`     — when true with `:transport => :auto`, attempt QUIC
+    first and silently fall back to UDP on any failure (default `false`).
   """
   @spec send(target(), keyword()) :: :ok | {:error, term()}
   def send(target, opts \\ []) do
@@ -51,6 +62,8 @@ defmodule Burble.Bolt.Sender do
     sender_mac  = opts[:sender_mac]
     request_ack = opts[:request_ack] || false
     naptr_routed = opts[:naptr_routed] || false
+    transport   = Keyword.get(opts, :transport, :auto)
+    try_quic    = Keyword.get(opts, :try_quic, false)
 
     payload = Map.merge(%{
       "from"    => node_id(),
@@ -67,7 +80,7 @@ defmodule Burble.Bolt.Sender do
 
     ip = resolve_ip(target)
 
-    result = send_udp(ip, @bolt_port, packet)
+    result = dispatch(transport, try_quic, ip, packet)
 
     if wol_compat do
       # Best-effort WoL send to port 9 — don't fail the bolt if this fails
@@ -75,6 +88,53 @@ defmodule Burble.Bolt.Sender do
     end
 
     result
+  end
+
+  @doc """
+  Send a bolt over QUIC explicitly. Returns `{:error, :quicer_not_available}`
+  if the NIF is not loaded — callers should fall back to `send/2` with
+  `transport: :udp` in that case.
+  """
+  @spec send_quic(target(), keyword()) :: :ok | {:error, term()}
+  def send_quic(target, opts \\ []) do
+    __MODULE__.send(target, Keyword.merge(opts, transport: :quic, wol_compat: false))
+  end
+
+  # ---------------------------------------------------------------------------
+  # Transport dispatch
+  # ---------------------------------------------------------------------------
+
+  defp dispatch(:udp, _try_quic, ip, packet) do
+    send_udp(ip, @bolt_port, packet)
+  end
+
+  defp dispatch(:quic, _try_quic, {255, 255, 255, 255}, _packet) do
+    # QUIC has no notion of LAN broadcast — refuse explicitly so the caller
+    # does not silently get unicast behavior.
+    {:error, :quic_broadcast_unsupported}
+  end
+
+  defp dispatch(:quic, _try_quic, ip, packet) do
+    Quic.send_datagram(ip, packet)
+  end
+
+  defp dispatch(:auto, true, ip, packet) when ip != {255, 255, 255, 255} do
+    if Quic.available?() do
+      case Quic.send_datagram(ip, packet) do
+        :ok ->
+          :ok
+
+        {:error, reason} ->
+          Logger.debug("[Bolt] QUIC send failed (#{inspect(reason)}), falling back to UDP")
+          send_udp(ip, @bolt_port, packet)
+      end
+    else
+      send_udp(ip, @bolt_port, packet)
+    end
+  end
+
+  defp dispatch(:auto, _try_quic, ip, packet) do
+    send_udp(ip, @bolt_port, packet)
   end
 
   @doc """

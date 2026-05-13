@@ -1,0 +1,119 @@
+= WSL2 Mirrored Networking for Burble Bolt
+:toc: macro
+:icons: font
+
+toc::[]
+
+== Why
+
+The Bolt listener (`Burble.Bolt.Listener`) binds UDP/QUIC on port 7373.
+Under WSL2's default NAT mode, inbound UDP from the Windows LAN is dropped
+at the host: the WSL2 distro lives behind an internal vEthernet adapter
+(`172.x.0.0/16`) and only outbound flows + their reply packets are
+forwarded. Wake-on-bolt and cross-host QUIC bolts (`udp/7373`,
+`udp/9` for the WoL-compat fallback) therefore never reach the listener
+when the server is run inside WSL2.
+
+Mirrored mode (`networkingMode=mirrored`, Windows 11 22H2+ / WSL 2.0+)
+makes the WSL2 instance share the Windows host's network interfaces —
+listeners in WSL appear on the host's LAN IP directly, no portproxy
+required.
+
+== Host configuration
+
+`%USERPROFILE%\.wslconfig` on the Windows host:
+
+[source,ini]
+----
+[wsl2]
+networkingMode=mirrored
+firewall=true
+dnsTunneling=true
+autoProxy=true
+
+[experimental]
+hostAddressLoopback=true
+----
+
+* `firewall=true` — WSL auto-creates inbound allow rules for ports
+  bound by WSL processes. Without this, Windows Defender Firewall
+  silently drops Bolt datagrams even with mirrored mode on.
+* `hostAddressLoopback=true` — lets WSL processes reach services on
+  the Windows host via `127.0.0.1` (the inverse of what mirrored mode
+  fixes for inbound).
+
+Restart the WSL VM for changes to take effect:
+
+[source,powershell]
+----
+wsl --shutdown
+----
+
+The next `wsl` invocation cold-boots the VM into mirrored mode.
+
+== Firewall rule for udp/7373
+
+`firewall=true` covers the common case, but if Windows Defender Firewall
+is centrally managed (group policy, third-party firewall, locked-down
+profile) the auto-rule may be suppressed. Add an explicit allow rule:
+
+[source,powershell]
+----
+New-NetFirewallRule `
+  -DisplayName "Burble Bolt (WSL2 mirrored)" `
+  -Direction Inbound `
+  -Protocol UDP `
+  -LocalPort 7373 `
+  -Action Allow `
+  -Profile Private,Domain
+----
+
+Add port 9 as a second rule if the WoL-compat fallback is in use.
+
+== Verification
+
+From inside WSL, start the Bolt listener and confirm it is reachable on
+the host's LAN IP — not just `127.0.0.1`:
+
+[source,bash]
+----
+# In WSL:
+just server  # boots Burble.Bolt.Listener on udp/7373
+
+# In Windows PowerShell (or another LAN host):
+Test-NetConnection -ComputerName <host-lan-ip> -Port 7373 -InformationLevel Detailed
+# Expect: UDP probe — mirrored mode means the WSL listener owns the port.
+----
+
+For an end-to-end sanity check, fire a raw datagram from another machine
+on the LAN and look for the receive log line in the listener:
+
+[source,bash]
+----
+echo -n "ping" | nc -u -w1 <host-lan-ip> 7373
+# Listener should log: [Bolt] received datagram from {ip, port}
+----
+
+== Gotchas
+
+* **Hyper-V firewall**: a separate layer from Defender. If inbound
+  packets still vanish after the rule above, see the host-side note in
+  `~/.claude/projects/.../memory/reference_wsl_network_workaround.md`
+  (`Set-NetFirewallHyperVVMSetting -Enabled $false`, requires admin).
+* **`localhost` is now host-shared**: services bound to `127.0.0.1` in
+  WSL are reachable from Windows on `127.0.0.1` and vice versa. Treat
+  loopback as cross-OS — don't bind sensitive dev tooling to `0.0.0.0`
+  expecting NAT to hide it.
+* **VPN clients**: some corp VPNs (Cisco AnyConnect, GlobalProtect)
+  refuse to forward to the mirrored adapter. If the listener stops
+  receiving when the VPN is connected, that's why.
+* **`localhostForwarding`**: the legacy option is ignored under mirrored
+  mode. Removing it from `.wslconfig` is cosmetic but avoids confusion.
+
+== Related
+
+* `server/lib/burble/bolt/listener.ex` — binds udp/7373 + optional QUIC.
+* `server/lib/burble/bolt/quic.ex` — QUIC datagram listener (ALPN
+  `burble-bolt-v1`), shares the same UDP port.
+* `server/lib/burble/bolt/packet.ex` — `Packet.port/0` (7373),
+  `Packet.wol_port/0` (9).
