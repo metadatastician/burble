@@ -1,0 +1,141 @@
+= Burble Bolt — DNS records (NAPTR + SRV)
+:toc: macro
+:icons: font
+
+toc::[]
+
+== Purpose
+
+For `burble bolt <user>@<domain>` to resolve to your Bolt-listening host
+without the sender knowing your IP in advance, two DNS records need to be
+published on `<domain>`:
+
+[cols="1,4"]
+|===
+| Type | Record
+
+| `NAPTR`
+| `<domain>. IN NAPTR 10 1 "U" "BURBLE+bolt" "!.*!bolt://<bolt-host>:7373!" .`
+
+| `SRV`
+| `_burble._bolt._udp.<domain>. IN SRV 10 1 7373 <bolt-host>.`
+|===
+
+The receiving client resolves in this order (see
+`server/lib/burble/bolt/naptr.ex`):
+
+. NAPTR with service tag containing `BURBLE` — extracts the `bolt://...` URI
+  from the regexp field
+. SRV at `_burble._bolt._udp.<domain>` — uses target + port directly
+. A/AAAA fallback on `<domain>` itself — default port 7373
+
+NAPTR is preferred because it carries the protocol scheme explicitly and
+supports indirection (regexp rewriting). SRV is the standards-compliant
+fallback for clients that don't speak NAPTR.
+
+== Concrete values for `jewell.nexus`
+
+[source,bash]
+----
+# NAPTR record
+jewell.nexus. IN NAPTR 10 1 "U" "BURBLE+bolt" "!.*!bolt://bolt.jewell.nexus:7373!" .
+
+# SRV record
+_burble._bolt._udp.jewell.nexus. IN SRV 10 1 7373 bolt.jewell.nexus.
+----
+
+`bolt.jewell.nexus` is the dynamic A record kept current by the DDNS
+script (see task #10 and `scripts/cf-ddns.sh`). NAPTR/SRV point at this
+hostname rather than a raw IP so the records stay valid as your public IP
+drifts.
+
+== Publishing via Cloudflare API
+
+Cloudflare's DNS supports both record types. Use the provisioning script:
+
+[source,bash]
+----
+# Generate a Cloudflare API token at:
+#   https://dash.cloudflare.com/profile/api-tokens
+# Token needs Zone:Zone:Read + Zone:DNS:Edit scoped to jewell.nexus.
+
+export CF_API_TOKEN='<your-token>'
+./scripts/cf-bolt-dns.sh jewell.nexus bolt.jewell.nexus
+----
+
+The script is idempotent — it updates existing records instead of creating
+duplicates. Re-run it any time the bolt host changes or you need to verify
+state.
+
+Dry-run (no API calls, prints the planned records):
+
+[source,bash]
+----
+DRY_RUN=1 ./scripts/cf-bolt-dns.sh jewell.nexus bolt.jewell.nexus
+----
+
+== Publishing via Cloudflare dashboard (manual fallback)
+
+If you'd rather click than scripts:
+
+. Cloudflare dashboard → jewell.nexus → DNS → Records → *Add record*
+. Type: *NAPTR*, Name: `@` (or `jewell.nexus`)
+.. Order: `10`
+.. Preference: `1`
+.. Flags: `U`
+.. Service: `BURBLE+bolt`
+.. Regex: `!.*!bolt://bolt.jewell.nexus:7373!`
+.. Replacement: `.` (single dot)
+.. Save
+. Add another record, Type: *SRV*, Name: `_burble._bolt._udp`
+.. Priority: `10`
+.. Weight: `1`
+.. Port: `7373`
+.. Target: `bolt.jewell.nexus`
+.. Save
+
+== Verification
+
+Once propagated (typically <60s with Cloudflare's TTL):
+
+[source,bash]
+----
+# Linux/WSL
+dig +short NAPTR jewell.nexus
+dig +short SRV _burble._bolt._udp.jewell.nexus
+----
+
+[source,powershell]
+----
+# Windows PowerShell
+Resolve-DnsName -Type SRV -Name '_burble._bolt._udp.jewell.nexus'
+# (NAPTR is not in Resolve-DnsName's enum; use dig from WSL for that)
+----
+
+End-to-end check (Joshua's machine after install):
+
+[source,bash]
+----
+# Should print: Bolt sent to user@jewell.nexus.
+bin/burble bolt jonathan@jewell.nexus --name "Joshua"
+----
+
+== Why CNAME `bolt.jewell.nexus` and not `bolt` A directly
+
+Two reasons:
+
+. *Reusability* — multiple service records (e.g. future NAPTR for an HTTP
+  relay, SRV for a control channel) can target the same `bolt.jewell.nexus`
+  hostname; only the A record at `bolt` needs DDNS updating.
+. *Operational separation* — `jewell.nexus`'s A record stays pointed at
+  your web property (Cloudflare-proxied, port 80/443). `bolt.jewell.nexus`
+  is grey-clouded (DNS-only, no proxy) because Cloudflare's proxy doesn't
+  forward UDP/7373.
+
+== Related
+
+* link:../decisions/0003-pake-sas-tiered-auth.adoc[ADR-0003 PAKE+SAS tiered auth]  — uses these records as the Tier 1 identity-discovery layer
+* `server/lib/burble/bolt/naptr.ex` — the resolver these records feed
+* `server/lib/burble/bolt/listener.ex` — what answers on `bolt.jewell.nexus:7373`
+* `scripts/gen-bolt-cert.sh` — TLS cert for the Bolt QUIC listener
+* `scripts/cf-ddns.sh` — keeps `bolt.jewell.nexus` A record current (task #10, future)
