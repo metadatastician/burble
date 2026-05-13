@@ -1,0 +1,126 @@
+= Burble Bolt — Cloudflare DDNS for the listener host
+:toc: macro
+:icons: font
+
+toc::[]
+
+== Why
+
+The Bolt listener binds UDP/7373 on the host's public interface. NAPTR/SRV
+records (see link:bolt-dns-records.adoc[bolt-dns-records.adoc]) point at
+`bolt.<zone>` rather than a raw IP so the discovery records remain valid
+as the host's public IP drifts. That hostname's A record is kept current
+by `scripts/cf-ddns.sh` on a short cron interval.
+
+== One-liner
+
+[source,bash]
+----
+export CF_API_TOKEN='<token-with-Zone:Zone:Read + Zone:DNS:Edit on jewell.nexus>'
+./scripts/cf-ddns.sh jewell.nexus bolt.jewell.nexus
+----
+
+* Idempotent — no-op when the public IP already matches the record.
+* Creates the A record if it doesn't exist yet.
+* Sets `proxied: false` (DNS-only / grey-cloud) — Cloudflare's HTTP proxy
+  cannot forward UDP/7373, so the record MUST bypass the proxy.
+
+== Cron entry
+
+[source,cron]
+----
+*/5 * * * * CF_API_TOKEN='...' /home/hyperpolymath/dev/burble/scripts/cf-ddns.sh \
+              jewell.nexus bolt.jewell.nexus \
+              >> /var/log/burble-ddns.log 2>&1
+----
+
+Five-minute interval matches the record's TTL (300s) — never stale by more
+than one TTL window. Adjust TTL via the `TTL` env var if you want a tighter
+or looser bound (Cloudflare minimum is 60s on free plans).
+
+== Systemd timer alternative
+
+If you prefer systemd to cron (recommended on systems with no traditional
+cron daemon):
+
+`/etc/systemd/system/burble-ddns.service`:
+[source,ini]
+----
+[Unit]
+Description=Burble Bolt — Cloudflare DDNS update
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+Environment="CF_API_TOKEN=..."
+ExecStart=/home/hyperpolymath/dev/burble/scripts/cf-ddns.sh jewell.nexus bolt.jewell.nexus
+StandardOutput=append:/var/log/burble-ddns.log
+StandardError=append:/var/log/burble-ddns.log
+----
+
+`/etc/systemd/system/burble-ddns.timer`:
+[source,ini]
+----
+[Unit]
+Description=Run Burble Bolt DDNS every 5 minutes
+
+[Timer]
+OnBootSec=1min
+OnUnitActiveSec=5min
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+----
+
+[source,bash]
+----
+sudo systemctl daemon-reload
+sudo systemctl enable --now burble-ddns.timer
+----
+
+== Public IP detection
+
+The script consults these providers in order, taking the first to answer:
+
+. `https://api.ipify.org`
+. `https://ifconfig.me/ip`
+. `https://icanhazip.com`
+. `https://ipv4.icanhazip.com`
+
+All return a plain `1.2.3.4` body — no JSON, no auth. The script validates
+the response matches an IPv4 regex before using it.
+
+== Verification
+
+[source,bash]
+----
+# Show what would happen without touching the API
+DRY_RUN=1 ./scripts/cf-ddns.sh jewell.nexus bolt.jewell.nexus
+
+# After a real run, confirm:
+dig +short A bolt.jewell.nexus
+# (or)
+nslookup bolt.jewell.nexus
+----
+
+The detected IP and the record value should match. If they don't and you
+just ran the script, check `/var/log/burble-ddns.log` for the Cloudflare
+API response.
+
+== IPv6 (future)
+
+This script handles IPv4 only. AAAA records for IPv6 are a separate
+concern — most residential ISPs do hand out IPv6 prefixes but the prefix
+itself is more stable than IPv4 so the DDNS pressure is lower. If/when
+needed, add a sibling `cf-ddns-v6.sh` that uses `curl -6` against the
+same providers and writes an AAAA record.
+
+== Related
+
+* link:bolt-dns-records.adoc[bolt-dns-records.adoc] — NAPTR/SRV records
+  that depend on this hostname resolving to the current host
+* link:wsl-mirrored-networking.adoc[wsl-mirrored-networking.adoc] — the
+  WSL2 networking mode that makes UDP/7373 reachable on the host LAN IP
+* `scripts/cf-bolt-dns.sh` — the NAPTR/SRV provisioner
