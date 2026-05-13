@@ -1,0 +1,17 @@
+# SPDX-License-Identifier: PMPL-1.0-or-later
+# Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+#
+# Stapeln service definition for boj-server
+#
+# Usage:
+#   podman-compose -f selur-compose.toml up -d
+#   just stack-up
+
+[project]
+name = "boj-server"
+
+[services.app]
+build = { context = ".", dockerfile = "Containerfile" }
+restart = "unless-stopped"
+networks = ["default"]
+healthcheck = { test = "exit 0", interval = "30s", timeout = "5s", retries = 3 }

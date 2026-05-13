@@ -1,0 +1,7 @@
+---
+source: crates/selur-compose-interp/tests/interp.rs
+expression: cmd
+---
+[
+    "args='--config /etc/coturn/turnserver.conf'; args=\"$args --static-auth-secret=$TURN_SECRET --realm=$TURN_REALM\"; [ -n \"$TURN_EXTERNAL_IP\" ] && args=\"$args --external-ip=$TURN_EXTERNAL_IP\"; exec turnserver $args",
+]

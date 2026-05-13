@@ -1,0 +1,24 @@
+-- SPDX-License-Identifier: PMPL-1.0-or-later
+-- Idris2 package file for Burble ABI proofs (src/Burble/ABI/).
+--
+-- Builds the canonical ABI proof modules under src/Burble/ABI/.
+-- The parallel tree at src/interface/abi/ declares the same module name
+-- (Burble.ABI.Types) and is deferred to Phase 1 module-path cleanup;
+-- it is NOT included here to avoid the duplicate-module collision.
+--
+-- All imports (Data.Fin, Data.Vect, Data.Nat) are from the Idris2 base
+-- prelude and require no extra `depends` entries.
+
+package burble-abi
+
+version = 0.1.0
+authors = "Jonathan D.A. Jewell"
+sourcedir = "."
+
+modules = Burble.ABI.Types
+        , Burble.ABI.Avow
+        , Burble.ABI.Permissions
+        , Burble.ABI.Vext
+        , Burble.ABI.MediaPipeline
+        , Burble.ABI.WebRTCSignaling
+        , Burble.ABI.Foreign

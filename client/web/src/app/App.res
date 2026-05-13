@@ -14,7 +14,7 @@
 //   └── RoomState (current room participants, messages)
 
 /// Top-level application state.
-type t = {
+type rec t = {
   auth: AuthState.t,
   voiceEngine: VoiceEngine.t,
   voiceControls: VoiceControls.t,
@@ -74,7 +74,7 @@ let make = (): t => {
       app.setupWizard = None
     })
     let overlay = SetupWizard.render(wizard)
-    documentBody["appendChild"](overlay)
+    let _ = documentBody["appendChild"](overlay)
     app.setupWizard = Some(wizard)
   }
 
@@ -107,7 +107,7 @@ let joinVoiceRoom = (app: t, ~serverId: string, ~roomId: string, ~roomName: stri
 
   // Connect voice engine
   let token = AuthState.token(app.auth)->Option.getOr("")
-  VoiceEngine.connect(app.voiceEngine, ~roomId, ~token)
+  let _ = VoiceEngine.connect(app.voiceEngine, ~roomId, ~token)
 
   // Update voice controls
   app.voiceControls.roomName = roomName
@@ -156,7 +156,7 @@ let toggleDeafen = (app: t): unit => {
 
 /// Show the self-test diagnostics panel. Creates a new panel instance
 /// and appends it to the document body as a modal.
-let showSelfTestPanel = (app: t): unit => {
+let rec showSelfTestPanel = (app: t): unit => {
   // Close existing panel if open.
   switch app.selfTestPanel {
   | Some(panel) => SelfTestPanel.destroy(panel)
@@ -177,14 +177,14 @@ let showSelfTestPanel = (app: t): unit => {
   // Close on backdrop click.
   overlay["onclick"] = (event: {..}) => {
     let target: {..} = event["target"]
-    let isSelf: bool = %raw(`target === overlay`)
+    let isSelf: bool = (%raw(`(a, b) => a === b`))(target, overlay)
     if isSelf {
       hideSelfTestPanel(app)
     }
   }
 
-  overlay["appendChild"](element)
-  documentBody["appendChild"](overlay)
+  let _ = overlay["appendChild"](element)
+  let _ = documentBody["appendChild"](overlay)
   app.selfTestPanel = Some(panel)
   app.selfTestVisible = true
 }
@@ -217,6 +217,6 @@ let showSetupWizard = (app: t): unit => {
     app.setupWizard = None
   })
   let overlay = SetupWizard.render(wizard)
-  documentBody["appendChild"](overlay)
+  let _ = documentBody["appendChild"](overlay)
   app.setupWizard = Some(wizard)
 }

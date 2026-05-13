@@ -1,0 +1,41 @@
+---
+source: crates/selur-compose-plan/tests/plan_snapshots.rs
+description: boj_server
+---
+[
+    BuildImage(
+        BuildSpec {
+            service: "app",
+            context: ".",
+            dockerfile: Some(
+                "Containerfile",
+            ),
+            args: {},
+            target: None,
+            tag: "boj-server_app:latest",
+            no_cache: false,
+        },
+    ),
+    RunContainer(
+        RunSpec {
+            service: "app",
+            image: "boj-server_app:latest",
+            container_name: "boj-server_app",
+            environment: [],
+            ports: [],
+            volumes: [],
+            networks: [
+                "default",
+            ],
+            network_mode: None,
+            command: None,
+            entrypoint: None,
+            restart: "unless-stopped",
+            labels: {
+                "io.podman.compose.config-hash": "<HASH>",
+                "io.podman.compose.project": "boj-server",
+                "io.podman.compose.service": "app",
+            },
+        },
+    ),
+]

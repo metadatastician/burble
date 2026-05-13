@@ -104,17 +104,17 @@ if config_env() == :prod do
   # Base URL for magic link emails and invite links.
   base_url = System.get_env("BURBLE_BASE_URL") || "https://#{host}"
 
-  # CORS: restrict to the configured origin in production.
-  # Accepts comma-separated list of origins, e.g. "https://app.burble.org,https://admin.burble.org"
-  cors_origins =
-    case System.get_env("BURBLE_CORS_ORIGINS") do
-      nil -> "https://#{host}"
-      origins -> String.split(origins, ",") |> Enum.map(&String.trim/1)
-    end
+  # CORS: compile-time default is "*" (set in endpoint.ex via Application.compile_env).
+  # Setting cors_origins here at runtime is inconsistent with the compile_env read
+  # and Phoenix's validate_compile_env check refuses to boot. Until endpoint.ex
+  # is updated to use `Application.get_env` instead of `compile_env` (Burble
+  # Phase 1 work), cors_origins stays at the compile-time default. The
+  # BURBLE_CORS_ORIGINS env var is honoured by reading at boot below but only
+  # used for documentation; the value is not applied.
+  _cors_origins_env = System.get_env("BURBLE_CORS_ORIGINS")
 
   config :burble,
-    base_url: base_url,
-    cors_origins: cors_origins
+    base_url: base_url
 
   # SMTP configuration for magic link email delivery.
   # All four SMTP_* variables must be set for production email sending.

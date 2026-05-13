@@ -12,11 +12,60 @@ We welcome contributions in many forms:
 - **Testing:** Adding property-based tests or formal proofs
 - **Bug reports:** Filing clear, reproducible issues
 
+## Building from source — system prerequisites
+
+`quicer` (the QUIC transport library used by Burble's server) builds `msquic` from
+source. This requires several system packages that are **not** pre-installed on a
+vanilla developer machine. Install them before running `just test` or `mix deps.get`.
+
+### Debian 12 / Ubuntu 24.04
+
+```bash
+sudo apt-get update
+sudo apt-get install -y cmake perl build-essential libssl-dev
+```
+
+### Fedora 40
+
+```bash
+sudo dnf install -y cmake perl-FindBin make gcc openssl-devel
+```
+
+### Wolfi (Chainguard — used in `containers/Containerfile.server`)
+
+```bash
+apk add --no-cache cmake perl make gcc musl-dev openssl-dev
+```
+
+### Cross-distro prerequisite mapping
+
+| Prerequisite | Debian 12 / Ubuntu 24.04 | Fedora 40 | Wolfi |
+|---|---|---|---|
+| Perl + FindBin | `perl` (core) | `perl-FindBin` | `perl` |
+| CMake ≥ 3.20 | `cmake` | `cmake` | `cmake` |
+| C compiler + Make | `build-essential` | `make` + `gcc` | `make` + `gcc` + `musl-dev` |
+| OpenSSL headers | `libssl-dev` | `openssl-devel` | `openssl-dev` |
+| Erlang/OTP 27 | via `setup-beam` / `kerl` | same | same |
+
+### Validating your environment
+
+Run the guard scripts to confirm all prerequisites are present before spending
+time on a full `mix deps.get`:
+
+```bash
+just guard-quicer-prereqs   # checks perl, cmake, make/ninja
+just guard-msquic            # checks msquic is at the required tag (v2.3.8)
+```
+
+If either guard fails, it will print which package is missing.
+`just doctor` also reports whether `cmake`, `perl`, and `make` are on PATH.
+
 ## Getting Started
 
 1. **Read the AI Manifest:** Start with `0-AI-MANIFEST.a2ml` (if present) to understand the repository structure.
-2. **Environment:** Use `nix develop` or `direnv allow` to set up your tools.
-3. **Task Runner:** Use `just` to see available commands (`just --list`).
+2. **Install system prerequisites:** Follow the "Building from source" section above for your distro.
+3. **Environment:** Use `nix develop` or `direnv allow` to set up your tools.
+4. **Task Runner:** Use `just` to see available commands (`just --list`).
 
 ## Development Workflow
 

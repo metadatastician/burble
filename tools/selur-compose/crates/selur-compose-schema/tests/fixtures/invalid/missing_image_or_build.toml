@@ -1,0 +1,6 @@
+# Invalid: service has neither `image` nor `build`.
+[project]
+name = "bad"
+
+[services.oops]
+restart = "unless-stopped"

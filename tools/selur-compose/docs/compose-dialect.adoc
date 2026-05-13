@@ -1,0 +1,356 @@
+// SPDX-License-Identifier: PMPL-1.0-or-later
+= selur-compose — TOML Compose Dialect
+:toc: left
+:toclevels: 3
+:icons: font
+:source-highlighter: rouge
+
+A reference for the TOML compose dialect read by `selur-compose`.
+The dialect is a strict superset of what the real consumer files
+(`burble/containers/selur-compose.toml`, `burble/containers/compose.toml`,
+`boj-server/selur-compose.toml`) use — anything those files contain is
+guaranteed to round-trip without data loss.
+
+== 1. File discovery
+
+`selur-compose` looks for the compose file in this order:
+
+1. The path given by `-f/--file`.
+2. `selur-compose.toml` in the current working directory.
+3. `compose.toml` in the current working directory.
+
+No automatic parent-directory walk is performed (unlike Docker Compose).
+If none of the above exist, the command exits with a clear error.
+
+== 2. Top-level structure
+
+[source,toml]
+----
+[project]           # optional — sets the project name
+name = "burble"
+
+[services]          # required — at least one service
+[networks]          # optional
+[volumes]           # optional — named volumes
+[secrets]           # optional
+[configs]           # optional
+
+[x-svalinn]         # optional — x-* extension tables are tolerated, not parsed
+# …any custom keys
+----
+
+`#[serde(deny_unknown_fields)]` is _off_ at the root table so unknown top-level
+keys (like `[x-svalinn]`, `[x-stapeln]`) survive as opaque `toml::Value` in
+`Compose.extensions`. It is _on_ inside service, network, and volume bodies so
+typos are caught loudly.
+
+== 3. Services
+
+[source,toml]
+----
+[services.web]
+image   = "ghcr.io/hyperpolymath/burble-web:latest"
+restart = "unless-stopped"
+
+# Build from source instead of pulling:
+[services.web.build]
+context    = "./client"
+dockerfile = "Dockerfile"
+args       = { NODE_ENV = "production" }
+
+# Environment — two equivalent forms:
+environment = { LISTEN_PORT = "8080" }
+# or:
+environment = ["LISTEN_PORT=8080", "DEBUG=false"]
+
+# env_file — paths relative to the compose file's directory:
+env_file = [".env", ".env.local"]
+
+ports   = ["4020:80", "127.0.0.1:4443:443"]
+volumes = ["./config:/etc/burble/config:ro", "data-vol:/var/lib/burble"]
+
+networks = ["frontend", "backend"]
+# or use network_mode for special modes:
+network_mode = "host"
+
+depends_on = ["db", "redis"]
+# or with conditions:
+[services.web.depends_on.db]
+condition = "service_healthy"
+
+[services.web.healthcheck]
+test     = "CMD wget -q --spider http://localhost:8080 || exit 1"
+interval = "30s"
+timeout  = "10s"
+retries  = 3
+start_period = "10s"
+
+profiles = ["production"]
+----
+
+=== 3.1 Restart policies
+
+Valid values (kebab-case):
+
+[cols="1,3"]
+|===
+| Value | Meaning
+| `no` | Never restart (default)
+| `always` | Always restart
+| `on-failure` | Restart only on non-zero exit
+| `unless-stopped` | Always restart unless explicitly stopped
+|===
+
+=== 3.2 `command` and `entrypoint`
+
+Both accept either a bare string or a TOML array:
+
+[source,toml]
+----
+# String form (passed to container shell)
+command = "--config /etc/app.conf --port 8080"
+
+# Array form (exec form, no shell)
+command = ["--config", "/etc/app.conf", "--port", "8080"]
+----
+
+=== 3.3 Port bindings
+
+[source,toml]
+----
+ports = [
+    "8080:80",              # host:container
+    "8080:80/tcp",          # with protocol
+    "127.0.0.1:8080:80",   # with host IP
+    "8080-8090:80-90",      # range (not yet fully supported in v0.1 driver)
+]
+----
+
+=== 3.4 Volume mounts
+
+[source,toml]
+----
+volumes = [
+    "./config:/etc/app/config",        # bind mount, rw
+    "./config:/etc/app/config:ro",     # bind mount, read-only
+    "data-vol:/var/lib/app",           # named volume
+    "/absolute/host:/absolute/ctr",    # absolute host path
+]
+----
+
+=== 3.5 `depends_on`
+
+List form (default condition: `service_started`):
+
+[source,toml]
+----
+depends_on = ["db", "cache"]
+----
+
+Map form with explicit conditions:
+
+[source,toml]
+----
+[services.api.depends_on.db]
+condition = "service_healthy"
+
+[services.api.depends_on.cache]
+condition = "service_started"
+----
+
+Valid conditions: `service_started`, `service_healthy`, `service_completed_successfully`.
+
+=== 3.6 Healthcheck
+
+[source,toml]
+----
+[services.db.healthcheck]
+# Shell-string form (runs in container shell):
+test = "CMD-SHELL pg_isready -U postgres"
+
+# Exec-array form (no shell):
+test = ["CMD", "pg_isready", "-U", "postgres"]
+
+# Disable healthcheck inherited from image:
+disable = true
+
+interval     = "30s"
+timeout      = "10s"
+retries      = 3
+start_period = "10s"
+----
+
+Duration strings use https://docs.rs/humantime/[humantime] format:
+`"30s"`, `"1m"`, `"1m30s"`, `"300ms"`.
+
+=== 3.7 Network mode
+
+[source,toml]
+----
+network_mode = "host"           # host networking (required for coturn)
+network_mode = "bridge"         # default bridge (same as not specifying)
+network_mode = "none"           # no networking
+network_mode = "container:foo"  # share network namespace with container 'foo'
+----
+
+`network_mode` and `networks` are mutually exclusive.
+
+== 4. Networks
+
+[source,toml]
+----
+[networks.frontend]
+driver = "bridge"
+
+[networks.backend]
+driver  = "bridge"
+internal = true      # no external connectivity
+----
+
+== 5. Variable interpolation
+
+=== 5.1 Syntax
+
+selur-compose supports the same `${VAR}` interpolation grammar as Docker Compose:
+
+[cols="1,3"]
+|===
+| Expression | Meaning
+
+| `${VAR}` | Substitute value of `VAR`; error if unset
+| `${VAR:-default}` | Substitute value of `VAR`, or `default` if unset or empty
+| `${VAR-default}` | Substitute value of `VAR`, or `default` if unset (not empty)
+| `${VAR:?err msg}` | Substitute value of `VAR`; fail with `err msg` if unset or empty
+| `${VAR?err msg}` | Substitute value of `VAR`; fail with `err msg` if unset
+| `$$` | Literal dollar sign `$`
+|===
+
+Interpolation is applied to all string-typed fields _after_ TOML parsing.
+Non-string fields (booleans, integers, arrays of integers) are not expanded.
+
+=== 5.2 Shell-variable passthrough
+
+IMPORTANT: Bare `$name` (without braces) is **not** interpolated.
+It is passed through to the container runtime unchanged.
+
+This is intentional: many services use shell-string `command` or `entrypoint`
+values that rely on the container's own shell to expand variables like `$@`, `$*`,
+`$args`, `$1`, etc.  selur-compose must not interfere with these.
+
+Example (the burble coturn service):
+
+[source,toml]
+----
+[services.coturn]
+# ${TURN_REALM:-burble.local} WILL be expanded by selur-compose.
+# $args will NOT be expanded — it is passed to the container shell verbatim.
+command = "--realm=${TURN_REALM:-burble.local} $args"
+----
+
+To include a literal `$` in a field that _would_ be expanded (e.g. `${...}`
+syntax), use `$$`:
+
+[source,toml]
+----
+environment = { PRICE = "$$5.00" }   # → $5.00 after interpolation
+----
+
+See `tests/fixtures/coturn_shell_passthrough.toml` for a concrete fixture.
+
+=== 5.3 `.env` file discovery
+
+The interpolator loads environment overrides in this order (later entries win):
+
+1. Variables from the `.env` file located in the **same directory as the compose file**.
+2. Variables from any files passed via `--env-file <path>` flags (in order given).
+3. Variables already set in the **process environment** (highest precedence).
+
+The `.env` file format:
+
+[source]
+----
+# Comments are ignored
+KEY=value
+ANOTHER="quoted value"
+MULTI_WORD="hello world"
+----
+
+Quoted values have their surrounding quotes stripped. Escape sequences
+(`\n`, `\t`, etc.) are _not_ expanded — the string is taken literally.
+Empty lines are ignored.
+
+== 6. Extension tables (`x-*`)
+
+Any TOML table whose key begins with `x-` is preserved in `Compose.extensions`
+as an opaque `toml::Value`. selur-compose neither validates nor acts on these.
+
+[source,toml]
+----
+[x-svalinn]
+policy-file = "policy/burble.toml"
+require-signed-images = true
+
+[x-stapeln]
+bundle = "burble-0.3.ctp"
+----
+
+Extension table keys are available to external tooling (e.g. `svalinn-policy-lint`)
+that consumes `selur-compose config --format json` output.
+
+== 7. Volumes (named)
+
+[source,toml]
+----
+[volumes.data]
+driver = "local"
+
+[volumes.cache]
+# external volumes are created outside selur-compose and must exist already.
+external = true
+----
+
+== 8. Secrets and configs
+
+[source,toml]
+----
+[secrets.db_password]
+file = "./secrets/db_password.txt"
+
+[configs.nginx_conf]
+file = "./nginx.conf"
+----
+
+Services reference them by short name:
+
+[source,toml]
+----
+[services.app]
+secrets = ["db_password"]
+
+# Or with mount options:
+secrets = [{ source = "db_password", target = "/run/secrets/db_password", uid = "1000" }]
+----
+
+== 9. Build
+
+[source,toml]
+----
+[services.api.build]
+context    = "./server"
+dockerfile = "Dockerfile.prod"
+target     = "release"          # multi-stage build target
+no_cache   = false
+args       = { FEATURES = "persistent,tls" }
+labels     = { "org.opencontainers.image.source" = "https://github.com/hyperpolymath/burble" }
+----
+
+== 10. Known v0.1 limitations
+
+* No `extends:` support (no equivalent in TOML).
+* No Docker Swarm `deploy:` key (ignored as extension if present).
+* Port ranges (`"8080-8090:80-90"`) are parsed but driver support is limited.
+* `configs` and `secrets` are parsed and planned but podman driver wiring is
+  minimal in v0.1 — see `docs/v0.2-roadmap.adoc`.
+* A static-base service (e.g. `cgr.dev/chainguard/static`) with a
+  `test = "CMD-SHELL …"` healthcheck will fail at runtime because there is
+  no `/bin/sh` — use `test = ["CMD", "…"]` exec form instead.

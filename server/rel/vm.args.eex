@@ -8,8 +8,12 @@
 ## Name of the node (sname = short name, name = fully qualified).
 -sname <%= @release.name %>
 
-## Cookie for distributed Erlang (set via RELEASE_COOKIE env var).
--setcookie <%= @release.cookie %>
+## Cookie for distributed Erlang.
+## Modern Elixir releases (≥1.14) read this from the RELEASE_COOKIE env var at
+## startup, not from a vm.args template — Mix.Release no longer carries a
+## :cookie field. If unset, Erlang generates a random cookie per boot, which is
+## fine for monarchic mode. For oligarchic/distributed clustering, set
+## RELEASE_COOKIE in containers/compose.toml's server env block.
 
 ## Heartbeat management — VM restarts if the heart process detects a hang.
 ## Uncomment for production:

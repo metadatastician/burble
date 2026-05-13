@@ -24,8 +24,8 @@ addPopStateListener(_ => {
 
 // Set initial page title
 let _ = {
-  open Webapi.Dom
-  document->Document.setTitle(Routes.title(app.currentRoute))
+  let title = Routes.title(app.currentRoute)
+  let _ = %raw(`(t => { document.title = t })`)(title)
 }
 
 Console.log("[Burble] Voice first. Friction last. Complexity optional.")

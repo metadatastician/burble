@@ -1,0 +1,34 @@
+// SPDX-License-Identifier: PMPL-1.0-or-later
+= selur-compose — Maintainers
+:toc:
+
+== Active maintainers
+
+[cols="1,2,2"]
+|===
+| Name | Email | Role
+
+| Jonathan D.A. Jewell
+| j.d.a.jewell@open.ac.uk
+| Lead maintainer, original author
+|===
+
+== Emeritus maintainers
+
+None yet.
+
+== Maintainer responsibilities
+
+Maintainers are expected to:
+
+* Review and merge pull requests within 14 days of submission.
+* Triage issues and label them appropriately within 7 days.
+* Cut releases on the schedule described in `CHANGELOG.md` and `docs/compose-dialect.adoc`.
+* Enforce the language policy (Rust + bash + YAML only — no Python, Go, or Node.js).
+* Ensure CI stays green on `main` before any merge.
+
+== How to become a maintainer
+
+Open a PR adding yourself to this file. Existing maintainers vote; a simple
+majority is required. You must have contributed at least three non-trivial
+merged PRs before nomination.

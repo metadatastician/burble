@@ -1,0 +1,59 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/selur-compose-schema",
+    "crates/selur-compose-interp",
+    "crates/selur-compose-plan",
+    "crates/selur-compose-driver",
+    "crates/selur-compose",
+]
+
+[workspace.package]
+version      = "0.1.0"
+edition      = "2021"
+rust-version = "1.78"
+license      = "PMPL-1.0-or-later"
+repository   = "https://github.com/hyperpolymath/selur-compose"
+homepage     = "https://github.com/hyperpolymath/selur-compose"
+
+[workspace.dependencies]
+# Serialisation
+serde            = { version = "1", features = ["derive"] }
+serde_json       = "1"
+toml             = "0.8"
+
+# Error handling
+thiserror        = "1"
+anyhow           = "1"
+
+# Async runtime
+tokio            = { version = "1", features = ["full"] }
+async-trait      = "0.1"
+futures          = "0.3"
+
+# CLI
+clap             = { version = "4", features = ["derive"] }
+
+# Observability
+tracing          = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Time / duration
+humantime        = "2"
+humantime-serde  = "1"
+
+# Hashing
+sha2             = "0.10"
+
+# Fuzzy matching (did-you-mean)
+strsim           = "0.11"
+
+# Graph / topology
+petgraph         = "0.6"
+
+# Testing
+insta            = { version = "1", features = ["toml", "json"] }
+proptest         = "1"
+rstest           = "0.21"
+assert_cmd       = "2"
+predicates       = "2"

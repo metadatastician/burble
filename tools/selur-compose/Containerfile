@@ -1,0 +1,65 @@
+# selur-compose — Containerfile
+# SPDX-License-Identifier: PMPL-1.0-or-later
+#
+# Two-stage Chainguard build:
+#   Stage 1 (builder): cgr.dev/chainguard/wolfi-base — installs Rust, builds
+#                      a fully static x86_64-unknown-linux-musl binary.
+#   Stage 2 (runtime): cgr.dev/chainguard/static      — minimal distroless
+#                      image; just the binary and nothing else.
+#
+# Usage:
+#   podman build -f Containerfile -t ghcr.io/hyperpolymath/selur-compose:0.1.0 .
+#   podman run --rm ghcr.io/hyperpolymath/selur-compose:0.1.0 --version
+#
+# Do NOT push without a confirmed v0.1.0 tag and passing CI.
+# Language policy: no Python, no Go, no Node.js.
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Stage 1: builder
+# ──────────────────────────────────────────────────────────────────────────────
+FROM cgr.dev/chainguard/wolfi-base:latest AS builder
+
+# Install Rust toolchain and musl target via Wolfi's apk.
+# Wolfi provides rust + cargo directly; no rustup needed.
+RUN apk add --no-cache \
+        rust \
+        cargo \
+        musl-dev \
+        gcc
+
+WORKDIR /build
+
+# Copy workspace manifests first to cache the dependency layer.
+COPY Cargo.toml Cargo.lock ./
+COPY crates/selur-compose-schema/Cargo.toml  crates/selur-compose-schema/
+COPY crates/selur-compose-interp/Cargo.toml  crates/selur-compose-interp/
+COPY crates/selur-compose-plan/Cargo.toml    crates/selur-compose-plan/
+COPY crates/selur-compose-driver/Cargo.toml  crates/selur-compose-driver/
+COPY crates/selur-compose/Cargo.toml         crates/selur-compose/
+
+# Create stub src files so cargo can fetch dependencies without the real source.
+RUN for crate in selur-compose-schema selur-compose-interp selur-compose-plan selur-compose-driver; do \
+        mkdir -p crates/$crate/src && echo "// stub" > crates/$crate/src/lib.rs; \
+    done && \
+    mkdir -p crates/selur-compose/src && echo "fn main() {}" > crates/selur-compose/src/main.rs
+
+RUN cargo fetch
+
+# Copy the actual source and build the release binary.
+COPY crates/ crates/
+
+RUN cargo build --release --target x86_64-unknown-linux-musl --bin selur-compose
+
+# Verify static linkage before handing the binary to the runtime stage.
+RUN file target/x86_64-unknown-linux-musl/release/selur-compose | grep -q "statically linked"
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Stage 2: runtime — distroless static image (no shell, no libc, no package manager)
+# ──────────────────────────────────────────────────────────────────────────────
+FROM cgr.dev/chainguard/static:latest
+
+COPY --from=builder \
+     /build/target/x86_64-unknown-linux-musl/release/selur-compose \
+     /selur-compose
+
+ENTRYPOINT ["/selur-compose"]

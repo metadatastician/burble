@@ -1,0 +1,40 @@
+# coturn_shell_passthrough.toml
+# SPDX-License-Identifier: PMPL-1.0-or-later
+#
+# Fixture for P-14 / task 2.5: demonstrates that bare $args shell variables
+# inside a TOML string are preserved verbatim by the interpolator.
+#
+# The burble coturn service uses a shell ENTRYPOINT that expands $args via
+# the container shell — NOT via selur-compose interpolation.  The interpolator
+# must leave bare $args untouched (only ${...} braces trigger substitution).
+#
+# Covered by: crates/selur-compose-interp/tests/expand.rs
+#   test: bare_dollar_args_is_preserved
+#
+# See also: docs/compose-dialect.adoc §5.2 (Shell-variable passthrough)
+
+[project]
+name = "coturn-passthrough-test"
+
+[services.coturn]
+image = "coturn/coturn:4.6"
+network_mode = "host"
+restart = "unless-stopped"
+
+# The ENTRYPOINT string contains a bare $args shell variable.
+# selur-compose MUST NOT interpolate $args — it is NOT ${args}.
+# The container's /bin/sh will expand it at runtime.
+entrypoint = ["/bin/sh", "-c", "turnserver $args"]
+
+# ${TURN_REALM:-burble.local} WILL be interpolated (uses ${...} braces).
+# $args will NOT be interpolated.
+command = "-n --log-file=stdout --realm=${TURN_REALM:-burble.local} $args"
+
+environment = { TURN_REALM = "${TURN_REALM:-burble.local}" }
+
+[services.coturn.healthcheck]
+test   = "CMD-SHELL"
+test_cmd = ["wget", "-q", "--spider", "http://localhost:3478", "||", "exit", "1"]
+interval = "30s"
+timeout  = "10s"
+retries  = 3

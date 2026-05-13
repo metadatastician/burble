@@ -33,17 +33,37 @@
 # =============================================================================
 # Pin the Chainguard wolfi-base digest for reproducible builds.
 # To update: podman pull cgr.dev/chainguard/wolfi-base:latest && podman inspect --format '{{.Digest}}'
-FROM cgr.dev/chainguard/wolfi-base:latest@sha256:3eff851ab805966c768d2a8107545a96218426cee1e5cc805865505edbe6ce92 AS build
+# Updated 2026-05-12: new digest ships libxcrypt-4.4.38 (compatible with libxcrypt-dev-4.5.2);
+# the old sha256:3eff851a digest had libxcrypt-4.4.36-r7 pinned in its world file, which
+# conflicted when gcc→glibc-dev pulled libxcrypt-dev-4.5.2-r2 (requires libxcrypt=4.5.2-r2).
+# Package renames in the new image: erlang-dev→erlang-28-dev, musl-dev→glibc-dev (glibc base),
+# ncurses-libs→ncurses.
+# Updated 2026-05-12 (OTP pin): pinned back to OTP 27 (erlang-27-dev + erl27-elixir-1.18)
+# because the elmdb NIF hard-codes -lerl_interface which was removed upstream in OTP 28.
+# OTP 27 still ships erl_interface in erlang-27-dev. Runtime stage also pinned to erlang-27.
+FROM cgr.dev/chainguard/wolfi-base:latest@sha256:26428d979e3059c50a151aa01401c848c460df5712743824b846a389c6d3006c AS build
 
 # Install build toolchain: Elixir, Erlang headers, Zig, C compiler.
+# Note: wolfi-base now uses glibc (not musl); musl-dev is replaced by glibc-dev.
+# Using OTP 27 explicitly: erl27-elixir-1.18 + erlang-27-dev, because OTP 28 removed
+# erl_interface (the C library the elmdb NIF links against with -lerl_interface).
+# cmake + perl are required by quicer's msquic source build (OpenSSL uses Perl; msquic uses CMake).
+# bash is required because quicer's build.sh has a #!/bin/bash shebang and wolfi-base ships
+# only /bin/sh (busybox ash); without bash the pre_hook fails with "./build.sh: not found".
+# pkgconf + openssl-dev required by ex_dtls (bundlex NIF for DTLS in ex_webrtc).
 RUN apk add --no-cache \
-    elixir \
-    erlang-dev \
+    erl27-elixir-1.18 \
+    erlang-27-dev \
     zig \
     gcc \
-    musl-dev \
+    glibc-dev \
     make \
-    git
+    cmake \
+    perl \
+    git \
+    bash \
+    pkgconf \
+    openssl-dev
 
 WORKDIR /build
 
@@ -56,6 +76,12 @@ RUN mix local.hex --force && mix local.rebar --force
 # Fetch and compile production deps only.
 ENV MIX_ENV=prod
 RUN mix deps.get --only prod
+
+# Patch: elmdb's Makefile hard-codes -lerl_interface which was removed from the Wolfi
+# erlang-27-dev package (only libei.a / libei_st.a are shipped). Strip the obsolete
+# flag; -lei (which remains in the link command) provides all the needed symbols.
+RUN sed -i 's/-lerl_interface //g' deps/elmdb/c_src/Makefile
+
 RUN mix deps.compile
 
 # --- Zig NIF layer (cached unless ffi/zig/ changes) ---
@@ -73,7 +99,12 @@ WORKDIR /build/server
 COPY server/lib/ ./lib/
 COPY server/config/ ./config/
 COPY server/priv/ ./priv/
-COPY server/rel/ ./rel/ 2>/dev/null || true
+# COPY does not interpret shell operators — the previous form
+# (`COPY server/rel/ ./rel/ 2>/dev/null || true`) tried to use shell
+# redirection inside a builder instruction and silently failed because
+# `2>/dev/null` was parsed as a literal source path. server/rel/ is
+# always present in the repo, so the unconditional COPY is correct.
+COPY server/rel/ ./rel/
 
 # Compile the application.
 RUN MIX_ENV=prod mix compile
@@ -85,12 +116,14 @@ RUN MIX_ENV=prod mix release
 # Stage 2: Runtime — Minimal Erlang + OTP release
 # =============================================================================
 # Pin runtime image to same digest as build stage for consistency.
-FROM cgr.dev/chainguard/wolfi-base:latest@sha256:3eff851ab805966c768d2a8107545a96218426cee1e5cc805865505edbe6ce92 AS runtime
+FROM cgr.dev/chainguard/wolfi-base:latest@sha256:26428d979e3059c50a151aa01401c848c460df5712743824b846a389c6d3006c AS runtime
 
 # Install only the Erlang runtime (no compiler, no dev headers).
+# Pinned to erlang-27 to match the OTP version used in the build stage.
+# ncurses-libs is now just 'ncurses' in this wolfi-base version.
 RUN apk add --no-cache \
-    erlang \
-    ncurses-libs \
+    erlang-27 \
+    ncurses \
     libstdc++
 
 # Non-root user for security.

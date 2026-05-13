@@ -263,8 +263,13 @@ let prevStep = (s: step): option<step> =>
 /// Check localStorage to see if the setup wizard has been completed.
 /// Returns true if the user has already gone through the wizard.
 let isSetupComplete = (): bool => {
+  // %raw with a bare identifier cannot see ReScript-bound locals (the compiler
+  // doesn't analyse the raw string, so `value` looked unused and the binding
+  // was elided — producing `localStorage.getItem(k), value !== null` in the
+  // compiled JS, where `value` is undefined). Pass via an arrow function arg
+  // so the value flows through explicitly.
   let value: Nullable.t<string> = localStorage["getItem"](storageKey)
-  let isNull: bool = %raw(`value === null`)
+  let isNull: bool = (%raw(`v => v === null`))(value)
   !isNull
 }
 
@@ -331,16 +336,17 @@ let rec enumerateDevices = async (wizard: t): unit => {
     }
 
     // Restore previous selections from localStorage.
+    // Same %raw-scope issue as isSetupComplete: pass values as function args.
     let savedInput: Nullable.t<string> = localStorage["getItem"](inputDeviceKey)
-    let savedInputNull: bool = %raw(`savedInput === null`)
+    let savedInputNull: bool = (%raw(`v => v === null`))(savedInput)
     if !savedInputNull {
-      let si: string = %raw(`savedInput`)
+      let si: string = (%raw(`v => v`))(savedInput)
       wizard.selectedInputId = si
     }
     let savedOutput: Nullable.t<string> = localStorage["getItem"](outputDeviceKey)
-    let savedOutputNull: bool = %raw(`savedOutput === null`)
+    let savedOutputNull: bool = (%raw(`v => v === null`))(savedOutput)
     if !savedOutputNull {
-      let so: string = %raw(`savedOutput`)
+      let so: string = (%raw(`v => v`))(savedOutput)
       wizard.selectedOutputId = so
     }
 
@@ -1446,9 +1452,9 @@ and destroy = (wizard: t): unit => {
   | Some(root) =>
     let rootObj = castFromJsObj(root)
     let parent: Nullable.t<{..}> = rootObj["parentNode"]
-    let isNull: bool = %raw(`parent === null`)
+    let isNull: bool = (%raw(`v => v === null`))(parent)
     if !isNull {
-      let p: {..} = %raw(`parent`)
+      let p: {..} = (%raw(`v => v`))(parent)
       ignore(p["removeChild"](root))
     }
   | None => ()

@@ -1,0 +1,91 @@
+# STOP - CRITICAL READING REQUIRED
+
+**THIS FILE MUST BE READ FIRST BY ALL AI AGENTS**
+
+## WHAT IS THIS?
+
+This is the AI manifest for **selur-compose** — a TOML-native, single-static-binary
+compose CLI that drives Podman 5.4+ rootless on Linux. It is the hyperpolymath
+org's drop-in replacement for `podman-compose` (which is banned: Python).
+
+Standalone repo: `github.com/hyperpolymath/selur-compose`
+Submodule mount in burble: `tools/selur-compose/`
+
+## CRITICAL INVARIANTS
+
+1. **Rust only.** No Python, no Go, no Node.js. Build scripts: bash or `just`.
+2. **No `podman-compose`.** Banned. selur-compose IS the replacement.
+3. **Chainguard base images.** `cgr.dev/chainguard/wolfi-base` for builds,
+   `cgr.dev/chainguard/static` for runtime images.
+4. **TOML compose dialect.** Not YAML. The format is `selur-compose.toml`.
+5. **PMPL-1.0-or-later** license (MPL-2.0 fallback where required).
+6. **Podman CLI driver only** in v0.1. No libpod REST socket dependency.
+7. **musl static linking.** The binary must run without a glibc runtime.
+8. **Five-crate workspace.** schema → interp → plan → driver → binary.
+   Do not merge crates; do not add a sixth crate without a design doc update.
+
+## REPOSITORY STRUCTURE
+
+```
+selur-compose/
+├── Cargo.toml                  # workspace root (version = "0.1.0")
+├── Cargo.lock                  # committed (binary crate — reproducibility)
+├── rust-toolchain.toml         # stable channel, rustfmt + clippy
+├── Justfile                    # build / test / lint / release-dry
+├── Containerfile               # Chainguard two-stage image
+├── dist-workspace.toml         # cargo-dist release config
+├── LICENSE                     # PMPL-1.0-or-later
+├── README.adoc
+├── CHANGELOG.md                # Keep-a-Changelog
+├── CONTRIBUTING.md
+├── MAINTAINERS.adoc
+├── CODE_OF_CONDUCT.md
+├── 0-AI-MANIFEST.a2ml          # THIS FILE
+├── .gitignore
+├── crates/
+│   ├── selur-compose-schema/   # pure serde types — NO I/O
+│   ├── selur-compose-interp/   # ${VAR:-default} expansion
+│   ├── selur-compose-plan/     # DAG planner, Kahn's algo, SHA-256 hash
+│   ├── selur-compose-driver/   # podman CLI driver + MockDriver
+│   └── selur-compose/          # binary crate (clap)
+├── tests/                      # workspace-level e2e + dry-run tests
+│   └── fixtures/               # real + synthetic compose files
+├── docs/
+│   ├── compose-dialect.adoc    # TOML schema + interpolation reference
+│   └── cli-json-schema.adoc    # --format json output schema
+└── .github/
+    ├── workflows/ci.yml        # per-PR: fmt, lint, test, podman-it
+    └── workflows/release.yml   # on-tag: cargo-dist, cargo publish
+```
+
+## ARCHITECTURE SUMMARY
+
+```
+*.toml file ─┐
+.env files  ─┼─► schema::Compose ─► interp ─► plan::Plan ─► driver::execute ─► podman procs
+process env ─┘                                     │
+                                                   └► cli output (table/json)
+```
+
+Layer rules:
+- Nothing above `driver` may know about podman.
+- Nothing below `schema` may touch I/O.
+- Library crates use `thiserror`; binary crate uses `anyhow`.
+
+## CURRENT STATUS (v0.1.0)
+
+- 216 unit tests pass across five crates.
+- All three real consumer files parse and round-trip (burble selur-compose.toml,
+  burble compose.toml, boj-server selur-compose.toml).
+- `--dry-run up` against burble's selur-compose.toml produces a correct planned-ops trace.
+- All six subcommands functional: up, down, build, pull, ps, logs, config, version.
+- Release engineering complete (dist-workspace.toml, CI/release workflows, Containerfile).
+
+## LANGUAGE POLICY (org-wide hard rule)
+
+Python — BANNED
+Go — BANNED
+Node.js — BANNED
+npm / pip / go get — BANNED
+
+Permitted: Rust, Elixir, ReScript, Zig, VCL, bash

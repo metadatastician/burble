@@ -1,0 +1,36 @@
+[package]
+name         = "selur-compose"
+description  = "TOML-native compose CLI for Podman. Drop-in replacement for podman-compose."
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+license.workspace      = true
+repository.workspace   = true
+homepage.workspace     = true
+
+[[bin]]
+name = "selur-compose"
+path = "src/main.rs"
+
+[dependencies]
+selur-compose-schema = { path = "../selur-compose-schema", version = "0.1.0" }
+selur-compose-interp = { path = "../selur-compose-interp", version = "0.1.0" }
+selur-compose-plan   = { path = "../selur-compose-plan", version = "0.1.0" }
+selur-compose-driver = { path = "../selur-compose-driver", version = "0.1.0" }
+clap                 = { workspace = true }
+tokio                = { workspace = true }
+anyhow               = { workspace = true }
+tracing              = { workspace = true }
+tracing-subscriber   = { workspace = true }
+serde                = { workspace = true }
+serde_json           = { workspace = true }
+toml                 = { workspace = true }
+
+[dev-dependencies]
+assert_cmd  = { workspace = true }
+predicates  = { workspace = true }
+insta       = { workspace = true }
+
+[features]
+e2e       = []
+podman-it = []

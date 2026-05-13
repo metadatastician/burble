@@ -1,0 +1,172 @@
+// SPDX-License-Identifier: PMPL-1.0-or-later
+= selur-compose
+:toc: preamble
+:icons: font
+
+A TOML-native, single-static-binary compose CLI that drives **Podman 5.4+
+rootless** on Linux. Drop-in ergonomic replacement for `podman-compose`, written
+in Rust, reading `selur-compose.toml` instead of YAML.
+
+== Why?
+
+`podman-compose` is Python. The hyperpolymath language policy bans Python
+org-wide. `docker compose` targets Docker, not Podman, and is Go. Neither
+handles TOML.
+
+selur-compose is:
+
+* **Pure Rust** — single static binary, no runtime dependencies.
+* **TOML-first** — reads `selur-compose.toml` and `compose.toml` natively.
+* **Podman 5.4 compatible** — shells out to the `podman` CLI you already have.
+* **Drop-in ergonomic** — `up`, `down`, `build`, `pull`, `ps`, `logs`, `config`,
+  `version` subcommands with flags matching `podman-compose`.
+
+== Install
+
+=== Via `cargo install` (build from source)
+
+```bash
+cargo install selur-compose
+```
+
+=== Via `cargo binstall` (prebuilt musl static binary — recommended)
+
+```bash
+cargo binstall selur-compose
+```
+
+Fetches the prebuilt `x86_64-unknown-linux-musl` or `aarch64-unknown-linux-musl`
+tarball from the GitHub Release and installs it directly — no Rust toolchain
+needed on the target machine.
+
+=== Via container image
+
+```bash
+podman run --rm ghcr.io/hyperpolymath/selur-compose:0.1.0 --version
+```
+
+The image is useful for CI pipelines. For day-to-day use the binary is preferred
+because it needs to invoke `podman` on the host.
+
+== Quick start
+
+Given a `selur-compose.toml` (e.g. from `boj-server/selur-compose.toml`):
+
+```bash
+# Bring the stack up in detached mode
+selur-compose up -d
+
+# Check what's running
+selur-compose ps
+
+# See logs from all services
+selur-compose logs
+
+# Tear it down
+selur-compose down
+```
+
+Specify a file explicitly (default is `selur-compose.toml`, falling back to
+`compose.toml`):
+
+```bash
+selur-compose -f containers/selur-compose.toml up -d
+```
+
+=== Burble stack
+
+```bash
+git clone --recurse-submodules https://github.com/hyperpolymath/burble && cd burble
+just build-selur-compose    # builds the deploy driver (~3 min, one-time)
+just up                     # brings up the burble container stack
+```
+
+=== Dry-run (inspect the plan without touching podman)
+
+```bash
+selur-compose --dry-run up
+```
+
+Prints the ordered list of operations (CreateNetwork, CreateVolume, BuildImage,
+PullImage, RunContainer, WaitHealthy) without executing any of them. Useful for
+CI plan-stability assertions and for reviewing what `up` will do before running it.
+
+== TOML compose dialect
+
+See link:docs/compose-dialect.adoc[docs/compose-dialect.adoc] for the full
+schema reference, including:
+
+* Variable interpolation (`${VAR}`, `${VAR:-default}`, `${VAR:?err}`, `$$`)
+* `.env` discovery rules
+* `depends_on` list and map-with-condition forms
+* `network_mode = "host"` and other network modes
+* Healthcheck-gated dependencies (`condition = "service_healthy"`)
+* Restart policies
+* Build arguments, secrets, configs
+
+== Subcommands
+
+[cols="1,3,2"]
+|===
+| Subcommand | Purpose | Key flags
+
+| `up`
+| Bring the stack up
+| `-d/--detach`, `--build`, `--no-build`, `--no-pull`, `--force-recreate`, `--remove-orphans`, `[SERVICE…]`
+
+| `down`
+| Tear the stack down
+| `--volumes`, `--rmi <local\|all>`, `--remove-orphans`, `--timeout`
+
+| `build`
+| Build images
+| `--no-cache`, `--pull`, `[SERVICE…]`
+
+| `pull`
+| Pull images
+| `[SERVICE…]`
+
+| `ps`
+| List containers
+| `--all`, `--quiet`
+
+| `logs`
+| Tail logs
+| `-f/--follow`, `--tail <N>`, `[SERVICE…]`
+
+| `config`
+| Print parsed + interpolated compose to stdout
+| `--format <toml\|json>`
+
+| `version`
+| Print selur-compose version + podman version
+| —
+|===
+
+Global flags: `-f/--file`, `-p/--project-name`, `--env-file`, `--profile`,
+`-v/--verbose`, `-q/--quiet`, `--format <text\|json>`, `--dry-run`.
+
+== Architecture
+
+Five crates, built bottom-up:
+
+```
+selur-compose-schema   pure serde types; no I/O
+selur-compose-interp   ${VAR:-default} expansion + .env loading
+selur-compose-plan     DAG planner, Kahn's algo, SHA-256 config hash
+selur-compose-driver   podman CLI driver + MockDriver for testing
+selur-compose          binary crate (clap CLI)
+```
+
+The planner is snapshot-tested against the three real consumer files.
+The driver is integration-tested against a live podman instance (`--features podman-it`).
+
+== Interop with podman-compose
+
+selur-compose uses the same `io.podman.compose.project` label key that
+`podman-compose` uses, so `selur-compose ps` sees containers that `podman-compose up`
+started, and `selur-compose down` can stop them. Migration is safe.
+
+== License
+
+link:LICENSE[PMPL-1.0-or-later] (MPL-2.0 fallback where required).

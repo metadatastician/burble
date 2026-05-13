@@ -1,0 +1,24 @@
+# Build artifacts
+/target/
+
+# Editor swap files
+*.swp
+*.swo
+*~
+.DS_Store
+
+# IDE directories
+.idea/
+.vscode/
+*.iml
+
+# Environment files (kept out of repo — use .env.example instead)
+.env
+.env.local
+
+# cargo-dist build outputs
+dist-target/
+
+# Nix build outputs (if flake.nix is later added)
+result
+result-*

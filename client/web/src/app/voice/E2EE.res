@@ -115,7 +115,7 @@ external createDecryptTransform: activeState => {..} = "createDecryptTransform"
 // ---------------------------------------------------------------------------
 
 /// Derive a 256-bit symmetric key from a shared secret and salt using HKDF.
-let deriveFrameKey = async (secret: ArrayBuffer.t, salt: ArrayBuffer.t, info: string): promise<ArrayBuffer.t> => {
+let deriveFrameKey = async (secret: ArrayBuffer.t, salt: ArrayBuffer.t, info: string): ArrayBuffer.t => {
   let keyMaterial = await subtle["importKey"](
     "raw",
     secret,
@@ -141,7 +141,7 @@ let deriveFrameKey = async (secret: ArrayBuffer.t, salt: ArrayBuffer.t, info: st
 }
 
 /// Ratchet the current key forward using a one-way function.
-let ratchetKey = async (currentKey: ArrayBuffer.t): promise<ArrayBuffer.t> => {
+let ratchetKey = async (currentKey: ArrayBuffer.t): ArrayBuffer.t => {
   // Simple ratchet: SHA-256(currentKey)
   subtle["digest"]("SHA-256", currentKey)
 }

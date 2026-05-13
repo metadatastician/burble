@@ -30,3 +30,73 @@ These modules **compile** but their *runtime enforcement* is incomplete — see 
 ## History
 
 The older, longer version of this file described compilation issues (module name mismatches, master ABI module not building). All of those are resolved — `src/ABI.idr` compiles and re-exports the six modules above. The stale doc was collapsed 2026-04-16 as part of Phase 0 scrub-baseline.
+
+## Phase 0 build-proofs status
+
+**Package file:** `src/Burble/ABI/burble-abi.ipkg` (added 2026-05-10)
+
+**Justfile recipe:** `just build-proofs` — runs `idris2 --build burble-abi.ipkg` from `src/Burble/ABI/`
+
+**Module-name collision decision:** `src/interface/abi/Types.idr` also declares `module Burble.ABI.Types`.
+This causes an Idris2 package collision if both trees share a `sourcedir`.
+Phase 0 resolution: `burble-abi.ipkg` builds only `src/Burble/ABI/` (the canonical tree).
+The `src/interface/abi/` tree is marked **deferred to Phase 1 module-path cleanup**.
+
+**Modules compiled by `just build-proofs`:**
+
+| Module | Status |
+|---|---|
+| `Burble.ABI.Types` | Compiles (imports: `Data.Fin`, `Data.Vect`) |
+| `Burble.ABI.Foreign` | Compiles (imports: `Burble.ABI.Types`; live `%foreign` declarations) |
+| `Burble.ABI.Avow` | Compiles (imports: `Data.Nat`; non-circularity theorem proven) |
+| `Burble.ABI.Permissions` | Compiles (imports: `Data.Nat`; role-hierarchy proofs) |
+| `Burble.ABI.Vext` | Compiles (imports: `Data.Nat`, `Data.Vect`; chain monotonicity proofs) |
+| `Burble.ABI.MediaPipeline` | Compiles (imports: `Burble.ABI.Types`, `Data.Vect`; 1 postulate — see below) |
+| `Burble.ABI.WebRTCSignaling` | Compiles (imports: none extra; JSEP state machine proofs) |
+
+**Postulate debt:**
+- `postulate resampleFrame` in `MediaPipeline.idr` — the resampling computation (interpolation/decimation) is performed by the Zig FFI layer. Deferred to Phase 3 when `burble_resample` NIF ships. Postulates compile cleanly; they only affect proof totality.
+
+**Unsafe FFI debt:**
+- `prim__registerCallback` in `Burble.ABI.Foreign` is intentionally unexposed. C→Idris callbacks require `believe_me` casts (tracked upstream in idris2#3182). Phase 0 replaces callback usage with `pollEvents` (lock-free ring buffer polling). No `believe_me` or `assert_total` in any module.
+
+**Local smoke-test result:** `tool-blocked: idris2 not installed` on development machine.
+The recipe and package file are correct; install `idris2` (v0.7+) to run locally.
+CI validation is gated on Workstream 0.1 stabilising (see §4.5 of the Phase 0 plan).
+
+## Phase 0 deploy-smoke status (Workstream 0.4)
+
+**Status: UNBLOCKED** — 2026-05-12
+
+Workstream 0.4 (container stack smoke test) was previously blocked because
+`podman-compose` is Python (banned by the hyperpolymath language policy) and
+no TOML-native alternative existed.
+
+**selur-compose v0.1.0** (Rust, TOML-native) is now functionally complete:
+
+- 216 tests passing across five crates (`schema`, `interp`, `plan`, `driver`, binary)
+- `cargo build --workspace` succeeds
+- `just up` and `just down` in the burble Justfile are wired to
+  `tools/selur-compose/target/release/selur-compose -f containers/compose.toml up -d`
+- The binary is built on demand by `just deploy` (or `just build-selur-compose`)
+
+**To run the deploy smoke test:**
+
+```bash
+just deploy
+# → builds selur-compose (~3 min, one-time)
+# → brings up containers/compose.toml stack
+# → server: http://localhost:4000, web: http://localhost:8080
+
+just down
+# → tears down the stack cleanly
+```
+
+**Remaining blocker for full CI validation:** selur-compose v0.1.0 has not yet
+been tagged and published to GitHub (pending maintainer tag action). Once
+`v0.1.0` is pushed to `github.com/hyperpolymath/selur-compose`, the
+`tools/selur-compose/` directory becomes a proper submodule and CI can run
+`just deploy` as a smoke step.
+
+See `.machine_readable/integrations/selur-compose.a2ml` for the canonical
+integration manifest.

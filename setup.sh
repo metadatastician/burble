@@ -57,6 +57,15 @@ if ! command -v just >/dev/null 2>&1; then
     echo ""
 fi
 
+# Submodules: tools/affinescript (compiler) and tools/nextgen-databases
+# (parent of verisimdb, built by containers/selur-compose.toml). Container
+# bring-up will fail to resolve VeriSimDB's build context without this.
+if [ -f .gitmodules ]; then
+    echo "Initialising git submodules..."
+    git submodule update --init --recursive
+    echo ""
+fi
+
 echo "Running diagnostics..."
 just doctor
 

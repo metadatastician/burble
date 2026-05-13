@@ -1,0 +1,148 @@
+---
+# CI workflow for selur-compose
+# Matrix: ubuntu-24.04 × {stable, msrv-1.78}
+# Language policy: Rust only — no Python, no Go, no Node.js.
+
+name: CI
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  # Disable incremental compilation in CI for reproducibility.
+  CARGO_INCREMENTAL: "0"
+  RUST_BACKTRACE: "1"
+
+jobs:
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Main test matrix
+  # ─────────────────────────────────────────────────────────────────────────────
+  test:
+    name: "test (${{ matrix.toolchain }})"
+    runs-on: ubuntu-24.04
+
+    strategy:
+      fail-fast: false
+      matrix:
+        toolchain:
+          - stable
+          - "1.78"  # MSRV — must match rust-version in Cargo.toml
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+
+      - name: Install Rust (${{ matrix.toolchain }})
+        uses: dtolnay/rust-toolchain@56f84321dbccf1a80e8ea509c24e7e01a7fb5157  # pinned stable tag
+        with:
+          toolchain: ${{ matrix.toolchain }}
+          components: rustfmt, clippy
+
+      - name: Cache cargo registry + build
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684  # v4.2.3
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-${{ matrix.toolchain }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-${{ matrix.toolchain }}-
+
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+      - name: Clippy (deny warnings)
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: Unit tests
+        run: cargo test --workspace
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Integration tests (podman-it feature) — gated to pushes to main and PRs
+  # that touch the driver crate.
+  # ─────────────────────────────────────────────────────────────────────────────
+  integration:
+    name: "integration tests (podman-it)"
+    runs-on: ubuntu-24.04
+
+    # Only run on push to main, or on PRs touching the driver or e2e code.
+    if: |
+      github.event_name == 'push' ||
+      (github.event_name == 'pull_request' &&
+       contains(github.event.pull_request.changed_files, 'crates/selur-compose-driver'))
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+
+      - name: Install Rust (stable)
+        uses: dtolnay/rust-toolchain@56f84321dbccf1a80e8ea509c24e7e01a7fb5157
+        with:
+          toolchain: stable
+
+      - name: Install podman 5.4
+        run: |
+          sudo apt-get update -qq
+          # Ubuntu 24.04 ships podman 4.x; install 5.x from kubic repo.
+          sudo apt-get install -y --no-install-recommends \
+            curl ca-certificates gnupg2
+          . /etc/os-release
+          echo "deb [signed-by=/usr/share/keyrings/libcontainers-archive-keyring.gpg] \
+            https://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/unstable/xUbuntu_${VERSION_ID}/ /" \
+            | sudo tee /etc/apt/sources.list.d/devel:kubic:libcontainers:unstable.list
+          curl -fsSL "https://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/unstable/xUbuntu_${VERSION_ID}/Release.key" \
+            | gpg --dearmor \
+            | sudo tee /usr/share/keyrings/libcontainers-archive-keyring.gpg > /dev/null
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends podman
+          podman --version
+
+      - name: Cache cargo
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684  # v4.2.3
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-stable-it-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Integration tests
+        run: cargo test --workspace --features podman-it
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Security audit and dependency checks
+  # ─────────────────────────────────────────────────────────────────────────────
+  audit:
+    name: "cargo audit + deny"
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+
+      - name: Install Rust (stable)
+        uses: dtolnay/rust-toolchain@56f84321dbccf1a80e8ea509c24e7e01a7fb5157
+        with:
+          toolchain: stable
+
+      - name: Install cargo-audit
+        run: cargo install cargo-audit --locked
+
+      - name: cargo audit
+        run: cargo audit
+
+      # cargo-deny is optional but recommended. Skip gracefully if not present.
+      - name: Install cargo-deny
+        run: cargo install cargo-deny --locked || true
+
+      - name: cargo deny check
+        run: cargo deny check || true

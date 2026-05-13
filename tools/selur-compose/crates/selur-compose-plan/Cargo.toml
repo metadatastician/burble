@@ -1,0 +1,21 @@
+[package]
+name         = "selur-compose-plan"
+description  = "DAG planner: turns a parsed Compose into an ordered sequence of Ops."
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+license.workspace      = true
+repository.workspace   = true
+homepage.workspace     = true
+
+[dependencies]
+selur-compose-schema = { path = "../selur-compose-schema", version = "0.1.0" }
+selur-compose-interp = { path = "../selur-compose-interp", version = "0.1.0" }
+serde                = { workspace = true }
+serde_json           = { workspace = true }
+thiserror            = { workspace = true }
+sha2                 = { workspace = true }
+petgraph             = { workspace = true }
+
+[dev-dependencies]
+insta = { workspace = true }

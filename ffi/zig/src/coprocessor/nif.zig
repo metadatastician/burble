@@ -612,7 +612,6 @@ fn nif_ptp_read_clock(env: ?*ErlNifEnv, _: c_int, _: [*c]const ERL_NIF_TERM) cal
             error.NoPtpDevice => make_error(env, "no_ptp_device"),
             error.IoctlFailed => make_error(env, "ioctl_failed"),
             error.UnsupportedOS => make_error(env, "unsupported_os"),
-            else => make_error(env, "ptp_error"),
         };
     };
     return make_ok(env, c.enif_make_int64(env, ns));

@@ -32,6 +32,10 @@ defmodule Burble.Bolt.Packet do
   and network equipment that pass WoL traffic will also pass Bolt packets.
   """
 
+  # Bitwise operators (&&&, |||) moved out of the Elixir prelude in 1.10.
+  # The set_flag/3 and flag_set?/2 helpers use them.
+  import Bitwise
+
   @magic "BURB"
   @version 0x01
   @port 7373
@@ -113,7 +117,7 @@ defmodule Burble.Bolt.Packet do
   """
   @spec decode(binary()) :: {:ok, t()} | {:error, atom()}
   def decode(<<
-    @magic::binary-size(4),
+    @magic,
     @version::8,
     flags::8,
     target_mac::binary-size(6),

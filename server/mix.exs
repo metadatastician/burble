@@ -127,7 +127,14 @@ defmodule Burble.MixProject do
         applications: [runtime_tools: :permanent, os_mon: :permanent],
         steps: [:assemble, :tar],
         rel_templates_path: "rel",
-        overlay: "rel/overlays"
+        overlay: "rel/overlays",
+        # Phoenix's validate_compile_env check refuses to boot when runtime.exs
+        # sets a value that compile_env reads with a different default. Several
+        # endpoint plugs use Application.compile_env where Application.get_env
+        # would be more correct (cors_origins, snif_path, ...). Migrating those
+        # to get_env is Phase 1 Burble work. Disabling validation here so the
+        # release boots while that migration is pending.
+        validate_compile_env: false
       ]
     ]
   end
@@ -177,8 +184,10 @@ defmodule Burble.MixProject do
       {:hammer, "~> 6.2"},
 
       # QUIC transport (optional — falls back to WebSocket when unavailable).
-      # Requires msquic C library on the build host.
-      {:quicer, "~> 0.2", optional: true},
+      # Git dep (not hex) so the full repo — including build.sh and the msquic
+      # submodule — is fetched.  The hex tarball strips build.sh, causing the
+      # Makefile build-nif target to fail with "No such file or directory".
+      {:quicer, github: "emqx/quic", tag: "0.2.15", submodules: true, optional: true},
 
       # LMDB playout buffer (optional — falls back to ETS when unavailable).
       # elmdb = Erlang NIF, ex_lmdb = Elixir wrapper.

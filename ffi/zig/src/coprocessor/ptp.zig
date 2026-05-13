@@ -21,7 +21,7 @@ pub const PtpClockTime = extern struct {
 /// Returns error.NoPtpDevice if the device path doesn't exist.
 /// Returns error.IoctlFailed if the ioctl call fails.
 /// Returns error.UnsupportedOS on non-Linux platforms.
-pub fn read_ptp_clock(device_path: []const u8) !i64 {
+pub fn read_ptp_clock(device_path: []const u8) error{ NoPtpDevice, IoctlFailed, UnsupportedOS }!i64 {
     if (builtin.os.tag != .linux) {
         return error.UnsupportedOS;
     }

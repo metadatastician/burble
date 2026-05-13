@@ -1,0 +1,74 @@
+---
+source: crates/selur-compose-schema/tests/parse_snapshots.rs
+expression: compose
+---
+Compose {
+    project: Some(
+        Project {
+            name: "boj-server",
+        },
+    ),
+    services: {
+        "app": Service {
+            image: None,
+            build: Some(
+                Build {
+                    context: ".",
+                    dockerfile: Some(
+                        "Containerfile",
+                    ),
+                    args: {},
+                    target: None,
+                    labels: {},
+                    no_cache: false,
+                },
+            ),
+            command: None,
+            entrypoint: None,
+            environment: Empty,
+            env_file: [],
+            ports: [],
+            volumes: [],
+            networks: [
+                "default",
+            ],
+            network_mode: None,
+            depends_on: Empty,
+            healthcheck: Some(
+                Healthcheck {
+                    test: Shell(
+                        "exit 0",
+                    ),
+                    interval: Some(
+                        30s,
+                    ),
+                    timeout: Some(
+                        5s,
+                    ),
+                    retries: Some(
+                        3,
+                    ),
+                    start_period: None,
+                    disable: false,
+                },
+            ),
+            restart: UnlessStopped,
+            profiles: [],
+            secrets: [],
+            configs: [],
+            user: None,
+            working_dir: None,
+            hostname: None,
+            cap_add: [],
+            cap_drop: [],
+            init: None,
+            stop_signal: None,
+            stop_grace_period: None,
+        },
+    },
+    networks: {},
+    volumes: {},
+    secrets: {},
+    configs: {},
+    extensions: {},
+}

@@ -50,6 +50,12 @@ build-ffi-debug:
 build-server:
     cd server && mix deps.get && mix compile
 
+# Build Idris2 ABI proofs (src/Burble/ABI/*)
+# Module collision note: src/interface/abi/ also declares Burble.ABI.Types
+# and is excluded from this recipe (deferred to Phase 1 module-path cleanup).
+build-proofs:
+    cd src/Burble/ABI && idris2 --build burble-abi.ipkg
+
 # Build web client
 build-client:
     cd client/web && deno task build
@@ -107,13 +113,57 @@ server:
 client:
     cd client/web && deno task dev
 
-# Start everything via containers (one command)
-up:
-    cd containers && podman-compose -f compose.toml up
+# Build the selur-compose binary from the tools/selur-compose/ workspace.
+# Once selur-compose ships as a submodule with a published crate, this becomes
+# 'cargo install selur-compose' or 'cargo binstall selur-compose'.
+build-selur-compose:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    SELUR="{{justfile_directory()}}/tools/selur-compose"
+    if [[ ! -d "$SELUR" ]]; then
+        echo "ERROR: tools/selur-compose not found."
+        echo "Run: git submodule update --init tools/selur-compose"
+        exit 1
+    fi
+    echo "Building selur-compose (release)…"
+    cargo build --release --manifest-path "$SELUR/Cargo.toml" -p selur-compose
+    echo "Built: $SELUR/target/release/selur-compose"
 
-# Stop containers
+# Start containers via selur-compose (Rust, TOML-native — no Python).
+# Builds selur-compose from tools/selur-compose/ if the binary is missing.
+# Once selur-compose is published and installed system-wide, the build
+# guard becomes a no-op (the binary will already exist on PATH).
+up:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    SELUR_BIN="{{justfile_directory()}}/tools/selur-compose/target/release/selur-compose"
+    if [[ ! -x "$SELUR_BIN" ]]; then
+        echo "selur-compose binary not found; building from tools/selur-compose/ first…"
+        just build-selur-compose
+    fi
+    # Run from containers/ so build.context = ".." in compose.toml resolves
+    # against the compose file's directory (burble root), per compose spec.
+    # selur-compose v0.1 does not yet resolve relative paths against the
+    # compose file location — TODO file an issue and remove the cd once fixed.
+    cd "{{justfile_directory()}}/containers"
+    exec "$SELUR_BIN" -f compose.toml up -d
+
+# Stop containers via selur-compose.
+# Builds selur-compose from tools/selur-compose/ if the binary is missing.
 down:
-    cd containers && podman-compose -f compose.toml down
+    #!/usr/bin/env bash
+    set -euo pipefail
+    SELUR_BIN="{{justfile_directory()}}/tools/selur-compose/target/release/selur-compose"
+    if [[ ! -x "$SELUR_BIN" ]]; then
+        echo "selur-compose binary not found; building from tools/selur-compose/ first…"
+        just build-selur-compose
+    fi
+    cd "{{justfile_directory()}}/containers"
+    exec "$SELUR_BIN" -f compose.toml down
+
+# Full deploy: build selur-compose if needed, then bring the stack up.
+# Equivalent to 'just up' but makes the build step explicit.
+deploy: build-selur-compose up
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # TEST
@@ -226,9 +276,14 @@ doctor:
             FAIL=$((FAIL + 1))
         fi
     }
-    check "just"              just      "1.25" 
-    check "git"               git       "2.40" 
-    check "Zig"               zig       "0.13" 
+    check "just"              just      "1.25"
+    check "git"               git       "2.40"
+    check "Zig"               zig       "0.13"
+    check "cmake"             cmake     "3.20"
+    check "perl"              perl      "5.30"
+    check "make"              make      "4.0"
+    check "idris2"            idris2    "0.7"
+    check "podman"            podman    "4.0"
     # Optional tools
     if command -v panic-attack >/dev/null 2>&1; then
         echo "  [OK]   panic-attack — available"

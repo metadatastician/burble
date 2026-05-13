@@ -66,7 +66,7 @@ defmodule Burble.Groove.HealthMesh do
   end
 
   @doc "Report status for a specific peer (used by WebRTC, etc.)."
-  def report_peer_status(peer_id, status, metadata \ %{}) do
+  def report_peer_status(peer_id, status, metadata \\ %{}) do
     GenServer.cast(__MODULE__, {:report_peer_status, peer_id, status, metadata})
   end
 

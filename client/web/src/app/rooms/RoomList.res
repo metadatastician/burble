@@ -351,7 +351,7 @@ and updateDom = (state: t): unit => {
   | Some(root) =>
     // Find the room list container within the root.
     let listContainer: {..} = %raw(`root.querySelector('[data-role="room-list"]')`)
-    let isNull: bool = %raw(`listContainer === null`)
+    let isNull: bool = (%raw(`v => v === null`))(listContainer)
     if !isNull {
       // Clear existing children.
       listContainer["innerHTML"] = ""
@@ -540,9 +540,9 @@ let destroy = (state: t): unit => {
   | Some(root) =>
     let rootObj = castFromJsObj(root)
     let parent: Nullable.t<{..}> = rootObj["parentNode"]
-    let isNull: bool = %raw(`parent === null`)
+    let isNull: bool = (%raw(`v => v === null`))(parent)
     if !isNull {
-      let p: {..} = %raw(`parent`)
+      let p: {..} = (%raw(`v => v`))(parent)
       ignore(p["removeChild"](root))
     }
   | None => ()

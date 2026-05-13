@@ -1,0 +1,212 @@
+---
+source: crates/selur-compose-plan/tests/plan_snapshots.rs
+description: burble_selur
+---
+[
+    CreateNetwork(
+        NetworkSpec {
+            name: "burble-internal",
+            driver: Some(
+                "bridge",
+            ),
+            labels: {
+                "io.podman.compose.project": "burble",
+            },
+        },
+    ),
+    CreateVolume(
+        VolumeSpec {
+            name: "burble-verisimdb-data",
+            driver: Some(
+                "local",
+            ),
+            labels: {
+                "io.podman.compose.project": "burble",
+            },
+        },
+    ),
+    CreateVolume(
+        VolumeSpec {
+            name: "coturn-data",
+            driver: Some(
+                "local",
+            ),
+            labels: {
+                "io.podman.compose.project": "burble",
+            },
+        },
+    ),
+    PullImage(
+        PullSpec {
+            service: "coturn",
+            image: "coturn/coturn:4.11.0-r0@sha256:<HASH>",
+        },
+    ),
+    BuildImage(
+        BuildSpec {
+            service: "server",
+            context: "..",
+            dockerfile: Some(
+                "containers/Containerfile.server",
+            ),
+            args: {},
+            target: None,
+            tag: "burble_server:latest",
+            no_cache: false,
+        },
+    ),
+    BuildImage(
+        BuildSpec {
+            service: "verisimdb",
+            context: "../tools/nextgen-databases/verisimdb",
+            dockerfile: Some(
+                "container/Containerfile",
+            ),
+            args: {
+                "FEATURES": "persistent",
+            },
+            target: None,
+            tag: "burble_verisimdb:latest",
+            no_cache: false,
+        },
+    ),
+    BuildImage(
+        BuildSpec {
+            service: "web",
+            context: "..",
+            dockerfile: Some(
+                "containers/Containerfile.web",
+            ),
+            args: {},
+            target: None,
+            tag: "burble_web:latest",
+            no_cache: false,
+        },
+    ),
+    RunContainer(
+        RunSpec {
+            service: "coturn",
+            image: "coturn/coturn:4.11.0-r0@sha256:<HASH>",
+            container_name: "burble_coturn",
+            environment: [
+                "TURN_SECRET=${TURN_SECRET:-change-me-in-production}",
+                "TURN_REALM=${TURN_REALM:-burble.local}",
+                "TURN_EXTERNAL_IP=${TURN_EXTERNAL_IP:-}",
+            ],
+            ports: [],
+            volumes: [
+                "./coturn.conf:/etc/coturn/turnserver.conf:ro",
+                "coturn-data:/var/lib/coturn",
+            ],
+            networks: [],
+            network_mode: Some(
+                "host",
+            ),
+            command: Some(
+                [
+                    "args='--config /etc/coturn/turnserver.conf'; args=\"$args --static-auth-secret=$TURN_SECRET --realm=$TURN_REALM\"; [ -n \"$TURN_EXTERNAL_IP\" ] && args=\"$args --external-ip=$TURN_EXTERNAL_IP\"; exec turnserver $args",
+                ],
+            ),
+            entrypoint: Some(
+                [
+                    "/bin/sh",
+                    "-c",
+                ],
+            ),
+            restart: "unless-stopped",
+            labels: {
+                "io.podman.compose.config-hash": "<HASH>",
+                "io.podman.compose.project": "burble",
+                "io.podman.compose.service": "coturn",
+            },
+        },
+    ),
+    RunContainer(
+        RunSpec {
+            service: "verisimdb",
+            image: "burble_verisimdb:latest",
+            container_name: "burble_verisimdb",
+            environment: [],
+            ports: [],
+            volumes: [
+                "burble-verisimdb-data:/data",
+            ],
+            networks: [
+                "burble-internal",
+            ],
+            network_mode: None,
+            command: None,
+            entrypoint: None,
+            restart: "unless-stopped",
+            labels: {
+                "io.podman.compose.config-hash": "<HASH>",
+                "io.podman.compose.project": "burble",
+                "io.podman.compose.service": "verisimdb",
+            },
+        },
+    ),
+    WaitHealthy(
+        WaitHealthySpec {
+            service: "verisimdb",
+            container_name: "burble_verisimdb",
+        },
+    ),
+    RunContainer(
+        RunSpec {
+            service: "server",
+            image: "burble_server:latest",
+            container_name: "burble_server",
+            environment: [
+                "PHX_SERVER=true",
+                "PORT=4020",
+                "PHX_HOST=localhost",
+                "VERISIMDB_URL=http://verisimdb:8080",
+                "BURBLE_TOPOLOGY=monarchic",
+                "PROVEN_LIB_DIR=/app/lib/burble-0.1.0/priv",
+                "TURN_URL=turn:${TURN_REALM:-burble.local}:3478",
+                "TURNS_URL=turns:${TURN_REALM:-burble.local}:5349",
+                "TURN_SECRET=${TURN_SECRET:-change-me-in-production}",
+                "TURN_REALM=${TURN_REALM:-burble.local}",
+                "STUN_URL=stun:${TURN_REALM:-burble.local}:3478",
+            ],
+            ports: [],
+            volumes: [],
+            networks: [
+                "burble-internal",
+            ],
+            network_mode: None,
+            command: None,
+            entrypoint: None,
+            restart: "unless-stopped",
+            labels: {
+                "io.podman.compose.config-hash": "<HASH>",
+                "io.podman.compose.project": "burble",
+                "io.podman.compose.service": "server",
+            },
+        },
+    ),
+    RunContainer(
+        RunSpec {
+            service: "web",
+            image: "burble_web:latest",
+            container_name: "burble_web",
+            environment: [],
+            ports: [
+                "4020:80",
+            ],
+            volumes: [],
+            networks: [
+                "burble-internal",
+            ],
+            network_mode: None,
+            command: None,
+            entrypoint: None,
+            restart: "unless-stopped",
+            labels: {
+                "io.podman.compose.config-hash": "<HASH>",
+                "io.podman.compose.project": "burble",
+                "io.podman.compose.service": "web",
+            },
+        },
+    ),
+]

@@ -19,6 +19,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11  # v4.1.1
+        with:
+          submodules: recursive
 
       - name: Set up Beam (OTP 27 + Elixir 1.17)
         uses: erlef/setup-beam@5304e04ea2b355f03681464e683d92e3b2f18451  # v1.18.2
@@ -26,24 +28,39 @@ jobs:
           otp-version: '27'
           elixir-version: '1.17'
 
+      - name: Set up Zig 0.13
+        uses: mlugg/setup-zig@53fc45b17fe98b52f92ee5ea08ff48a85a3e7eb7  # v1.2.2
+        with:
+          version: '0.13'
+
+      - name: Install just
+        uses: taiki-e/install-action@899b013517f9e7774591216672bf75a46bb9a481  # v2.9.4
+        with:
+          tool: just
+
+      - name: Install system prerequisites for quicer/msquic
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y cmake perl build-essential libssl-dev
+
       - name: Cache Mix dependencies
-        uses: actions/cache@1bd1e32a3bdc45362d1e726936510720a7c6158d  # v4.2.2
+        uses: actions/cache@d4323d4df104b026a6aa633fdb11d772146be0bf  # v4.2.2
         with:
           path: |
             server/deps
             server/_build
-          key: ${{ runner.os }}-mix-${{ hashFiles('server/mix.lock') }}
+          key: ${{ runner.os }}-mix-msquic-v2.3.8-${{ hashFiles('server/mix.lock') }}
           restore-keys: |
+            ${{ runner.os }}-mix-msquic-v2.3.8-
             ${{ runner.os }}-mix-
 
-      - name: Install dependencies
-        run: mix deps.get
+      - name: Build Zig FFI
+        working-directory: ${{ github.workspace }}
+        run: just build-ffi
 
-      - name: Compile (warnings as errors)
-        run: mix compile --warnings-as-errors
-
-      - name: Run tests with coverage
-        run: mix test --cover
+      - name: Run server tests
+        working-directory: ${{ github.workspace }}
+        run: just test-server
 
   dialyzer:
     name: Dialyzer
@@ -56,6 +73,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11  # v4.1.1
+        with:
+          submodules: recursive
 
       - name: Set up Beam (OTP 27 + Elixir 1.17)
         uses: erlef/setup-beam@5304e04ea2b355f03681464e683d92e3b2f18451  # v1.18.2
@@ -63,23 +82,30 @@ jobs:
           otp-version: '27'
           elixir-version: '1.17'
 
+      - name: Install system prerequisites for quicer/msquic
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y cmake perl build-essential libssl-dev
+
       - name: Restore PLT cache
-        uses: actions/cache@1bd1e32a3bdc45362d1e726936510720a7c6158d  # v4.2.2
+        uses: actions/cache@d4323d4df104b026a6aa633fdb11d772146be0bf  # v4.2.2
         id: plt-cache
         with:
           path: server/priv/plts
-          key: ${{ runner.os }}-dialyzer-plt-otp27-elixir1.17-${{ hashFiles('server/mix.lock') }}
+          key: ${{ runner.os }}-dialyzer-plt-otp27-elixir1.17-msquic-v2.3.8-${{ hashFiles('server/mix.lock') }}
           restore-keys: |
+            ${{ runner.os }}-dialyzer-plt-otp27-elixir1.17-msquic-v2.3.8-
             ${{ runner.os }}-dialyzer-plt-otp27-elixir1.17-
 
       - name: Cache Mix dependencies
-        uses: actions/cache@1bd1e32a3bdc45362d1e726936510720a7c6158d  # v4.2.2
+        uses: actions/cache@d4323d4df104b026a6aa633fdb11d772146be0bf  # v4.2.2
         with:
           path: |
             server/deps
             server/_build
-          key: ${{ runner.os }}-mix-${{ hashFiles('server/mix.lock') }}
+          key: ${{ runner.os }}-mix-msquic-v2.3.8-${{ hashFiles('server/mix.lock') }}
           restore-keys: |
+            ${{ runner.os }}-mix-msquic-v2.3.8-
             ${{ runner.os }}-mix-
 
       - name: Install dependencies

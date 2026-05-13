@@ -9,7 +9,7 @@
 // Subsystem: NFNL_SUBSYS_NFTABLES
 
 const std = @import("std");
-const os = std.os;
+const posix = std.posix;
 const linux = std.os.linux;
 
 pub const FirewallError = error{
@@ -31,12 +31,12 @@ const NFT_MSG_DELSETLEM = 13;
 
 /// Netlink header and attributes structure.
 const NetlinkCtx = struct {
-    fd: os.socket_t,
+    fd: posix.socket_t,
     seq: u32,
 
     pub fn init() FirewallError!NetlinkCtx {
         // NETLINK_NETFILTER = 12
-        const fd = os.socket(linux.AF.NETLINK, linux.SOCK.RAW, 12) catch return error.NetlinkSocketError;
+        const fd = posix.socket(linux.AF.NETLINK, linux.SOCK.RAW, 12) catch return error.NetlinkSocketError;
         return NetlinkCtx{
             .fd = fd,
             .seq = 1,
@@ -44,7 +44,7 @@ const NetlinkCtx = struct {
     }
 
     pub fn deinit(self: *NetlinkCtx) void {
-        os.close(self.fd);
+        posix.close(self.fd);
     }
 };
 

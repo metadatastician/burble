@@ -1,17 +1,17 @@
 = Threat Model
 <!-- SPDX-License-Identifier: PMPL-1.0-or-later -->
-<!-- Copyright (c) {{CURRENT_YEAR}} {{AUTHOR}} (hyperpolymath) <{{AUTHOR_EMAIL}}> -->
+<!-- Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk> -->
 
-# Threat Model: {{PROJECT_NAME}}
+# Threat Model: Burble
 
 ## Document Info
 
 | Field         | Value                          |
 |---------------|--------------------------------|
-| Project       | {{PROJECT_NAME}}               |
+| Project       | Burble                         |
 | Version       | 1.0                            |
-| Last Reviewed | {{DATE}}                       |
-| Author        | {{AUTHOR}}                     |
+| Last Reviewed | 2026-05-07                     |
+| Author        | Jonathan D.A. Jewell           |
 | Methodology   | STRIDE                         |
 
 ## Scope
@@ -34,7 +34,7 @@
 
 ## System Overview
 
-Brief description of {{PROJECT_NAME}} and its architecture.
+Burble is a voice-first, self-hostable, end-to-end encrypted communications platform designed for teams, communities, and embedded applications. The system supports four deployment topologies—monarchic (single-server), oligarchic (federated cluster), distributed (open mesh), and serverless (peer-to-peer)—each balancing scalability, moderation, and decentralization. The control plane runs on Elixir/Erlang OTP with per-room GenServer isolation, ensuring fault tolerance and sub-millisecond signaling. The media plane uses a WebRTC-compatible SFU (Selective Forwarding Unit) that *does not* decrypt media: voice frames pass through uninterpreted for end-to-end encryption. Protocol bridges (SIP, Mumble) transcode messages at the control plane only, preserving the trust boundary that the SFU neither sees nor modifies encrypted audio. Audio processing (compression, echo cancellation, denoising) runs as Zig SIMD-compiled NIFs invoked by Elixir, achieving 26,350x speedup over byte-loop implementations. Dependent-type proofs in Idris2 formally verify the ABI surface and media pipeline linearity.
 
 > See [STATE-VISUALIZER.adoc](../STATE-VISUALIZER.adoc) for the full architecture diagram and completion dashboard.
 
@@ -140,6 +140,8 @@ Brief description of {{PROJECT_NAME}} and its architecture.
 - **Bot Governance**: Bot orchestration with confidence thresholds (optional)
 - **Edge Security**: Gateway with policy enforcement (optional, where applicable)
 - **SBOM**: Generated and published with releases
+
+NOTE: Items marked `(optional)` reference tools (svalinn, cerro-torre, vordr) that are referenced in the Burble Trustfile but are not yet installed in this repository as of 2026-05-07. See `docs/superpowers/specs/2026-05-07-burble-full-implementation-scoping.md` §7 R6.
 
 ## Residual Risks
 

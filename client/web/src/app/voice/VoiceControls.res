@@ -38,6 +38,11 @@ type networkQuality =
   | /// Not connected to any voice room.
     Disconnected
 
+/// Opaque JS object type — re-exported from VoiceEngine for consistency.
+type jsObj = VoiceEngine.jsObj
+let castToJsObj = VoiceEngine.castToJsObj
+let castFromJsObj = VoiceEngine.castFromJsObj
+
 /// Voice control bar state — mirrors VoiceEngine state for UI rendering.
 type t = {
   /// Current mute/deafen state.
@@ -61,7 +66,7 @@ type t = {
   /// Whether the settings panel is currently open.
   mutable settingsOpen: bool,
   /// The root DOM element for the control bar (created by render).
-  mutable rootElement: option<{..}>,
+  mutable rootElement: option<jsObj>,
   /// Reference to the VoiceEngine for dispatching actions.
   mutable engine: option<VoiceEngine.t>,
   /// The requestAnimationFrame ID for the update loop.
@@ -307,7 +312,7 @@ let makeLevelMeter = (): {..} => {
     transition: width 0.05s linear;
   `
 
-  container["appendChild"](fill)
+  let _ = container["appendChild"](fill)
   container
 }
 
@@ -321,7 +326,7 @@ let makeLevelMeter = (): {..} => {
 ///
 /// Call this once and append the returned element to your page container.
 /// Subsequent updates are handled by the internal update loop.
-let render = (controls: t, engine: VoiceEngine.t): {..} => {
+let rec render = (controls: t, engine: VoiceEngine.t): {..} => {
   controls.engine = Some(engine)
 
   // ── Root container ──
@@ -344,19 +349,19 @@ let render = (controls: t, engine: VoiceEngine.t): {..} => {
   statusGroup["style"]["cssText"] = "display: flex; align-items: center; margin-right: 8px;"
 
   let statusDot = makeStatusDot(connectionColor(controls))
-  statusDot["setAttribute"]("data-role", "status-dot")
+  let _ = statusDot["setAttribute"]("data-role", "status-dot")
   let statusLabel = makeLabel(connectionLabel(controls))
-  statusLabel["setAttribute"]("data-role", "status-label")
-  statusGroup["appendChild"](statusDot)
-  statusGroup["appendChild"](statusLabel)
-  bar["appendChild"](statusGroup)
+  let _ = statusLabel["setAttribute"]("data-role", "status-label")
+  let _ = statusGroup["appendChild"](statusDot)
+  let _ = statusGroup["appendChild"](statusLabel)
+  let _ = bar["appendChild"](statusGroup)
 
   // ── Audio level meter ──
   let levelMeter = makeLevelMeter()
-  levelMeter["setAttribute"]("data-role", "level-meter")
-  bar["appendChild"](levelMeter)
+  let _ = levelMeter["setAttribute"]("data-role", "level-meter")
+  let _ = bar["appendChild"](levelMeter)
 
-  bar["appendChild"](makeSeparator())
+  let _ = bar["appendChild"](makeSeparator())
 
   // ── Mute button ──
   let muteBtn = makeButton(
@@ -372,8 +377,8 @@ let render = (controls: t, engine: VoiceEngine.t): {..} => {
       }
     },
   )
-  muteBtn["setAttribute"]("data-role", "mute-btn")
-  bar["appendChild"](muteBtn)
+  let _ = muteBtn["setAttribute"]("data-role", "mute-btn")
+  let _ = bar["appendChild"](muteBtn)
 
   // ── Deafen button ──
   let deafenBtn = makeButton(
@@ -389,10 +394,10 @@ let render = (controls: t, engine: VoiceEngine.t): {..} => {
       }
     },
   )
-  deafenBtn["setAttribute"]("data-role", "deafen-btn")
-  bar["appendChild"](deafenBtn)
+  let _ = deafenBtn["setAttribute"]("data-role", "deafen-btn")
+  let _ = bar["appendChild"](deafenBtn)
 
-  bar["appendChild"](makeSeparator())
+  let _ = bar["appendChild"](makeSeparator())
 
   // ── Input mode toggle (VAD / PTT) ──
   let modeBtn = makeButton(
@@ -412,13 +417,13 @@ let render = (controls: t, engine: VoiceEngine.t): {..} => {
       }
     },
   )
-  modeBtn["setAttribute"]("data-role", "mode-btn")
-  bar["appendChild"](modeBtn)
+  let _ = modeBtn["setAttribute"]("data-role", "mode-btn")
+  let _ = bar["appendChild"](modeBtn)
 
   // ── PTT indicator ──
   let pttIndicator = createElement("span")
   pttIndicator["className"] = "burble-vc-ptt-indicator"
-  pttIndicator["setAttribute"]("data-role", "ptt-indicator")
+  let _ = pttIndicator["setAttribute"]("data-role", "ptt-indicator")
   pttIndicator["textContent"] = "TX"
   pttIndicator["style"]["cssText"] = `
     display: none;
@@ -430,9 +435,9 @@ let render = (controls: t, engine: VoiceEngine.t): {..} => {
     font-weight: bold;
     margin-left: 4px;
   `
-  bar["appendChild"](pttIndicator)
+  let _ = bar["appendChild"](pttIndicator)
 
-  bar["appendChild"](makeSeparator())
+  let _ = bar["appendChild"](makeSeparator())
 
   // ── Self-test button ──
   let selfTestBtn = makeButton(
@@ -443,8 +448,8 @@ let render = (controls: t, engine: VoiceEngine.t): {..} => {
       windowOpen("/api/v1/diagnostics/self-test/quick", "_blank")
     },
   )
-  selfTestBtn["setAttribute"]("data-role", "selftest-btn")
-  bar["appendChild"](selfTestBtn)
+  let _ = selfTestBtn["setAttribute"]("data-role", "selftest-btn")
+  let _ = bar["appendChild"](selfTestBtn)
 
   // ── Settings gear ──
   let settingsBtn = makeButton(
@@ -457,10 +462,10 @@ let render = (controls: t, engine: VoiceEngine.t): {..} => {
       Console.log2("[Burble] Settings panel:", if controls.settingsOpen { "open" } else { "closed" })
     },
   )
-  settingsBtn["setAttribute"]("data-role", "settings-btn")
-  bar["appendChild"](settingsBtn)
+  let _ = settingsBtn["setAttribute"]("data-role", "settings-btn")
+  let _ = bar["appendChild"](settingsBtn)
 
-  bar["appendChild"](makeSeparator())
+  let _ = bar["appendChild"](makeSeparator())
 
   // ── Leave / disconnect button ──
   let leaveBtn = makeButton(
@@ -478,12 +483,12 @@ let render = (controls: t, engine: VoiceEngine.t): {..} => {
       }
     },
   )
-  leaveBtn["setAttribute"]("data-role", "leave-btn")
+  let _ = leaveBtn["setAttribute"]("data-role", "leave-btn")
   leaveBtn["style"]["background"] = "#4a1a1a"
   leaveBtn["style"]["borderColor"] = "#744"
-  bar["appendChild"](leaveBtn)
+  let _ = bar["appendChild"](leaveBtn)
 
-  controls.rootElement = Some(bar)
+  controls.rootElement = Some(castToJsObj(bar))
 
   // ── Start the update loop ──
   startUpdateLoop(controls)
@@ -614,11 +619,12 @@ let destroy = (controls: t): unit => {
   // Remove the root element from the DOM.
   switch controls.rootElement {
   | Some(root) =>
-    let parent: Nullable.t<{..}> = root["parentNode"]
-    let isNull: bool = %raw(`parent === null`)
+    let rootObj = castFromJsObj(root)
+    let parent: Nullable.t<{..}> = rootObj["parentNode"]
+    let isNull: bool = (%raw(`v => v === null`))(parent)
     if !isNull {
-      let p: {..} = %raw(`parent`)
-      p["removeChild"](root)
+      let p: {..} = (%raw(`v => v`))(parent)
+      let _ = p["removeChild"](rootObj)
     }
   | None => ()
   }

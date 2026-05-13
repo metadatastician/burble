@@ -1,0 +1,8 @@
+# Invalid: `interval` value is not a valid humantime duration.
+[project]
+name = "bad"
+
+[services.svc]
+image = "nginx:latest"
+restart = "unless-stopped"
+healthcheck = { test = "exit 0", interval = "not-a-duration" }

@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: PMPL-1.0-or-later
 # Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
 #
-# Burble Web Client — ReScript SPA served by nginx (Chainguard).
+# Burble Web Client — ReScript/AffineScript SPA served by nginx (Chainguard).
 #
 # Multi-stage build:
 #   Stage 1 (build): Deno + ReScript + Vite → static assets in dist/
@@ -9,37 +9,69 @@
 #
 # Build:  podman build -t burble-web:latest -f containers/Containerfile.web .
 # Run:    podman run --rm -p 8080:80 burble-web:latest
+#
+# Toolchain: Deno only. Node.js and npm are banned by hyperpolymath policy.
+# The rescript compiler and vite are pulled via Deno's npm: specifier support
+# (--node-modules-dir=auto) as declared in deno.json tasks.
 
 # =============================================================================
-# Stage 1: Build — Deno + ReScript + Vite
+# Stage 1: Build — Deno → ReScript → Vite → dist/
 # =============================================================================
 FROM cgr.dev/chainguard/wolfi-base:latest AS build
 
-# Install Deno for package management and build tooling.
-# Falls back to Node for ReScript compiler compatibility.
-RUN apk add --no-cache nodejs npm
+RUN apk add --no-cache deno
 
 WORKDIR /build
 COPY client/web/ ./
 
-# Install dependencies (ReScript compiler, Vite, etc.).
-RUN npm install
+# Cache Deno dependencies (npm: specifiers) before the build steps so that
+# the dependency layer can be reused without rerunning the full compile.
+RUN deno install --node-modules-dir=auto --entrypoint src/Main.res.mjs 2>/dev/null || true
 
-# Compile ReScript sources to JavaScript.
-RUN npx rescript build
+# Step 1: Compile ReScript/AffineScript sources to ES modules (.res.mjs).
+# Equivalent to: npx rescript (via deno's npm compat layer).
+RUN deno task res:build
 
-# Bundle with Vite for production (tree-shaking, minification).
-RUN npx vite build
+# Step 2: Bundle with Vite for production (tree-shaking, minification, hashed assets).
+# Output lands in dist/ as declared in vite.config (default Vite convention).
+RUN deno run \
+      --node-modules-dir=auto \
+      --allow-read \
+      --allow-write \
+      --allow-env \
+      --allow-net \
+      --allow-sys \
+      --allow-ffi \
+      --allow-run \
+      npm:vite build
 
 # =============================================================================
 # Stage 2: Runtime — Chainguard nginx
 # =============================================================================
 FROM cgr.dev/chainguard/nginx:latest
 
-# Copy built SPA assets into the nginx document root.
+USER root
+
+# Chainguard's nginx image ships a default config at
+# /etc/nginx/conf.d/nginx.default.conf with `server_name localhost;` —
+# which takes precedence over our `server_name _;` for requests to
+# Host: localhost and silently shadows our /api/, /socket, /.well-known
+# location blocks. Chainguard's image is distroless (no shell, no rm),
+# so we overwrite that file with an empty-stub config instead of
+# removing it.
+COPY containers/nginx-default-disabled.conf /etc/nginx/conf.d/nginx.default.conf
+
+# Custom nginx config: SPA fallback routing + reverse-proxy to burble_server
+# for /api/, /socket (WebSocket), and /.well-known/.
+COPY containers/nginx.conf /etc/nginx/conf.d/default.conf
+
+# Built SPA assets from Stage 1.
 COPY --from=build /build/dist/ /usr/share/nginx/html/
 
-# Copy custom nginx config for SPA routing (all paths → index.html).
-COPY containers/nginx.conf /etc/nginx/conf.d/default.conf 2>/dev/null || true
-
-EXPOSE 80
+USER nginx
+EXPOSE 8080
+# Chainguard nginx image already sets ENTRYPOINT ["nginx"]; CMD provides args only.
+# Passing "nginx" again would cause nginx to parse its own name as an invalid option.
+# Note: nginx binds 8080 inside the container because Chainguard runs rootless
+# and cannot bind ports < 1024. compose.toml maps 4020:8080 on the host.
+CMD ["-g", "daemon off;"]

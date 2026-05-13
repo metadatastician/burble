@@ -1,0 +1,17 @@
+---
+source: crates/selur-compose-interp/tests/interp.rs
+expression: env_list
+---
+[
+    "PHX_SERVER=true",
+    "PORT=4020",
+    "PHX_HOST=localhost",
+    "VERISIMDB_URL=http://verisimdb:8080",
+    "BURBLE_TOPOLOGY=monarchic",
+    "PROVEN_LIB_DIR=/app/lib/burble-0.1.0/priv",
+    "TURN_URL=turn:example.com:3478",
+    "TURNS_URL=turns:example.com:5349",
+    "TURN_SECRET=hunter2",
+    "TURN_REALM=example.com",
+    "STUN_URL=stun:example.com:3478",
+]

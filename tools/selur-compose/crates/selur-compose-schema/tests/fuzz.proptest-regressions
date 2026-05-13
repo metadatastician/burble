@@ -1,0 +1,7 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc c59feaffd98ec4847ecefd14fa9f94d79d00c21088483f85f9f63baec23e714c # shrinks to compose = Compose { project: Some(Project { name: "fuzz-project" }), services: {"-": Service { image: Some("nginx:latest"), build: None, command: None, entrypoint: None, environment: Empty, env_file: [], ports: [], volumes: [], networks: [], network_mode: None, depends_on: Empty, healthcheck: None, restart: No, profiles: [], secrets: [], configs: [], user: None, working_dir: None, hostname: None, cap_add: [], cap_drop: [], init: None, stop_signal: None, stop_grace_period: None }}, networks: {}, volumes: {}, secrets: {}, configs: {}, extensions: {} }

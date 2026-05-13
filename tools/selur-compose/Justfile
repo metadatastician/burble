@@ -1,0 +1,46 @@
+# selur-compose — Justfile
+# Requires: just, cargo, cargo-nextest, cargo-insta, cargo-audit
+
+# Build all workspace crates
+build:
+    cargo build --workspace
+
+# Run all unit/fast tests (no podman required)
+test:
+    cargo nextest run --workspace
+
+# Alias: same as test
+nextest *ARGS:
+    cargo nextest run --workspace {{ARGS}}
+
+# Run integration tests (requires podman 5.4 on PATH)
+test-it:
+    cargo nextest run --workspace --features podman-it
+
+# Run end-to-end tests (requires sibling repos checked out)
+test-e2e:
+    cargo nextest run --workspace --features e2e
+
+# Lint: clippy with deny warnings
+lint:
+    cargo clippy --workspace --all-targets -- -D warnings
+
+# Format all code
+fmt:
+    cargo fmt --all
+
+# Check formatting without modifying files
+fmt-check:
+    cargo fmt --all -- --check
+
+# Review insta snapshots interactively
+snapshot-review:
+    cargo insta review
+
+# Security audit
+audit:
+    cargo audit
+
+# Dry-run release plan (requires cargo-dist)
+release-dry:
+    cargo dist plan

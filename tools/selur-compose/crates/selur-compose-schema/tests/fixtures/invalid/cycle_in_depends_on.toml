@@ -1,0 +1,13 @@
+# Note: cycles in depends_on are accepted by the PARSER (serde only checks shape,
+# not semantics).  Cycle detection is the planner's responsibility (Phase 3).
+# This fixture tests that the parser accepts it without error.
+[project]
+name = "cycle-test"
+
+[services.a]
+image = "nginx"
+depends_on = ["b"]
+
+[services.b]
+image = "nginx"
+depends_on = ["a"]

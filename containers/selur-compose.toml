@@ -29,12 +29,15 @@ name = "burble"
 # VeriSimDB — Persistent store (internal network only, not exposed)
 # =============================================================================
 [services.verisimdb]
+# Pre-built image from GHCR (published by .github/workflows/publish-verisimdb.yml).
+# Matches PR #28's approach on origin/main.
 image = "ghcr.io/hyperpolymath/verisimdb:latest"
 restart = "unless-stopped"
 networks = ["burble-internal"]
 healthcheck = { test = "wget -q --spider http://localhost:8080/health || exit 1", interval = "30s", timeout = "5s", retries = 3 }
-# VeriSimDB data volume — persistent across restarts.
-volumes = ["verisimdb-data:/data"]
+# Volume name follows upstream convention. The nextgen-databases CLAUDE.md
+# port-and-volume table reserves "burble-verisimdb-data" for this consumer.
+volumes = ["burble-verisimdb-data:/data"]
 
 # =============================================================================
 # Burble Server — Elixir OTP release with coprocessor NIFs
@@ -76,7 +79,7 @@ healthcheck = { test = "wget -q --spider http://localhost:4020/api/v1/auth/guest
 build = { context = "..", dockerfile = "containers/Containerfile.web" }
 depends_on = ["server"]
 restart = "unless-stopped"
-ports = ["4020:80"]
+ports = ["4020:8080"]
 networks = ["burble-internal"]
 
 # =============================================================================
@@ -87,8 +90,13 @@ networks = ["burble-internal"]
 #
 # Uses host networking so coturn sees real client IPs for NAT detection.
 # Firewall: open 3478/udp+tcp (STUN/TURN), 5349/tcp (TURNS), 49152-65535/udp (relay range).
+#
+# coturn pinned to 4.11.0-r0 @ sha256:5d1d717c0542b70c97c006ac8e38d4e9a6c9a7962ac7b1a11a7a2c42ab655902 on 2026-05-10.
+# To upgrade: bump the tag, re-resolve the digest with
+#   podman pull coturn/coturn:<NEW_TAG> && podman inspect ... --format '{{.Digest}}'
+# and update both compose.toml and selur-compose.toml in the same commit.
 [services.coturn]
-image = "coturn/coturn:latest"
+image = "coturn/coturn:4.11.0-r0@sha256:5d1d717c0542b70c97c006ac8e38d4e9a6c9a7962ac7b1a11a7a2c42ab655902"
 restart = "unless-stopped"
 network_mode = "host"
 volumes = [
@@ -115,7 +123,7 @@ driver = "bridge"
 # =============================================================================
 # Volumes
 # =============================================================================
-[volumes.verisimdb-data]
+[volumes.burble-verisimdb-data]
 driver = "local"
 
 [volumes.coturn-data]

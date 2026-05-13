@@ -1,0 +1,167 @@
+// SPDX-License-Identifier: PMPL-1.0-or-later
+= selur-compose — v0.2 Roadmap
+:toc: left
+:icons: font
+
+This document lists features deferred from v0.1.0, organised by theme.
+Everything here has been discussed in the design doc
+(link:../docs/superpowers/specs/2026-05-07-selur-compose-design.md[design §12])
+or surfaced during the burble integration sprint.
+
+Items are not committed to any timeline.  Contributions and discussion welcome
+via issues on `github.com/hyperpolymath/selur-compose`.
+
+== 1. Additional CLI subcommands
+
+These subcommands exist in `podman-compose` and Docker Compose but are out of
+scope for v0.1.0.
+
+[cols="1,2,2"]
+|===
+| Subcommand | Semantics | Notes
+
+| `exec`
+| Execute a command in a running container
+| `podman exec` wrapper; must handle TTY allocation (-it)
+
+| `run`
+| Create and start a one-off container for a service
+| Like `docker compose run`; must remove container on exit by default
+
+| `restart`
+| Restart one or all services
+| `podman restart` per container; respects dependency order
+
+| `stop`
+| Stop services without removing containers
+| Reverse topo order; `podman stop`; honors `--timeout`
+
+| `start`
+| Start previously stopped services
+| Forward topo order; `podman start`
+
+| `kill`
+| Send signal to services
+| `podman kill --signal SIGTERM` (default); configurable signal
+|===
+
+== 2. Flag implementations deferred from v0.1
+
+These flags are accepted by the CLI parser but have no-op or partial
+implementations in v0.1.
+
+[cols="1,1,2"]
+|===
+| Flag | Command | Full implementation note
+
+| `--tail <N>`
+| `logs`
+| v0.1 always tails from the start; `podman logs --tail <N>` wiring needed
+
+| `--rmi <local\|all>`
+| `down`
+| v0.1 never removes images; `podman rmi` wiring needed
+
+| `--volumes`
+| `down`
+| v0.1 removes named volumes only if `--volumes` is set; verify podman volume rm
+
+| `--remove-orphans`
+| `up`, `down`
+| Detect containers with `io.podman.compose.project=<P>` label that are not in the current plan
+
+| `--force-recreate`
+| `up`
+| Compare config-hash label; recreate container if hash differs
+
+| `--watch`
+| `up`
+| File-watcher mode (heavy; probably v0.3)
+|===
+
+== 3. Error quality improvements
+
+=== 3.1 `miette` span-underlining errors
+
+v0.1 uses `thiserror` + `anyhow` for error chains.  v0.2 target: wrap
+`toml::de::Error` (which carries line/column) in a `miette::Diagnostic` that
+underlines the offending token in the compose file, similar to Rust compiler
+output.
+
+=== 3.2 `did_you_mean` coverage
+
+v0.1 has Levenshtein suggestions for unknown service fields.  v0.2 extends this
+to unknown network, volume, and config fields.
+
+== 4. macOS support
+
+v0.1 is Linux rootless only.  macOS support requires either:
+
+* Detecting `podman machine` and routing CLI calls through it.
+* Using the podman REST API (libpod) rather than raw CLI subprocess calls.
+
+The `Driver` trait in `selur-compose-driver` is already trait-bounded to allow
+alternative implementations.  A `PodmanMachineDriver` would be a straightforward
+v0.2 addition once the CLI driver is stable.
+
+Windows is not planned until there is a concrete consumer need.
+
+== 5. `up` summary table enrichment
+
+v0.1's `up` output table shows: service name, container ID (short), status, ports.
+v0.2 additions:
+- Health status (healthy / starting / unhealthy)
+- Image digest (short SHA)
+- Start duration (wall-clock from RunContainer to WaitHealthy resolved)
+
+== 6. `[templates]` / `extends:`
+
+YAML's `<<: *anchor` merge has no TOML equivalent.
+v0.2 proposal: a `[templates]` top-level table whose entries are merged into
+service definitions that declare `extends = "template-name"`.
+
+[source,toml]
+----
+[templates.base-service]
+restart  = "unless-stopped"
+networks = ["default"]
+
+[services.api]
+extends = "base-service"
+image   = "ghcr.io/hyperpolymath/burble-api:latest"
+----
+
+This requires a pre-interpolation merge pass in the schema layer.
+
+== 7. `convert` subcommand
+
+Convert a YAML compose file to the TOML dialect understood by selur-compose.
+Would allow migration from `docker compose` / `podman-compose` YAML stacks
+to selur-compose TOML without manual rewriting.
+
+Likely uses the `serde_yaml` crate for parsing (not a runtime dep — build-time
+or optional feature only, to avoid pulling YAML into the binary for users who
+don't need it).
+
+== 8. CI automation improvements
+
+* Container image build-and-push automated in `release.yml` (currently manual).
+* Nightly full e2e against burble + verisimdb stacks.
+* `cargo-mutants` mutation testing (nightly only).
+* `cargo semver-checks` to catch accidental API breaks in published crates.
+
+== 9. `[x-stapeln]` / `[x-svalinn]` integration
+
+v0.1 ignores extension tables.  v0.2 intention:
+
+* `svalinn-policy-lint` consumes `selur-compose config --format json` and
+  enforces `[x-svalinn]` policy (signed images, allowed registries).
+* `stapeln` verifies `.ctp` bundles referenced in `[x-stapeln]`.
+
+These are separate tools in the hyperpolymath ecosystem; selur-compose only
+surfaces the extension data via `config --format json`.
+
+== 10. `cosign` image signing
+
+Post-v0.2: sign the `ghcr.io/hyperpolymath/selur-compose` image with
+`cosign` and attach the SBOM.  A `TODO` placeholder is already in `release.yml`.

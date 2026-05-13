@@ -1,0 +1,50 @@
+# SPDX-License-Identifier: PMPL-1.0-or-later
+# selur-compose integration manifest — canonical dep reference for AI tooling
+# Format: .a2ml (Anthropic Machine-readable Manifest Language)
+
+[integration]
+name       = "selur-compose"
+type       = "deploy-driver"
+repository = "https://github.com/hyperpolymath/selur-compose"
+version    = "0.1.0"
+
+# Submodule mount within burble (set once v0.1.0 ships and the submodule is added)
+submodule-path = "tools/selur-compose"
+
+# Language policy: Rust only — no Python, no Go, no Node.js
+language = "rust"
+
+[binary]
+# The binary produced by the workspace
+name   = "selur-compose"
+crate  = "selur-compose"
+
+# Locations where the binary may be found, in preference order:
+paths = [
+    "tools/selur-compose/target/release/selur-compose",  # built from worktree/submodule
+    "~/.cargo/bin/selur-compose",                         # cargo install
+]
+
+[purpose]
+# selur-compose replaces podman-compose (Python, banned by hyperpolymath language policy)
+# for burble's container stack. It reads the TOML compose files in containers/
+# and drives Podman 5.4+ rootless on Linux.
+replaces = "podman-compose"
+compose-files = [
+    "containers/compose.toml",
+    "containers/selur-compose.toml",
+]
+
+[justfile-integration]
+# Recipes that invoke selur-compose
+recipes = ["up", "down", "deploy", "build-selur-compose"]
+
+[crates-io]
+# Published crates in dependency order
+publish-order = [
+    "selur-compose-schema",
+    "selur-compose-interp",
+    "selur-compose-plan",
+    "selur-compose-driver",
+    "selur-compose",
+]

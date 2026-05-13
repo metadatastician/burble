@@ -18,7 +18,10 @@
 # bolt) uses the sender's server URL from the packet payload.
 
 defmodule BurbleWeb.BoltChannel do
-  use BurbleWeb, :channel
+  # Match the existing convention in this codebase — other channels
+  # (assist_channel, room_channel, signaling_channel) all use `Phoenix.Channel`
+  # directly. There is no `BurbleWeb` aggregator module in this project.
+  use Phoenix.Channel
   require Logger
 
   alias Burble.Bolt.{Notify, Sender}

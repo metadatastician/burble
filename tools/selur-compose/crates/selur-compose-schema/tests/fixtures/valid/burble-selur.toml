@@ -1,0 +1,136 @@
+# SPDX-License-Identifier: PMPL-1.0-or-later
+# Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+#
+# Burble — Selur/Podman Compose deployment configuration.
+#
+# Services:
+#   burble-server  — Elixir OTP control plane + Zig coprocessor NIFs
+#   burble-web     — ReScript SPA served by nginx (exposed on port 4020)
+#   verisimdb      — VeriSimDB persistent store (internal only)
+#
+# Usage:
+#   podman-compose -f containers/selur-compose.toml up -d
+#   (or, when selur-compose is ready: selur-compose up)
+#
+# Required secrets (set via environment or .env file):
+#   SECRET_KEY_BASE   — Phoenix secret key
+#   GUARDIAN_SECRET    — JWT signing key (defaults to SECRET_KEY_BASE)
+#   TURN_SECRET        — HMAC secret for time-limited TURN credentials (generate with: openssl rand -hex 32)
+#   TURN_REALM         — TURN realm, usually your domain (e.g. burble.example.com)
+#   TURN_EXTERNAL_IP  — Public IP of your server (required for coturn behind NAT)
+#
+# Optional SMTP (for magic link emails):
+#   SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS
+
+[project]
+name = "burble"
+
+# =============================================================================
+# VeriSimDB — Persistent store (internal network only, not exposed)
+# =============================================================================
+[services.verisimdb]
+build = { context = "../tools/nextgen-databases/verisimdb", dockerfile = "container/Containerfile", args = { FEATURES = "persistent" } }
+restart = "unless-stopped"
+networks = ["burble-internal"]
+healthcheck = { test = "wget -q --spider http://localhost:8080/health || exit 1", interval = "30s", timeout = "5s", retries = 3 }
+# Volume name follows upstream convention. The nextgen-databases CLAUDE.md
+# port-and-volume table reserves "burble-verisimdb-data" for this consumer.
+volumes = ["burble-verisimdb-data:/data"]
+
+# =============================================================================
+# Burble Server — Elixir OTP release with coprocessor NIFs
+# =============================================================================
+[services.server]
+build = { context = "..", dockerfile = "containers/Containerfile.server" }
+depends_on = { verisimdb = { condition = "service_healthy" } }
+restart = "unless-stopped"
+networks = ["burble-internal"]
+environment = [
+  "PHX_SERVER=true",
+  "PORT=4020",
+  "PHX_HOST=localhost",
+  "VERISIMDB_URL=http://verisimdb:8080",
+  "BURBLE_TOPOLOGY=monarchic",
+  # Proven NIF shared objects directory.
+  "PROVEN_LIB_DIR=/app/lib/burble-0.1.0/priv",
+  # STUN/TURN — used to generate ICE server config for browser clients.
+  # TURN_SECRET must match the secret in coturn.conf.
+  "TURN_URL=turn:${TURN_REALM:-burble.local}:3478",
+  "TURNS_URL=turns:${TURN_REALM:-burble.local}:5349",
+  "TURN_SECRET=${TURN_SECRET:-change-me-in-production}",
+  "TURN_REALM=${TURN_REALM:-burble.local}",
+  "STUN_URL=stun:${TURN_REALM:-burble.local}:3478",
+]
+# Secrets — inject at deploy time via environment or .env file:
+#   SECRET_KEY_BASE=<mix phx.gen.secret>
+#   GUARDIAN_SECRET=<mix phx.gen.secret>
+#   SMTP_HOST=smtp.example.com
+#   SMTP_PORT=587
+#   SMTP_USER=noreply@example.com
+#   SMTP_PASS=<smtp password>
+healthcheck = { test = "wget -q --spider http://localhost:4020/api/v1/auth/guest || exit 1", interval = "30s", timeout = "5s", retries = 3 }
+
+# =============================================================================
+# Burble Web — ReScript SPA via nginx (publicly exposed on port 4020)
+# =============================================================================
+[services.web]
+build = { context = "..", dockerfile = "containers/Containerfile.web" }
+depends_on = ["server"]
+restart = "unless-stopped"
+ports = ["4020:80"]
+networks = ["burble-internal"]
+
+# =============================================================================
+# coturn — STUN/TURN relay (essential for NAT traversal)
+# =============================================================================
+# Without TURN, peers behind symmetric NAT silently fail to connect.
+# coturn provides both STUN (NAT discovery) and TURN (relay fallback).
+#
+# Uses host networking so coturn sees real client IPs for NAT detection.
+# Firewall: open 3478/udp+tcp (STUN/TURN), 5349/tcp (TURNS), 49152-65535/udp (relay range).
+#
+# coturn pinned to 4.11.0-r0 @ sha256:5d1d717c0542b70c97c006ac8e38d4e9a6c9a7962ac7b1a11a7a2c42ab655902 on 2026-05-10.
+# To upgrade: bump the tag, re-resolve the digest with
+#   podman pull coturn/coturn:<NEW_TAG> && podman inspect ... --format '{{.Digest}}'
+# and update both compose.toml and selur-compose.toml in the same commit.
+[services.coturn]
+image = "coturn/coturn:4.11.0-r0@sha256:5d1d717c0542b70c97c006ac8e38d4e9a6c9a7962ac7b1a11a7a2c42ab655902"
+restart = "unless-stopped"
+network_mode = "host"
+volumes = [
+  "./coturn.conf:/etc/coturn/turnserver.conf:ro",
+  "coturn-data:/var/lib/coturn",
+]
+environment = [
+  "TURN_SECRET=${TURN_SECRET:-change-me-in-production}",
+  "TURN_REALM=${TURN_REALM:-burble.local}",
+  "TURN_EXTERNAL_IP=${TURN_EXTERNAL_IP:-}",
+]
+# Inject TURN_SECRET and optional external IP at runtime via shell expansion.
+# static-auth-secret and realm are not in coturn.conf so they can be env-driven.
+entrypoint = ["/bin/sh", "-c"]
+command = ["args='--config /etc/coturn/turnserver.conf'; args=\"$args --static-auth-secret=$TURN_SECRET --realm=$TURN_REALM\"; [ -n \"$TURN_EXTERNAL_IP\" ] && args=\"$args --external-ip=$TURN_EXTERNAL_IP\"; exec turnserver $args"]
+
+# =============================================================================
+# Networks
+# =============================================================================
+[networks.burble-internal]
+driver = "bridge"
+# Internal network — only burble-web is exposed to the host via port mapping.
+
+# =============================================================================
+# Volumes
+# =============================================================================
+[volumes.burble-verisimdb-data]
+driver = "local"
+
+[volumes.coturn-data]
+driver = "local"
+
+# =============================================================================
+# Svalinn policy enforcement (future — when Stapeln stack is ready)
+# =============================================================================
+# [x-svalinn]
+# policy = "containers/policy.yaml"
+# require-signed-images = true
+# require-sbom = true

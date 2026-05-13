@@ -1,0 +1,7 @@
+# Bad port — port binding table is missing the required `target` field.
+[project]
+name = "bad"
+
+[services.svc]
+image = "nginx"
+ports = [{ published = "8080", protocol = "tcp" }]

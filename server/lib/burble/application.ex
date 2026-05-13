@@ -11,6 +11,11 @@
 #   6. Web endpoint (Phoenix, WebSocket signaling)
 
 defmodule Burble.Application do
+  # Logger.info/1 is a macro — needs `require Logger` to expand correctly.
+  # Without this, the call at log_hardware_capabilities/0 fails at runtime
+  # with `function Logger.info/1 is undefined or private`.
+  require Logger
+
   @moduledoc """
   OTP Application for Burble voice server.
 
@@ -24,6 +29,17 @@ defmodule Burble.Application do
 
   @impl true
   def start(_type, _args) do
+    # Create the RateLimiter ETS table at app startup so it persists for the
+    # BEAM's lifetime. Doing this in BurbleWeb.Plugs.RateLimiter.init/1 fails
+    # because Plug.init/1 runs at COMPILE TIME in production releases, and
+    # the table created there dies with the compilation process.
+    try do
+      :ets.new(:burble_rate_limiter, [:named_table, :public, :set, read_concurrency: true])
+      Logger.info("[Burble] RateLimiter ETS table created at app startup")
+    rescue
+      ArgumentError -> :ok  # Hot-reload case: table already exists.
+    end
+
     children = [
       # Persistent store (VeriSimDB)
       Burble.Store,
@@ -96,7 +112,12 @@ defmodule Burble.Application do
       Burble.Groove.Feedback,
 
       # Blockchain anchoring bridge for Vext chains.
-      Burble.Verification.Anchor,
+      # The Burble.Verification.Anchor module was intentionally removed (per
+      # EXPLAINME.adoc — VeriSimDB and Vext handle internal chain integrity,
+      # so external blockchain anchoring is redundant) but this supervisor
+      # entry was not removed. Commented out here. Re-introduce only when
+      # an actual Anchor module exists.
+      # Burble.Verification.Anchor,
 
       # RTSP transport — serves broadcast/stage rooms and screen-share streams.
       # Listens on TCP port 8554 (RTSP control) and allocates UDP port pairs for
@@ -138,9 +159,17 @@ defmodule Burble.Application do
         do: "ACTIVE (WASM/SNIF)",
         else: "UNAVAILABLE → Zig/Elixir fallback"
 
+    # PTP module exposes source/0 (not status/0). Wrapped in try/rescue so a
+    # rename of either function does not crash app boot — this is diagnostic
+    # output, not a load-bearing call.
     ptp_source =
-      case Burble.Timing.PTP.status() do
-        {:ok, %{source: s}} -> Atom.to_string(s)
+      try do
+        case Burble.Timing.PTP.source() do
+          atom when is_atom(atom) -> Atom.to_string(atom)
+          {:ok, %{source: s}} when is_atom(s) -> Atom.to_string(s)
+          _ -> "unknown"
+        end
+      rescue
         _ -> "unknown"
       end
 

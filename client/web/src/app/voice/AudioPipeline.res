@@ -34,6 +34,11 @@ type noiseSuppression =
   | /// Aggressive suppression — maximum noise removal, may affect voice.
     High
 
+/// Opaque JS object type — re-exported from VoiceEngine for consistency.
+type jsObj = VoiceEngine.jsObj
+let castToJsObj = VoiceEngine.castToJsObj
+let castFromJsObj = VoiceEngine.castFromJsObj
+
 /// Pipeline state — all mutable audio processing parameters.
 /// Central state object for the audio pipeline controls panel.
 type pipelineState = {
@@ -56,23 +61,23 @@ type pipelineState = {
   /// Whether comfort noise injection is enabled.
   mutable comfortNoiseEnabled: bool,
   /// The AudioContext powering the processing graph.
-  mutable audioContext: option<{..}>,
+  mutable audioContext: option<jsObj>,
   /// AnalyserNode for VAD speech detection via FFT.
-  mutable analyser: option<{..}>,
+  mutable analyser: option<jsObj>,
   /// GainNode for AGC output level control.
-  mutable gainNode: option<{..}>,
+  mutable gainNode: option<jsObj>,
   /// DynamicsCompressor acting as AGC.
-  mutable compressorNode: option<{..}>,
+  mutable compressorNode: option<jsObj>,
   /// GainNode controlling comfort noise level.
-  mutable comfortNoiseGain: option<{..}>,
+  mutable comfortNoiseGain: option<jsObj>,
   /// BufferSourceNode generating pink noise for comfort noise.
-  mutable comfortNoiseSource: option<{..}>,
+  mutable comfortNoiseSource: option<jsObj>,
   /// Timeout ID for VAD smoothing hold timer (prevents rapid on/off).
   mutable vadHoldTimer: option<float>,
   /// Whether VAD is in the hold period (stays "speaking" briefly after silence).
   mutable vadHolding: bool,
   /// The root DOM element for the pipeline controls panel.
-  mutable rootElement: option<{..}>,
+  mutable rootElement: option<jsObj>,
   /// Reference to the VoiceEngine for dispatching audio state changes.
   mutable engine: option<VoiceEngine.t>,
   /// The requestAnimationFrame ID for the UI update loop.
@@ -213,14 +218,14 @@ let setupAgc = (state: pipelineState, ctx: {..}, sourceNode: {..}): {..} => {
   // up to the target level.
   let makeupGain = ctx["createGain"]()
   // Makeup gain compensates for compression. ~6dB boost.
-  makeupGain["gain"]["setValueAtTime"](2.0, ctx["currentTime"])
+  let _ = makeupGain["gain"]["setValueAtTime"](2.0, ctx["currentTime"])
 
   // Wire: source -> compressor -> makeupGain
-  sourceNode["connect"](compressor)
-  compressor["connect"](makeupGain)
+  let _ = sourceNode["connect"](compressor)
+  let _ = compressor["connect"](makeupGain)
 
-  state.compressorNode = Some(compressor)
-  state.gainNode = Some(makeupGain)
+  state.compressorNode = Some(castToJsObj(compressor))
+  state.gainNode = Some(castToJsObj(makeupGain))
 
   console["log"]("[Burble:Pipeline] AGC enabled (target ~-20 LUFS)")
 
@@ -239,8 +244,8 @@ let setupAnalyser = (state: pipelineState, ctx: {..}, sourceNode: {..}): unit =>
   // Smoothing constant: 0.8 provides stable readings without
   // excessive lag. Higher = smoother but slower to respond.
   analyser["smoothingTimeConstant"] = 0.8
-  sourceNode["connect"](analyser)
-  state.analyser = Some(analyser)
+  let _ = sourceNode["connect"](analyser)
+  state.analyser = Some(castToJsObj(analyser))
 }
 
 // ---------------------------------------------------------------------------
@@ -282,12 +287,13 @@ let generatePinkNoiseBuffer = (ctx: {..}): {..} => {
 /// Only active when in a voice room and VAD detects silence.
 let startComfortNoise = (state: pipelineState): unit => {
   switch state.audioContext {
-  | Some(ctx) =>
+  | Some(ctxRaw) =>
+    let ctx = castFromJsObj(ctxRaw)
     // Create gain node for comfort noise level control.
     let gain = ctx["createGain"]()
     // -50dB = 10^(-50/20) ≈ 0.00316
     let linearGain = %raw(`Math.pow(10, -50 / 20)`)
-    gain["gain"]["setValueAtTime"](linearGain, ctx["currentTime"])
+    let _ = gain["gain"]["setValueAtTime"](linearGain, ctx["currentTime"])
 
     // Create the pink noise buffer source.
     let buffer = generatePinkNoiseBuffer(ctx)
@@ -296,12 +302,12 @@ let startComfortNoise = (state: pipelineState): unit => {
     source["loop"] = true
 
     // Wire: source -> gain -> destination
-    source["connect"](gain)
-    gain["connect"](ctx["destination"])
-    source["start"]()
+    let _ = source["connect"](gain)
+    let _ = gain["connect"](ctx["destination"])
+    let _ = source["start"]()
 
-    state.comfortNoiseGain = Some(gain)
-    state.comfortNoiseSource = Some(source)
+    state.comfortNoiseGain = Some(castToJsObj(gain))
+    state.comfortNoiseSource = Some(castToJsObj(source))
 
     console["log"]("[Burble:Pipeline] Comfort noise started")
   | None => ()
@@ -404,12 +410,12 @@ let updateVad = (state: pipelineState): unit => {
         // If comfort noise is enabled, update its state.
         if state.comfortNoiseEnabled {
           switch state.comfortNoiseGain {
-          | Some(gain) =>
+          | Some(gainRaw) =>
             // Fade comfort noise in when speech ends.
             switch state.audioContext {
-            | Some(ctx) =>
+            | Some(ctxRaw) =>
               let linearGain: float = %raw(`Math.pow(10, -50 / 20)`)
-              gain["gain"]["setTargetAtTime"](linearGain, ctx["currentTime"], 0.1)
+              castFromJsObj(gainRaw)["gain"]["setTargetAtTime"](linearGain, castFromJsObj(ctxRaw)["currentTime"], 0.1)
             | None => ()
             }
           | None =>
@@ -424,8 +430,8 @@ let updateVad = (state: pipelineState): unit => {
     // When speaking and comfort noise is active, fade it out.
     if state.vadSpeaking && state.comfortNoiseEnabled {
       switch (state.comfortNoiseGain, state.audioContext) {
-      | (Some(gain), Some(ctx)) =>
-        gain["gain"]["setTargetAtTime"](0.0, ctx["currentTime"], 0.05)
+      | (Some(gainRaw), Some(ctxRaw)) =>
+        castFromJsObj(gainRaw)["gain"]["setTargetAtTime"](0.0, castFromJsObj(ctxRaw)["currentTime"], 0.05)
       | _ => ()
       }
     }
@@ -447,8 +453,8 @@ let handlePttKeyDown = (state: pipelineState, event: {..}): unit => {
     switch state.engine {
     | Some(eng) =>
       switch eng.localStream {
-      | Some(stream) =>
-        let tracks: array<{..}> = stream["getAudioTracks"]()
+      | Some(streamRaw) =>
+        let tracks: array<{..}> = castFromJsObj(streamRaw)["getAudioTracks"]()
         tracks->Array.forEach(track => {
           track["enabled"] = VoiceEngine.getVoiceState(eng) == Active
         })
@@ -470,8 +476,8 @@ let handlePttKeyUp = (state: pipelineState, event: {..}): unit => {
     switch state.engine {
     | Some(eng) =>
       switch eng.localStream {
-      | Some(stream) =>
-        let tracks: array<{..}> = stream["getAudioTracks"]()
+      | Some(streamRaw) =>
+        let tracks: array<{..}> = castFromJsObj(streamRaw)["getAudioTracks"]()
         tracks->Array.forEach(track => {
           track["enabled"] = false
         })
@@ -550,25 +556,24 @@ let attachToEngine = (state: pipelineState, engine: VoiceEngine.t): unit => {
 
   // Use the engine's existing AudioContext if available,
   // otherwise create a new one.
-  let ctx = switch engine.audioContext {
-  | Some(ctx) => ctx
-  | None =>
-    let ctx = makeAudioContext()
-    ctx
+  let ctxObj = switch engine.audioContext {
+  | Some(ctxRaw) => castFromJsObj(ctxRaw)
+  | None => makeAudioContext()
   }
-  state.audioContext = Some(ctx)
+  state.audioContext = Some(castToJsObj(ctxObj))
 
   // Create a source node from the engine's local stream.
   switch engine.localStream {
-  | Some(stream) =>
-    let source = ctx["createMediaStreamSource"](stream)
+  | Some(streamRaw) =>
+    let stream = castFromJsObj(streamRaw)
+    let source = ctxObj["createMediaStreamSource"](stream)
 
     // Set up the VAD analyser (taps the source without modifying it).
-    setupAnalyser(state, ctx, source)
+    setupAnalyser(state, ctxObj, source)
 
     // Set up AGC via DynamicsCompressor (always on).
     if state.agcEnabled {
-      let _lastNode = setupAgc(state, ctx, source)
+      let _lastNode = setupAgc(state, ctxObj, source)
       ignore(_lastNode)
     }
 
@@ -582,7 +587,7 @@ let attachToEngine = (state: pipelineState, engine: VoiceEngine.t): unit => {
 
     console["log"]("[Burble:Pipeline] Audio pipeline attached to engine")
   | None =>
-    console["log"]("[Burble:Pipeline] No local stream — pipeline deferred")
+    console["log"]("[Burble:Pipeline] No local stream - pipeline deferred")
   }
 }
 
@@ -681,7 +686,7 @@ let makeGainIndicator = (): {..} => {
     font-size: 10px;
     font-weight: bold;
   `
-  container["appendChild"](label)
+  let _ = container["appendChild"](label)
 
   let bar = createElement("div")
   bar["style"]["cssText"] = `
@@ -692,7 +697,7 @@ let makeGainIndicator = (): {..} => {
     overflow: hidden;
   `
   let fill = createElement("div")
-  fill["setAttribute"]("data-role", "agc-fill")
+  let _ = fill["setAttribute"]("data-role", "agc-fill")
   fill["style"]["cssText"] = `
     width: 50%;
     height: 100%;
@@ -700,8 +705,8 @@ let makeGainIndicator = (): {..} => {
     border-radius: 2px;
     transition: width 0.1s linear;
   `
-  bar["appendChild"](fill)
-  container["appendChild"](bar)
+  let _ = bar["appendChild"](fill)
+  let _ = container["appendChild"](bar)
 
   container
 }
@@ -730,7 +735,7 @@ let noiseSuppressionLabel = (level: noiseSuppression): string =>
 ///
 /// Call this once and append the returned element to your page container.
 /// Subsequent updates are handled by the internal update loop.
-let render = (state: pipelineState, engine: VoiceEngine.t): {..} => {
+let rec render = (state: pipelineState, engine: VoiceEngine.t): {..} => {
   state.engine = Some(engine)
 
   // ── Root container ──
@@ -770,20 +775,20 @@ let render = (state: pipelineState, engine: VoiceEngine.t): {..} => {
       }
     },
   )
-  modeBtn["setAttribute"]("data-role", "mode-btn")
-  panel["appendChild"](modeBtn)
+  let _ = modeBtn["setAttribute"]("data-role", "mode-btn")
+  let _ = panel["appendChild"](modeBtn)
 
   // ── TX badge (visible during PTT transmission) ──
   let txBadge = makeBadge(~text="TX", ~color="white", ~bgColor="#ff4444")
-  txBadge["setAttribute"]("data-role", "tx-badge")
-  panel["appendChild"](txBadge)
+  let _ = txBadge["setAttribute"]("data-role", "tx-badge")
+  let _ = panel["appendChild"](txBadge)
 
   // ── VAD speaking badge (visible during VAD speech detection) ──
   let vadBadge = makeBadge(~text="VOICE", ~color="white", ~bgColor="#44aa44")
-  vadBadge["setAttribute"]("data-role", "vad-badge")
-  panel["appendChild"](vadBadge)
+  let _ = vadBadge["setAttribute"]("data-role", "vad-badge")
+  let _ = panel["appendChild"](vadBadge)
 
-  panel["appendChild"](makeSeparator())
+  let _ = panel["appendChild"](makeSeparator())
 
   // ── Noise suppression cycle button ──
   let nsBtn = makeButton(
@@ -794,15 +799,15 @@ let render = (state: pipelineState, engine: VoiceEngine.t): {..} => {
       let _level = cycleNoiseSuppression(state)
     },
   )
-  nsBtn["setAttribute"]("data-role", "ns-btn")
-  panel["appendChild"](nsBtn)
+  let _ = nsBtn["setAttribute"]("data-role", "ns-btn")
+  let _ = panel["appendChild"](nsBtn)
 
   // ── Noise suppression active indicator ──
   let nsIndicator = makeBadge(~text="NS", ~color="white", ~bgColor="#4488cc")
-  nsIndicator["setAttribute"]("data-role", "ns-indicator")
-  panel["appendChild"](nsIndicator)
+  let _ = nsIndicator["setAttribute"]("data-role", "ns-indicator")
+  let _ = panel["appendChild"](nsIndicator)
 
-  panel["appendChild"](makeSeparator())
+  let _ = panel["appendChild"](makeSeparator())
 
   // ── Comfort noise toggle button ──
   let cnBtn = makeButton(
@@ -829,23 +834,23 @@ let render = (state: pipelineState, engine: VoiceEngine.t): {..} => {
       }
     },
   )
-  cnBtn["setAttribute"]("data-role", "cn-btn")
-  panel["appendChild"](cnBtn)
+  let _ = cnBtn["setAttribute"]("data-role", "cn-btn")
+  let _ = panel["appendChild"](cnBtn)
 
-  panel["appendChild"](makeSeparator())
+  let _ = panel["appendChild"](makeSeparator())
 
   // ── AGC gain indicator (always visible since AGC is always on) ──
   let gainIndicator = makeGainIndicator()
-  gainIndicator["setAttribute"]("data-role", "gain-indicator")
-  panel["appendChild"](gainIndicator)
+  let _ = gainIndicator["setAttribute"]("data-role", "gain-indicator")
+  let _ = panel["appendChild"](gainIndicator)
 
   // ── PTT key binding label ──
   let pttKeyLabel = makeLabel(`PTT Key: ${state.pttKey}`)
-  pttKeyLabel["setAttribute"]("data-role", "ptt-key-label")
+  let _ = pttKeyLabel["setAttribute"]("data-role", "ptt-key-label")
   pttKeyLabel["style"]["display"] = if state.pttEnabled { "inline" } else { "none" }
-  panel["appendChild"](pttKeyLabel)
+  let _ = panel["appendChild"](pttKeyLabel)
 
-  state.rootElement = Some(panel)
+  state.rootElement = Some(castToJsObj(panel))
 
   // ── Start the update loop ──
   startUpdateLoop(state)
@@ -932,8 +937,8 @@ and startUpdateLoop = (state: pipelineState): unit => {
       gainFills->Array.forEach(fill => {
         // Read gain reduction from compressor if available.
         let reduction = switch state.compressorNode {
-        | Some(comp) =>
-          let r: float = comp["reduction"]
+        | Some(compRaw) =>
+          let r: float = castFromJsObj(compRaw)["reduction"]
           // reduction is negative dB; normalise to 0-100%.
           Math.min(100.0, Math.abs(r) *. 3.33)
         | None => 0.0
@@ -1052,12 +1057,13 @@ let destroy = (state: pipelineState): unit => {
 
   // Remove the root element from the DOM.
   switch state.rootElement {
-  | Some(root) =>
+  | Some(rootRaw) =>
+    let root = castFromJsObj(rootRaw)
     let parent: Nullable.t<{..}> = root["parentNode"]
-    let isNull: bool = %raw(`parent === null`)
+    let isNull: bool = (%raw(`v => v === null`))(parent)
     if !isNull {
-      let p: {..} = %raw(`parent`)
-      p["removeChild"](root)
+      let p: {..} = (%raw(`v => v`))(parent)
+      let _ = p["removeChild"](root)
     }
   | None => ()
   }

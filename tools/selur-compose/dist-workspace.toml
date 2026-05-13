@@ -1,0 +1,33 @@
+# cargo-dist release configuration
+# https://opensource.axo.dev/cargo-dist/
+#
+# To verify this config: dist plan
+# To build locally:      dist build
+
+[workspace]
+members = ["cargo:."]
+
+[dist]
+# The version of cargo-dist used to generate this config.
+# Update when upgrading cargo-dist.
+cargo-dist-version = "0.31.0"
+
+# Shell + PowerShell installers for cargo-binstall and direct curl installs.
+installers = ["shell", "powershell"]
+
+# Prebuilt targets.  musl static linking means no glibc runtime dependency —
+# the binary runs on any Linux container base, including cgr.dev/chainguard/static.
+targets = [
+    "x86_64-unknown-linux-musl",
+    "aarch64-unknown-linux-musl",
+]
+
+# On pull requests, only run the plan step (fast).
+# Full builds run only on tag pushes.
+pr-run-mode = "plan"
+
+# Let cargo-dist manage the GitHub Release creation.
+create-release = true
+
+# Include SHA256SUMS in the release.
+checksum = "sha256"

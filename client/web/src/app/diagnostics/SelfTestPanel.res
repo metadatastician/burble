@@ -469,7 +469,7 @@ and updateDom = (panel: t): unit => {
   | Some(root) =>
     // Find the content area within the root element.
     let contentArea: {..} = %raw(`root.querySelector('[data-role="content"]')`)
-    let isNull: bool = %raw(`contentArea === null`)
+    let isNull: bool = (%raw(`v => v === null`))(contentArea)
     if isNull {
       () // Panel hasn't been rendered yet.
     } else {
@@ -630,9 +630,9 @@ let destroy = (panel: t): unit => {
   | Some(root) =>
     let rootObj = castFromJsObj(root)
     let parent: Nullable.t<{..}> = rootObj["parentNode"]
-    let isNull: bool = %raw(`parent === null`)
+    let isNull: bool = (%raw(`v => v === null`))(parent)
     if !isNull {
-      let p: {..} = %raw(`parent`)
+      let p: {..} = (%raw(`v => v`))(parent)
       ignore(p["removeChild"](root))
     }
   | None => ()

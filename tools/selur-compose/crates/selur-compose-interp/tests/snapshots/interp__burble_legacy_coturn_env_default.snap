@@ -1,0 +1,9 @@
+---
+source: crates/selur-compose-interp/tests/interp.rs
+expression: env_list
+---
+[
+    "TURN_SECRET=change-me-in-production",
+    "TURN_REALM=burble.local",
+    "TURN_EXTERNAL_IP=",
+]

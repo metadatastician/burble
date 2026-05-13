@@ -1,0 +1,18 @@
+[package]
+name         = "selur-compose-interp"
+description  = "Shell-style variable interpolation for selur-compose. No I/O except .env loading."
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+license.workspace      = true
+repository.workspace   = true
+homepage.workspace     = true
+
+[dependencies]
+selur-compose-schema = { path = "../selur-compose-schema", version = "0.1.0" }
+serde_json           = { workspace = true }
+thiserror            = { workspace = true }
+
+[dev-dependencies]
+insta    = { workspace = true }
+tempfile = "3"

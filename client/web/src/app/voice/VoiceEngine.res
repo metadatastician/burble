@@ -319,14 +319,14 @@ let startAudioLevelMonitoring = (engine: t): unit => {
     let source = ctx["createMediaStreamSource"](stream)
     let analyser = ctx["createAnalyser"]()
     analyser["fftSize"] = 256
-    source["connect"](analyser)
+    let _ = source["connect"](analyser)
 
     // If coprocessor is enabled, insert a GainNode for noise gating.
     if engine.config.coprocessorEnabled {
       let gainNode = ctx["createGain"]()
       gainNode["gain"]["value"] = 1.0
-      source["connect"](gainNode)
-      gainNode["connect"](ctx["destination"])
+      let _ = source["connect"](gainNode)
+      let _ = gainNode["connect"](ctx["destination"])
       engine.noiseGateNode = Some(castToJsObj(gainNode))
     }
 
@@ -560,7 +560,7 @@ let setupChannelListeners = (engine: t, ch: PhoenixSocket.channel): unit => {
 ///   7. Set up channel listeners for SDP/ICE exchange
 ///   8. Start audio level monitoring and PTT listeners
 ///   9. If PTT mode, mute tracks initially (unmute on key press)
-let connect = async (engine: t, ~roomId: string, ~token: string): result<unit, string> => {
+let rec connect = async (engine: t, ~roomId: string, ~token: string): result<unit, string> => {
   engine.state = Connecting
   engine.roomId = Some(roomId)
   engine.authToken = Some(token)
@@ -605,15 +605,15 @@ let connect = async (engine: t, ~roomId: string, ~token: string): result<unit, s
 
     // 5. Add local audio tracks to the PeerConnection.
     // Each track is associated with the local stream for proper cleanup.
-    let _ = %raw(`(pc, stream) => {
-      const tracks = stream.getAudioTracks();
-      tracks.forEach(track => pc.addTrack(track, stream));
-    }`)(pc, stream)
+    let tracks: array<{..}> = %raw(`stream.getAudioTracks()`)
+    tracks->Array.forEach(track => {
+      let _ = %raw(`(pc, track, stream) => pc.addTrack(track, stream)`)(pc, track, stream)
+    })
 
     // 6a. Handle outgoing ICE candidates — forward to server via channel.
     pc["onicecandidate"] = (event: {..}) => {
       let candidate = event["candidate"]
-      let isNull: bool = %raw(`candidate === null`)
+      let isNull: bool = (%raw(`v => v === null`))(candidate)
       if !isNull {
         let json: {..} = %raw(`event.candidate.toJSON()`)
         switch engine.channel {
@@ -694,7 +694,7 @@ let connect = async (engine: t, ~roomId: string, ~token: string): result<unit, s
     Ok()
   } catch {
   | exn =>
-    let msg = exn->Exn.message->Option.getOr("WebRTC connection failed")
+    let msg: string = %raw(`(exn => exn && exn.message ? exn.message : "WebRTC connection failed")`)(exn)
     engine.state = Failed(msg)
     notifyState(engine)
     Console.error2("[Burble] Voice connect error:", msg)
@@ -740,7 +740,7 @@ let handleSdpOffer = async (engine: t, sdp: string): unit => {
         await pc.setLocalDescription(answer);
       })()`)
 
-      let answerSdp: string = pc["localDescription"]["sdp"]
+      let answerSdp: string = %raw(`pc.localDescription.sdp`)
 
       switch engine.channel {
       | Some(ch) =>
@@ -785,20 +785,20 @@ let disconnect = (engine: t): unit => {
   // Stop all local media tracks (releases microphone).
   switch engine.localStream {
   | Some(stream) =>
-    let tracks: array<{..}> = stream["getTracks"]()
+    let tracks: array<{..}> = %raw(`stream.getTracks()`)
     tracks->Array.forEach(track => track["stop"]())
   | None => ()
   }
 
   // Close PeerConnection (terminates ICE, DTLS, and media).
   switch engine.peerConnection {
-  | Some(pc) => pc["close"]()
+  | Some(pc) => let _ = %raw(`(pc => { if (pc && pc.close) pc.close(); })`)(pc)
   | None => ()
   }
 
   // Close AudioContext (releases audio processing resources).
   switch engine.audioContext {
-  | Some(ctx) => ctx["close"]()
+  | Some(ctx) => let _ = %raw(`(ctx => { if (ctx && ctx.close) ctx.close(); })`)(ctx)
   | None => ()
   }
 
@@ -864,7 +864,7 @@ let toggleMute = (engine: t): voiceState => {
     let peerIds = Dict.keysToArray(engine.peerAudios)
     peerIds->Array.forEach(peerId => {
       switch Dict.get(engine.peerAudios, peerId) {
-      | Some(peer) => peer.audioElement["muted"] = false
+      | Some(peer) => castFromJsObj(peer.audioElement)["muted"] = false
       | None => ()
       }
     })
@@ -911,7 +911,7 @@ let toggleDeafen = (engine: t): voiceState => {
   let peerIds = Dict.keysToArray(engine.peerAudios)
   peerIds->Array.forEach(peerId => {
     switch Dict.get(engine.peerAudios, peerId) {
-    | Some(peer) => peer.audioElement["muted"] = isDeafened
+    | Some(peer) => castFromJsObj(peer.audioElement)["muted"] = isDeafened
     | None => ()
     }
   })

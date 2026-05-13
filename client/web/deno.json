@@ -5,6 +5,7 @@
   },
   "imports": {
     "@rescript/core": "npm:@rescript/core@1.6.1",
+    "@rescript/runtime": "npm:@rescript/runtime@12.2.0",
     "rescript": "npm:rescript@12.2.0",
     "phoenix": "npm:phoenix@1.7.11",
     "cadre-router": "../../../developer-ecosystem/rescript-ecosystem/cadre-router/src/client/CadreRouter.js",

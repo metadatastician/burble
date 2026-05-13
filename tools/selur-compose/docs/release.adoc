@@ -1,0 +1,258 @@
+// SPDX-License-Identifier: PMPL-1.0-or-later
+= selur-compose — Release Engineering Guide
+:toc: left
+:icons: font
+
+This document covers the end-to-end release pipeline for selur-compose:
+cargo-dist validation, publish order, tag procedure, container image,
+and the v0.1.0 release checklist.
+
+Language policy: **no Python, no Go, no Node.js.**
+All release tooling is pure Rust + bash + GitHub Actions YAML.
+
+== 1. Toolchain prerequisites
+
+The following must be available locally before running any release steps:
+
+[source,bash]
+----
+cargo install cargo-dist --locked   # musl binary builder + installer scaffold
+cargo install cargo-audit --locked  # security audit
+cargo install cargo-deny --locked   # license + advisory checks
+----
+
+Check installation:
+
+[source,bash]
+----
+dist --version   # should print cargo-dist 0.31.0
+cargo audit --version
+cargo deny --version
+----
+
+== 2. Cargo-dist pipeline validation
+
+=== 2.1 What `dist plan` does
+
+`dist plan` (which is an alias for `dist manifest --artifacts=all --no-local-paths`)
+reads `dist-workspace.toml` and the Cargo workspace, then prints the full list of
+artifacts that the release CI will produce.  It does **not** build anything.
+
+Run it from the workspace root:
+
+[source,bash]
+----
+dist plan
+----
+
+Expected output for v0.1.0:
+
+----
+announcing v0.1.0
+  selur-compose 0.1.0
+    source.tar.gz
+      [checksum] source.tar.gz.sha256
+    selur-compose-installer.sh
+    sha256.sum
+    selur-compose-aarch64-unknown-linux-musl.tar.xz
+      [bin] selur-compose
+      [misc] CHANGELOG.md, LICENSE, README.adoc
+      [checksum] selur-compose-aarch64-unknown-linux-musl.tar.xz.sha256
+    selur-compose-x86_64-unknown-linux-musl.tar.xz
+      [bin] selur-compose
+      [misc] CHANGELOG.md, LICENSE, README.adoc
+      [checksum] selur-compose-x86_64-unknown-linux-musl.tar.xz.sha256
+----
+
+If `dist plan` exits non-zero, do **not** tag.  Fix any issues first.
+
+=== 2.2 Static linkage verification
+
+After building locally with `cargo build --release --target x86_64-unknown-linux-musl`,
+confirm the binary is statically linked:
+
+[source,bash]
+----
+file target/x86_64-unknown-linux-musl/release/selur-compose
+# Must contain: "statically linked"
+----
+
+`dist build` will produce the same output automatically in CI.
+
+== 3. Publish order and dry-run validation
+
+The five crates must be published in strict dependency order.
+Inter-crate path dependencies all include a `version = "0.1.0"` field
+so `cargo publish` resolves them from crates.io after each step.
+
+Validation dry-runs (local, do NOT publish):
+
+[source,bash]
+----
+# 1. Root crate — no internal deps, always passes dry-run:
+cargo publish --dry-run -p selur-compose-schema
+
+# 2-5. Downstream crates — their dry-runs will fail locally because
+#      schema/interp/plan/driver are not yet on crates.io.
+#      This is expected and correct.  The CI publish job runs sequentially
+#      with 30-second waits for crates.io index propagation.
+cargo publish --dry-run -p selur-compose-interp   # expects "no matching package" error
+cargo publish --dry-run -p selur-compose-plan     # expects "no matching package" error
+cargo publish --dry-run -p selur-compose-driver   # expects "no matching package" error
+cargo publish --dry-run -p selur-compose          # expects "no matching package" error
+----
+
+NOTE: Only `selur-compose-schema`'s dry-run can be validated fully locally.
+The downstream errors are expected: they confirm that each crate correctly
+references its upstream dependency by version, not just by path.
+
+The `release.yml` workflow publishes each crate with `--no-verify` (the source
+has already been verified by CI), in order, with `sleep 30` between each.
+
+== 4. Pre-release checklist
+
+Execute this checklist before tagging:
+
+[source]
+----
+[ ] CI is green on main for at least 3 consecutive runs
+[ ] cargo test --workspace passes (216 tests, 0 failures)
+[ ] cargo clippy --workspace --all-targets -- -D warnings passes
+[ ] dist plan exits 0 with no errors (warnings about powershell on Linux are fine)
+[ ] CHANGELOG.md [Unreleased] section is empty; [0.1.0] section is complete
+[ ] README.adoc quick-start section is accurate
+[ ] docs/compose-dialect.adoc reflects all v0.1 features
+[ ] Cargo.toml workspace version = "0.1.0" (all five crates inherit)
+[ ] Cargo.lock committed and up to date
+[ ] cargo publish --dry-run -p selur-compose-schema exits 0
+[ ] No open issues blocking v0.1.0 milestone
+[ ] CRATES_IO_TOKEN secret is set in the GitHub repo settings
+----
+
+== 5. Tag and release procedure
+
+These are the exact commands the maintainer runs after merging the release PR:
+
+[source,bash]
+----
+# 1. Confirm you are on main and it is clean
+git checkout main
+git pull --ff-only
+
+# 2. Confirm tests still pass
+cargo test --workspace
+
+# 3. Confirm dist plan is clean
+dist plan
+
+# 4. Tag v0.1.0 (annotated tag)
+git tag -a v0.1.0 -m "selur-compose v0.1.0 — TOML-native Podman compose CLI
+
+First stable release. 216 tests. Ships static musl binaries for
+x86_64 and aarch64 Linux. See CHANGELOG.md for the full feature list."
+
+# 5. Push the tag — this fires release.yml
+git push origin v0.1.0
+
+# 6. Monitor the Actions tab:
+#    release.yml → dist job (musl builds) → release job (GitHub Release) → publish job (crates.io)
+#    Typical duration: ~8 minutes
+
+# 7. Verify the release
+cargo install selur-compose            # install from crates.io source
+selur-compose --version                # should print selur-compose 0.1.0
+
+# 8. Verify binstall works
+cargo binstall selur-compose           # fetches musl tarball from GitHub Release
+selur-compose --version
+----
+
+If the `release.yml` publish job fails partway through (e.g. network error after
+`selur-compose-schema` but before `selur-compose-interp`), re-run only the publish
+job from the Actions tab.  Do **not** re-tag — the GitHub Release and dist artifacts
+are already correct.
+
+== 6. Container image build and push
+
+The `Containerfile` uses a two-stage Chainguard build:
+
+- Stage 1: `cgr.dev/chainguard/wolfi-base` — Rust + musl toolchain, builds the static binary.
+- Stage 2: `cgr.dev/chainguard/static` — distroless runtime, just the binary.
+
+Build and push (run after the GitHub Release exists):
+
+[source,bash]
+----
+# Build the image locally first to verify
+podman build \
+  -f Containerfile \
+  -t ghcr.io/hyperpolymath/selur-compose:0.1.0 \
+  -t ghcr.io/hyperpolymath/selur-compose:latest \
+  .
+
+# Smoke test the image
+podman run --rm ghcr.io/hyperpolymath/selur-compose:0.1.0 --version
+# → selur-compose 0.1.0
+
+# Log in to ghcr.io
+echo $GITHUB_TOKEN | podman login ghcr.io -u hyperpolymath --password-stdin
+
+# Push both tags
+podman push ghcr.io/hyperpolymath/selur-compose:0.1.0
+podman push ghcr.io/hyperpolymath/selur-compose:latest
+----
+
+In CI, the container push is a manual step post-release (not yet automated in v0.1).
+Automation is a v0.2 task.
+
+=== 6.1 Image labels
+
+The image should carry OCI standard labels.  Add these to `Containerfile` after
+the binary COPY:
+
+[source,dockerfile]
+----
+LABEL org.opencontainers.image.title="selur-compose"
+LABEL org.opencontainers.image.version="0.1.0"
+LABEL org.opencontainers.image.source="https://github.com/hyperpolymath/selur-compose"
+LABEL org.opencontainers.image.licenses="PMPL-1.0-or-later"
+LABEL org.opencontainers.image.description="TOML-native Podman compose CLI"
+----
+
+== 7. Post-release: burble submodule
+
+After v0.1.0 is published on GitHub and the git tag is pushed:
+
+[source,bash]
+----
+# In the burble repo:
+cd /path/to/burble
+
+# Add as a submodule
+git submodule add https://github.com/hyperpolymath/selur-compose tools/selur-compose
+git submodule update --init
+
+# Pin to v0.1.0 tag
+cd tools/selur-compose
+git checkout v0.1.0
+cd ../..
+
+git add .gitmodules tools/selur-compose
+git commit -m "feat(tools): add selur-compose v0.1.0 as submodule"
+----
+
+Once the submodule is live, the burble Justfile `up`/`down` recipes can point
+at `tools/selur-compose/target/release/selur-compose` (built from the submodule)
+rather than the worktree copy.
+
+== 8. Rollback procedure
+
+If v0.1.0 proves critically broken after publication:
+
+1. Do **not** delete the crates.io versions (this is permanently harmful to the
+   ecosystem — `cargo update` will break for users who already have it).
+2. Yank the broken versions: +
+   `cargo yank --version 0.1.0 -p selur-compose` (and the other crates if needed).
+   Yanking prevents new `Cargo.lock` resolution of that version but does not break
+   existing locked builds.
+3. Fix the issue and ship `v0.1.1` via the normal tag procedure.

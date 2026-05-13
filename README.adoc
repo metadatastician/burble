@@ -89,18 +89,41 @@ app. Used in IDApTIK (asymmetric co-op game) and PanLL (panel workspace).
 
 [source,bash]
 ----
-git clone https://github.com/hyperpolymath/burble && cd burble
-cd containers && podman-compose -f compose.toml up
-# Server: http://localhost:4000
+git clone --recurse-submodules https://github.com/hyperpolymath/burble && cd burble
+just deploy       # builds selur-compose if needed (~3 min first run), then brings up the stack
+# Server:     http://localhost:4000
 # Web client: http://localhost:8080
-# VeriSimDB: http://localhost:8081
+# VeriSimDB:  http://localhost:8081
 ----
 
+`just deploy` uses link:tools/selur-compose/[selur-compose] — the TOML-native
+Rust compose driver developed in-tree. No Python, no Docker Compose, no
+`podman-compose`.
+
+To stop the stack:
+
+[source,bash]
+----
+just down
+----
+
+NOTE: `--recurse-submodules` is required. VeriSimDB is integrated as a
+submodule under `tools/nextgen-databases` (paralleling `tools/affinescript`)
+because Burble's anti-purpose forbids vendoring it in-tree. If you already
+cloned without it, run `git submodule update --init --recursive` — or just
+run `./setup.sh`, which now does that automatically.
+
 === Development setup
+
+NOTE: Building from source requires system packages for the `quicer`/`msquic` QUIC
+transport library (cmake, perl, build tools, OpenSSL headers). See
+link:CONTRIBUTING.md#building-from-source--system-prerequisites[CONTRIBUTING.md]
+for the full package list and per-distro install commands.
 
 [source,bash]
 ----
 # Prerequisites: Elixir 1.17+, Zig 0.15+, Deno
+# (plus system packages — see CONTRIBUTING.md)
 
 # Build Zig coprocessor
 cd ffi/zig && zig build -Doptimize=ReleaseFast

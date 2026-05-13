@@ -1,0 +1,291 @@
+---
+source: crates/selur-compose-schema/tests/parse_snapshots.rs
+expression: compose
+---
+Compose {
+    project: Some(
+        Project {
+            name: "burble",
+        },
+    ),
+    services: {
+        "coturn": Service {
+            image: Some(
+                "coturn/coturn:4.11.0-r0@sha256:5d1d717c0542b70c97c006ac8e38d4e9a6c9a7962ac7b1a11a7a2c42ab655902",
+            ),
+            build: None,
+            command: Some(
+                List(
+                    [
+                        "args='--config /etc/coturn/turnserver.conf'; args=\"$args --static-auth-secret=$TURN_SECRET --realm=$TURN_REALM\"; [ -n \"$TURN_EXTERNAL_IP\" ] && args=\"$args --external-ip=$TURN_EXTERNAL_IP\"; exec turnserver $args",
+                    ],
+                ),
+            ),
+            entrypoint: Some(
+                List(
+                    [
+                        "/bin/sh",
+                        "-c",
+                    ],
+                ),
+            ),
+            environment: List(
+                [
+                    "TURN_SECRET=${TURN_SECRET:-change-me-in-production}",
+                    "TURN_REALM=${TURN_REALM:-burble.local}",
+                    "TURN_EXTERNAL_IP=${TURN_EXTERNAL_IP:-}",
+                ],
+            ),
+            env_file: [],
+            ports: [],
+            volumes: [
+                Short(
+                    "./coturn.conf:/etc/coturn/turnserver.conf:ro",
+                ),
+                Short(
+                    "coturn-data:/var/lib/coturn",
+                ),
+            ],
+            networks: [],
+            network_mode: Some(
+                Host,
+            ),
+            depends_on: Empty,
+            healthcheck: None,
+            restart: UnlessStopped,
+            profiles: [],
+            secrets: [],
+            configs: [],
+            user: None,
+            working_dir: None,
+            hostname: None,
+            cap_add: [],
+            cap_drop: [],
+            init: None,
+            stop_signal: None,
+            stop_grace_period: None,
+        },
+        "server": Service {
+            image: None,
+            build: Some(
+                Build {
+                    context: "..",
+                    dockerfile: Some(
+                        "containers/Containerfile.server",
+                    ),
+                    args: {},
+                    target: None,
+                    labels: {},
+                    no_cache: false,
+                },
+            ),
+            command: None,
+            entrypoint: None,
+            environment: List(
+                [
+                    "PHX_SERVER=true",
+                    "PORT=4020",
+                    "PHX_HOST=localhost",
+                    "VERISIMDB_URL=http://verisimdb:8080",
+                    "BURBLE_TOPOLOGY=monarchic",
+                    "PROVEN_LIB_DIR=/app/lib/burble-0.1.0/priv",
+                    "TURN_URL=turn:${TURN_REALM:-burble.local}:3478",
+                    "TURNS_URL=turns:${TURN_REALM:-burble.local}:5349",
+                    "TURN_SECRET=${TURN_SECRET:-change-me-in-production}",
+                    "TURN_REALM=${TURN_REALM:-burble.local}",
+                    "STUN_URL=stun:${TURN_REALM:-burble.local}:3478",
+                ],
+            ),
+            env_file: [],
+            ports: [],
+            volumes: [],
+            networks: [
+                "burble-internal",
+            ],
+            network_mode: None,
+            depends_on: Map(
+                {
+                    "verisimdb": DependsOnSpec {
+                        condition: ServiceHealthy,
+                        restart: false,
+                    },
+                },
+            ),
+            healthcheck: Some(
+                Healthcheck {
+                    test: Shell(
+                        "wget -q --spider http://localhost:4020/api/v1/auth/guest || exit 1",
+                    ),
+                    interval: Some(
+                        30s,
+                    ),
+                    timeout: Some(
+                        5s,
+                    ),
+                    retries: Some(
+                        3,
+                    ),
+                    start_period: None,
+                    disable: false,
+                },
+            ),
+            restart: UnlessStopped,
+            profiles: [],
+            secrets: [],
+            configs: [],
+            user: None,
+            working_dir: None,
+            hostname: None,
+            cap_add: [],
+            cap_drop: [],
+            init: None,
+            stop_signal: None,
+            stop_grace_period: None,
+        },
+        "verisimdb": Service {
+            image: None,
+            build: Some(
+                Build {
+                    context: "../tools/nextgen-databases/verisimdb",
+                    dockerfile: Some(
+                        "container/Containerfile",
+                    ),
+                    args: {
+                        "FEATURES": "persistent",
+                    },
+                    target: None,
+                    labels: {},
+                    no_cache: false,
+                },
+            ),
+            command: None,
+            entrypoint: None,
+            environment: Empty,
+            env_file: [],
+            ports: [],
+            volumes: [
+                Short(
+                    "burble-verisimdb-data:/data",
+                ),
+            ],
+            networks: [
+                "burble-internal",
+            ],
+            network_mode: None,
+            depends_on: Empty,
+            healthcheck: Some(
+                Healthcheck {
+                    test: Shell(
+                        "wget -q --spider http://localhost:8080/health || exit 1",
+                    ),
+                    interval: Some(
+                        30s,
+                    ),
+                    timeout: Some(
+                        5s,
+                    ),
+                    retries: Some(
+                        3,
+                    ),
+                    start_period: None,
+                    disable: false,
+                },
+            ),
+            restart: UnlessStopped,
+            profiles: [],
+            secrets: [],
+            configs: [],
+            user: None,
+            working_dir: None,
+            hostname: None,
+            cap_add: [],
+            cap_drop: [],
+            init: None,
+            stop_signal: None,
+            stop_grace_period: None,
+        },
+        "web": Service {
+            image: None,
+            build: Some(
+                Build {
+                    context: "..",
+                    dockerfile: Some(
+                        "containers/Containerfile.web",
+                    ),
+                    args: {},
+                    target: None,
+                    labels: {},
+                    no_cache: false,
+                },
+            ),
+            command: None,
+            entrypoint: None,
+            environment: Empty,
+            env_file: [],
+            ports: [
+                Short(
+                    "4020:80",
+                ),
+            ],
+            volumes: [],
+            networks: [
+                "burble-internal",
+            ],
+            network_mode: None,
+            depends_on: List(
+                [
+                    "server",
+                ],
+            ),
+            healthcheck: None,
+            restart: UnlessStopped,
+            profiles: [],
+            secrets: [],
+            configs: [],
+            user: None,
+            working_dir: None,
+            hostname: None,
+            cap_add: [],
+            cap_drop: [],
+            init: None,
+            stop_signal: None,
+            stop_grace_period: None,
+        },
+    },
+    networks: {
+        "burble-internal": Network {
+            driver: Some(
+                "bridge",
+            ),
+            driver_opts: {},
+            external: false,
+            name: None,
+            ipam: None,
+            labels: {},
+            internal: false,
+        },
+    },
+    volumes: {
+        "burble-verisimdb-data": Volume {
+            driver: Some(
+                "local",
+            ),
+            driver_opts: {},
+            external: false,
+            name: None,
+            labels: {},
+        },
+        "coturn-data": Volume {
+            driver: Some(
+                "local",
+            ),
+            driver_opts: {},
+            external: false,
+            name: None,
+            labels: {},
+        },
+    },
+    secrets: {},
+    configs: {},
+    extensions: {},
+}

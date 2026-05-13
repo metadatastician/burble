@@ -1,0 +1,7 @@
+# Invalid: typo `imag` instead of `image` in a service.
+[project]
+name = "bad"
+
+[services.typo-svc]
+imag = "nginx:latest"
+restart = "unless-stopped"

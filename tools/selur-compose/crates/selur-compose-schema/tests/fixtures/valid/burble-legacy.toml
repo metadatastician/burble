@@ -1,0 +1,83 @@
+# SPDX-License-Identifier: PMPL-1.0-or-later
+#
+# Burble — Podman Compose configuration (legacy).
+#
+# PREFER: selur-compose.toml (selur-compose or podman-compose).
+# This file is retained for backwards compatibility.
+#
+# Services:
+#   burble-server  — Elixir OTP control plane + coprocessor NIFs
+#   burble-web     — ReScript SPA (nginx)
+#   verisimdb      — VeriSimDB database (Rust core)
+#
+# Ports:
+#   4020 — Burble web client (public)
+#   Internal: server on 4020, VeriSimDB on 8080
+
+[project]
+name = "burble"
+
+[services.verisimdb]
+build = { context = "../tools/nextgen-databases/verisimdb", dockerfile = "container/Containerfile", args = { FEATURES = "persistent" } }
+restart = "unless-stopped"
+networks = ["burble-net"]
+volumes = ["burble-verisimdb-data:/data"]
+healthcheck = { test = "wget -q --spider http://localhost:8080/health || exit 1", interval = "30s", timeout = "5s", retries = 3 }
+
+[services.server]
+build = { context = "..", dockerfile = "containers/Containerfile.server" }
+depends_on = { verisimdb = { condition = "service_healthy" } }
+restart = "unless-stopped"
+networks = ["burble-net"]
+environment = [
+  "PHX_SERVER=true",
+  "PORT=4020",
+  "VERISIMDB_URL=http://verisimdb:8080",
+  "BURBLE_TOPOLOGY=monarchic",
+  "PROVEN_LIB_DIR=/app/lib/burble-0.1.0/priv",
+]
+# Secrets — set these at deploy time:
+#   SECRET_KEY_BASE=<mix phx.gen.secret>
+#   GUARDIAN_SECRET=<mix phx.gen.secret>
+
+[services.web]
+build = { context = "..", dockerfile = "containers/Containerfile.web" }
+ports = ["4020:80"]
+depends_on = ["server"]
+restart = "unless-stopped"
+networks = ["burble-net"]
+
+# coturn pinned to 4.11.0-r0 @ sha256:5d1d717c0542b70c97c006ac8e38d4e9a6c9a7962ac7b1a11a7a2c42ab655902 on 2026-05-10.
+# To upgrade: bump the tag, re-resolve the digest with
+#   podman pull coturn/coturn:<NEW_TAG> && podman inspect ... --format '{{.Digest}}'
+# and update both compose.toml and selur-compose.toml in the same commit.
+[services.coturn]
+image = "coturn/coturn:4.11.0-r0@sha256:5d1d717c0542b70c97c006ac8e38d4e9a6c9a7962ac7b1a11a7a2c42ab655902"
+restart = "unless-stopped"
+network_mode = "host"
+volumes = [
+  "./coturn.conf:/etc/coturn/turnserver.conf:ro",
+  "coturn-data:/var/lib/coturn",
+]
+environment = [
+  "TURN_SECRET=${TURN_SECRET:-change-me-in-production}",
+  "TURN_REALM=${TURN_REALM:-burble.local}",
+  "TURN_EXTERNAL_IP=${TURN_EXTERNAL_IP:-}",
+]
+entrypoint = ["/bin/sh", "-c"]
+command = ["args='--config /etc/coturn/turnserver.conf'; args=\"$args --static-auth-secret=$TURN_SECRET --realm=$TURN_REALM\"; [ -n \"$TURN_EXTERNAL_IP\" ] && args=\"$args --external-ip=$TURN_EXTERNAL_IP\"; exec turnserver $args"]
+
+[networks.burble-net]
+driver = "bridge"
+
+[volumes.coturn-data]
+driver = "local"
+
+[volumes.burble-verisimdb-data]
+driver = "local"
+
+# Svalinn policy enforcement (when Stapeln stack is ready).
+# [x-svalinn]
+# policy = "containers/policy.yaml"
+# require-signed-images = true
+# require-sbom = true

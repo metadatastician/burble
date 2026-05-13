@@ -1,0 +1,131 @@
+= selur-compose CLI JSON Schema
+:doctype: article
+:toc:
+
+== Overview
+
+When `--format json` is passed globally, commands that produce structured
+output emit a JSON document to stdout.  Each document has a top-level `type`
+field that discriminates the command.  Error output (stderr) also uses a JSON
+envelope when `--format json` is active.
+
+== `version`
+
+Emitted by `selur-compose --format json version`.
+
+[source,json]
+----
+{
+  "type": "version",
+  "selur_compose": "0.1.0",
+  "podman": "5.4.2"
+}
+----
+
+Fields:
+
+[cols="1,1,3"]
+|===
+| Field | Type | Description
+| `type` | string | Always `"version"`.
+| `selur_compose` | string | The `selur-compose` binary version (semver).
+| `podman` | string | The `podman --version` output, or `"unknown"` if podman is absent.
+|===
+
+== `ps`
+
+Emitted by `selur-compose --format json ps`.
+
+[source,json]
+----
+{
+  "type": "ps",
+  "containers": [
+    {
+      "service":      "web",
+      "container_id": "abc123def456",
+      "image":        "burble_web:latest",
+      "status":       "Up 3 minutes (healthy)",
+      "ports":        "0.0.0.0:4020->80/tcp"
+    }
+  ]
+}
+----
+
+Fields:
+
+[cols="1,1,3"]
+|===
+| Field | Type | Description
+| `type` | string | Always `"ps"`.
+| `containers` | array | Zero or more container rows.
+| `containers[].service` | string | The compose service name.
+| `containers[].container_id` | string | Full container ID (may be up to 64 hex chars).
+| `containers[].image` | string | Image tag or digest the container was started from.
+| `containers[].status` | string | Human-readable state string (e.g. `"Up 3 minutes (healthy)"`).
+| `containers[].ports` | string | Port binding summary, or empty string if none.
+|===
+
+NOTE: `ps` is stubbed in Phase 5 and will be fully implemented when the Driver
+trait lands in Phase 4.
+
+== `config`
+
+`selur-compose config` emits either TOML (default) or JSON:
+
+* `selur-compose config` → pretty TOML
+* `selur-compose config --output json` or `selur-compose --format json config` → JSON
+
+The JSON form is the `selur_compose_schema::Compose` struct serialised with
+`serde_json::to_string_pretty`.  It has no `type` wrapper because the schema
+struct itself is the document root.
+
+[source,json]
+----
+{
+  "project": { "name": "burble" },
+  "services": {
+    "web": {
+      "image": null,
+      "build": { "context": "..", "dockerfile": "containers/Containerfile.web", ... },
+      ...
+    }
+  },
+  "networks": { ... },
+  "volumes":  { ... }
+}
+----
+
+The exact shape mirrors `selur_compose_schema::Compose`.  Refer to that
+crate's rustdoc for field-level documentation.
+
+== `error`
+
+When any command fails and `--format json` is active, the error is written to
+stderr in the following envelope:
+
+[source,json]
+----
+{
+  "type": "error",
+  "error": "could not find a compose file (tried selur-compose.toml, compose.toml)",
+  "chain": []
+}
+----
+
+Fields:
+
+[cols="1,1,3"]
+|===
+| Field | Type | Description
+| `type` | string | Always `"error"`.
+| `error` | string | The top-level error message.
+| `chain` | array of string | Additional context from the `anyhow` error chain (may be empty).
+|===
+
+== Stability guarantee
+
+JSON schemas in this document are stable across patch releases.  Minor
+releases may add new optional fields to existing objects.  Major version bumps
+may reorganise or remove fields.  No field will be silently removed in a patch
+release.
