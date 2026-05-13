@@ -1,0 +1,545 @@
+<!DOCTYPE html>
+<!-- SPDX-License-Identifier: PMPL-1.0-or-later -->
+<!-- Burble P2P Voice — PAKE+SAS prototype.
+     Prototype for ADR-0003. NOT a production implementation:
+       * Uses HKDF-of-passphrase + AES-GCM in lieu of proper SPAKE2.
+         A passive relay observing the ciphertext can in theory
+         offline-brute-force a low-entropy passphrase. Real SPAKE2 is
+         provably resistant to this. Migration path in PAKE-PROTOTYPE.md.
+       * SAS derived from sorted DTLS fingerprints rather than from a
+         DH session exporter. Equivalent strength for MITM detection
+         in the WebRTC trust model, simpler to implement here.
+       * No pairing / "remember this caller" UI — that's the Tier 2
+         graduation work, distinct from this Tier 3 demo.
+     Pairs of "PROD-TODO" comments below mark the spots that change
+     when this graduates from prototype to mainline. -->
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Burble P2P (PAKE prototype)</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: system-ui, sans-serif; background: #0d1117; color: #e6edf3; min-height: 100vh; display: flex; flex-direction: column; align-items: center; padding: 2rem; }
+    h1 { font-size: 1.8rem; margin-bottom: 0.3rem; }
+    .subtitle { color: #8b949e; margin-bottom: 0.5rem; font-size: 0.9rem; }
+    .proto-tag { display: inline-block; background: #6e40c9; color: #fff; font-size: 0.7rem; padding: 0.15rem 0.4rem; border-radius: 4px; margin-bottom: 1.5rem; }
+    .card { background: #161b22; border: 1px solid #30363d; border-radius: 12px; padding: 1.5rem; max-width: 520px; width: 100%; margin-bottom: 1rem; }
+    .card h2 { font-size: 1.1rem; margin-bottom: 0.8rem; }
+    label { display: block; color: #8b949e; font-size: 0.85rem; margin-bottom: 0.3rem; }
+    input, textarea { width: 100%; padding: 0.6rem; background: #0d1117; border: 1px solid #30363d; border-radius: 6px; color: #e6edf3; font-size: 0.9rem; margin-bottom: 0.8rem; font-family: monospace; }
+    textarea { height: 80px; resize: vertical; }
+    input:focus, textarea:focus { outline: none; border-color: #58a6ff; }
+    button { padding: 0.6rem 1.2rem; border: none; border-radius: 6px; font-size: 0.9rem; cursor: pointer; margin-right: 0.5rem; margin-bottom: 0.5rem; }
+    .btn-green { background: #238636; color: #fff; }
+    .btn-green:hover { background: #2ea043; }
+    .btn-blue { background: #1f6feb; color: #fff; }
+    .btn-blue:hover { background: #388bfd; }
+    .btn-grey { background: #21262d; color: #c9d1d9; }
+    .btn-grey:hover { background: #30363d; }
+    .btn-red { background: #da3633; color: #fff; }
+    .btn-red:hover { background: #f85149; }
+    .status { padding: 0.5rem; border-radius: 6px; margin-bottom: 0.8rem; font-size: 0.85rem; text-align: center; }
+    .status.idle { background: #1c1e23; color: #8b949e; }
+    .status.waiting { background: #1a1500; color: #d29922; }
+    .status.connected { background: #0d2818; color: #3fb950; }
+    .status.error { background: #1a0000; color: #f85149; }
+    .meter { height: 6px; background: #21262d; border-radius: 3px; margin: 0.3rem 0 0.8rem; overflow: hidden; }
+    .meter-fill { height: 100%; background: #3fb950; transition: width 80ms; width: 0%; }
+    .step-num { display: inline-block; width: 24px; height: 24px; background: #1f6feb; border-radius: 50%; text-align: center; line-height: 24px; font-size: 0.8rem; font-weight: bold; margin-right: 0.5rem; }
+    .hidden { display: none !important; }
+    .instructions { color: #8b949e; font-size: 0.85rem; line-height: 1.5; margin-bottom: 0.8rem; }
+    .sas-display { font-family: monospace; font-size: 1.3rem; letter-spacing: 0.05em; color: #d2a8ff; background: #1a1325; padding: 0.7rem; border-radius: 6px; text-align: center; border: 1px solid #4a3673; }
+    .sas-label { color: #8b949e; font-size: 0.8rem; margin-bottom: 0.4rem; text-align: center; }
+    .pass-row { display: flex; gap: 0.5rem; }
+    .pass-row input { flex: 1; }
+    .pass-row button { white-space: nowrap; margin-bottom: 0.8rem; }
+    audio { display: none; }
+    .field-hint { color: #6e7681; font-size: 0.75rem; margin-top: -0.5rem; margin-bottom: 0.8rem; }
+  </style>
+</head>
+<body>
+  <h1>Burble P2P</h1>
+  <p class="subtitle">Direct voice — no server, no account, no tracking</p>
+  <span class="proto-tag">PAKE+SAS prototype · ADR-0003</span>
+
+  <div id="status" class="status idle">Ready to connect</div>
+
+  <!-- Step 1: Microphone -->
+  <div class="card" id="step-mic">
+    <h2><span class="step-num">1</span>Microphone</h2>
+    <button class="btn-green" id="btn-mic" onclick="getMic()">Allow Microphone</button>
+    <div class="meter" id="mic-meter-wrap" style="display:none"><div class="meter-fill" id="mic-meter"></div></div>
+  </div>
+
+  <!-- Step 2: Role + passphrase -->
+  <div class="card hidden" id="step-role">
+    <h2><span class="step-num">2</span>Passphrase &amp; role</h2>
+    <label for="passphrase">Shared passphrase (share this with the other person via voice / SMS / in person)</label>
+    <div class="pass-row">
+      <input id="passphrase" type="text" placeholder="four short words, separated by hyphens" autocomplete="off" />
+      <button class="btn-grey" onclick="suggestPassphrase()" title="Random 4-word suggestion">⟳</button>
+    </div>
+    <p class="field-hint">Both ends must enter the same passphrase. Without it, the call cannot connect — even an attacker with the room code cannot join.</p>
+    <button class="btn-green" onclick="startCreate()">Create room</button>
+    <button class="btn-blue" onclick="startJoin()">Join room</button>
+  </div>
+
+  <!-- Step 3a: Creator — code to send -->
+  <div class="card hidden" id="step-offer">
+    <h2><span class="step-num">3</span>Send this code to the other person</h2>
+    <textarea id="offer-text" readonly onclick="copyOffer()"></textarea>
+    <span class="instructions">Click the box to copy. Send via any channel — chat, email, SMS. The code is encrypted with your passphrase; it's safe to share over insecure channels.</span>
+  </div>
+
+  <div class="card hidden" id="step-answer-input">
+    <h2><span class="step-num">4</span>Paste their reply code</h2>
+    <textarea id="answer-text" placeholder="Paste the reply code here..."></textarea>
+    <button class="btn-green" onclick="acceptAnswer()">Connect</button>
+  </div>
+
+  <!-- Step 3b: Joiner — paste offer + generate reply -->
+  <div class="card hidden" id="step-offer-input">
+    <h2><span class="step-num">3</span>Paste the room code</h2>
+    <textarea id="remote-offer-text" placeholder="Paste the room code here..."></textarea>
+    <button class="btn-green" onclick="createAnswer()">Generate reply</button>
+  </div>
+
+  <div class="card hidden" id="step-answer">
+    <h2><span class="step-num">4</span>Send this reply code back</h2>
+    <textarea id="answer-out-text" readonly onclick="copyAnswer()"></textarea>
+    <span class="instructions">Click to copy.</span>
+  </div>
+
+  <!-- Step 5: SAS verification + connected -->
+  <div class="card hidden" id="step-sas">
+    <h2><span class="step-num">5</span>Verify the safety phrase</h2>
+    <div class="sas-label">Both you and the other person should see the SAME four words below. Read them aloud — if they match, the call is end-to-end secure.</div>
+    <div class="sas-display" id="sas-text">— — — —</div>
+    <div style="margin-top:0.8rem; text-align:center;">
+      <button class="btn-green" onclick="acknowledgeSAS()">They match</button>
+      <button class="btn-red" onclick="hangUp()">They don't match (hang up)</button>
+    </div>
+    <p class="instructions" style="margin-top:0.8rem">If the words don't match, someone is intercepting the connection. Hang up and try again with a fresh passphrase via a different channel.</p>
+  </div>
+
+  <!-- Connected view -->
+  <div class="card hidden" id="step-connected">
+    <h2>Connected — verified</h2>
+    <div class="sas-label">Verified safety phrase</div>
+    <div class="sas-display" id="sas-text-confirmed" style="font-size:0.95rem">— — — —</div>
+    <label style="margin-top:0.8rem">Your microphone</label>
+    <div class="meter"><div class="meter-fill" id="mic-meter-live"></div></div>
+    <label>Remote audio</label>
+    <div class="meter"><div class="meter-fill" id="remote-meter"></div></div>
+    <div style="margin-top:0.8rem; display:flex; gap:0.5rem; justify-content:center;">
+      <button id="btn-mute" class="btn-green" onclick="toggleMute()">Mute</button>
+      <button class="btn-red" onclick="hangUp()">Hang up</button>
+    </div>
+    <audio id="remote-audio" autoplay></audio>
+  </div>
+
+  <script>
+    // SPDX-License-Identifier: PMPL-1.0-or-later
+    //
+    // PAKE+SAS prototype — see top-of-file comment for what's prototype-
+    // vs production-grade.
+    //
+    // PROTOCOL OVERVIEW
+    //   Out-of-band: both peers agree on a shared low-entropy passphrase P.
+    //   On creator's side:
+    //     1. Generate ECDHE keypair, build SDP offer (vanilla WebRTC).
+    //     2. salt_C := random 16 bytes
+    //     3. key_C := HKDF(passphrase=P, salt=salt_C, info="burble-pake-v0")
+    //     4. nonce_C := random 12 bytes
+    //     5. envelope_C := salt_C || nonce_C || AES-GCM(key_C, nonce_C, sdp_offer)
+    //     6. base64(envelope_C) is the "room code" to send.
+    //   On joiner's side:
+    //     7. Parse envelope_C, derive same key_C from passphrase + salt_C.
+    //     8. Decrypt to recover sdp_offer. If decryption fails -> wrong
+    //        passphrase or tampered envelope -> abort.
+    //     9. Build sdp_answer (vanilla WebRTC).
+    //    10. salt_J := random 16 bytes (fresh).
+    //    11. key_J := HKDF(passphrase=P, salt=salt_J, info="burble-pake-v0")
+    //    12. envelope_J := salt_J || nonce_J || AES-GCM(key_J, nonce_J, sdp_answer)
+    //    13. Send envelope_J back.
+    //   Both ends:
+    //    14. After PeerConnection enters 'connected', derive SAS from sorted
+    //        DTLS fingerprints (pulled from the SDP descriptions). Display
+    //        4 words from the PGP-even word list.
+    //    15. Verbal verification by both parties before trusting the call.
+    //
+    // PROD-TODO: replace steps 2-13 with SPAKE2(P) → shared secret K, then
+    //   AES-GCM over K. The relay-observable transcripts no longer permit
+    //   offline brute-force of P, which the symmetric scheme below does.
+    //
+    // PROD-TODO: replace step 14's fingerprint-based SAS with one derived
+    //   from a DH session exporter (RFC 5705) once Web exposes that API or
+    //   we move the call setup off raw DTLS to a wrapped Noise/QUIC layer.
+
+    const ICE_SERVERS = [
+      { urls: 'stun:stun.l.google.com:19302' },
+      { urls: 'stun:stun.cloudflare.com:3478' }
+    ];
+
+    let pc = null;
+    let localStream = null;
+    let remoteStream = null;
+    let muted = false;
+    let micAnalyser = null, remoteAnalyser = null;
+    let micData = null, remoteData = null;
+    let animFrame = null;
+    let role = null;          // 'create' | 'join'
+    let passKey = null;       // we store the *passphrase string*, not derived key — each envelope uses a fresh salt+key
+
+    // ── PGP-even biometric word list (256 entries) ────────────────────
+    // Public-domain word list designed for short authentication strings.
+    // Each byte of the SAS digest maps to one word; we take 4 bytes = 4 words.
+    const PGP_EVEN = [
+      "aardvark","absurd","accrue","acme","adrift","adult","afflict","ahead",
+      "aimless","Algol","allow","alone","ammo","ancient","apple","artist",
+      "assume","Athens","atlas","Aztec","baboon","backfield","backward","banjo",
+      "beaming","bedlamp","beehive","beeswax","befriend","Belfast","berserk","billiard",
+      "bison","blackjack","blockade","blowtorch","bluebird","bombast","bookshelf","brackish",
+      "breadline","breakup","brickyard","briefcase","Burbank","button","buzzard","cement",
+      "chairlift","chatter","checkup","chisel","choking","chopper","Christmas","clamshell",
+      "classic","classroom","cleanup","clockwork","cobra","commence","concert","cowbell",
+      "crackdown","cranky","crowfoot","crucial","crumpled","crusade","cubic","dashboard",
+      "deadbolt","deckhand","dogsled","dragnet","drainage","dreadful","drifter","dropper",
+      "drumbeat","drunken","Dupont","dwelling","eating","edict","egghead","eightball",
+      "endorse","endow","enlist","erase","escape","exceed","eyeglass","eyetooth",
+      "facial","fallout","flagpole","flatfoot","flytrap","fracture","framework","freedom",
+      "frighten","gazelle","Geiger","glitter","glucose","goggles","goldfish","gremlin",
+      "guidance","hamlet","highchair","hockey","indoors","indulge","inverse","involve",
+      "island","jawbone","keyboard","kickoff","kiwi","klaxon","locale","lockup",
+      "merit","minnow","miser","Mohawk","mural","music","necklace","Neptune",
+      "newborn","nightbird","Oakland","obtuse","offload","optic","orca","payday",
+      "peachy","pheasant","physique","playhouse","Pluto","preclude","prefer","preshrunk",
+      "printer","prowler","pupil","puppy","python","quadrant","quiver","quota",
+      "ragtime","ratchet","rebirth","reform","regain","reindeer","rematch","repay",
+      "retouch","revenge","reward","rhythm","ribcage","ringbolt","robust","rocker",
+      "ruffled","sailboat","sawdust","scallion","scenic","scorecard","Scotland","seabird",
+      "select","sentence","shadow","shamrock","showgirl","skullcap","skydive","slingshot",
+      "slowdown","snapline","snapshot","snowcap","snowslide","solo","southward","soybean",
+      "spaniel","spearhead","spellbind","spheroid","spigot","spindle","spyglass","stagehand",
+      "stagnate","stairway","standard","stapler","steamship","sterling","stockman","stopwatch",
+      "stormy","sugar","surmount","suspense","sweatband","swelter","tactics","talon",
+      "tapeworm","tempest","tiger","tissue","tonic","topmost","tracker","transit",
+      "trauma","treadmill","Trojan","trouble","tumor","tunnel","tycoon","uncut",
+      "unearth","unwind","uproot","upset","upshot","vapor","village","virus",
+      "Vulcan","waffle","wallet","watchword","wayside","willow","woodlark","Zulu"
+    ];
+
+    // ── Crypto helpers ────────────────────────────────────────────────
+
+    const enc = new TextEncoder();
+    const dec = new TextDecoder();
+
+    function bytesToB64(bytes) {
+      let s = '';
+      for (const b of bytes) s += String.fromCharCode(b);
+      return btoa(s);
+    }
+    function b64ToBytes(b64) {
+      const s = atob(b64);
+      const a = new Uint8Array(s.length);
+      for (let i = 0; i < s.length; i++) a[i] = s.charCodeAt(i);
+      return a;
+    }
+    function concat(...arrs) {
+      const len = arrs.reduce((n, a) => n + a.length, 0);
+      const out = new Uint8Array(len);
+      let off = 0;
+      for (const a of arrs) { out.set(a, off); off += a.length; }
+      return out;
+    }
+
+    async function deriveKey(passphrase, salt) {
+      // PROD-TODO: this is HKDF over the passphrase. It is NOT PAKE. A relay
+      // observing (salt || ciphertext) can offline-brute-force passphrase.
+      // Replace with SPAKE2 / OPAQUE for production.
+      const ikm = await crypto.subtle.importKey(
+        'raw', enc.encode(passphrase),
+        { name: 'HKDF' }, false, ['deriveKey']
+      );
+      return crypto.subtle.deriveKey(
+        { name: 'HKDF', hash: 'SHA-256', salt, info: enc.encode('burble-pake-v0') },
+        ikm,
+        { name: 'AES-GCM', length: 256 },
+        false, ['encrypt', 'decrypt']
+      );
+    }
+
+    async function sealSDP(passphrase, sdpObj) {
+      const salt  = crypto.getRandomValues(new Uint8Array(16));
+      const nonce = crypto.getRandomValues(new Uint8Array(12));
+      const key   = await deriveKey(passphrase, salt);
+      const ct    = new Uint8Array(await crypto.subtle.encrypt(
+        { name: 'AES-GCM', iv: nonce },
+        key,
+        enc.encode(JSON.stringify(sdpObj))
+      ));
+      return bytesToB64(concat(salt, nonce, ct));
+    }
+
+    async function openSDP(passphrase, envelopeB64) {
+      const env = b64ToBytes(envelopeB64);
+      if (env.length < 16 + 12 + 16) throw new Error('envelope too short');
+      const salt  = env.slice(0, 16);
+      const nonce = env.slice(16, 28);
+      const ct    = env.slice(28);
+      const key   = await deriveKey(passphrase, salt);
+      const pt    = new Uint8Array(await crypto.subtle.decrypt(
+        { name: 'AES-GCM', iv: nonce },
+        key,
+        ct
+      ));
+      return JSON.parse(dec.decode(pt));
+    }
+
+    // ── SAS derivation ────────────────────────────────────────────────
+
+    function fingerprintOf(sdpString) {
+      // Extract first a=fingerprint:sha-256 line and return the hex bytes.
+      const m = sdpString.match(/a=fingerprint:sha-256 ([0-9A-Fa-f:]+)/);
+      if (!m) return null;
+      return m[1].toUpperCase();
+    }
+
+    async function deriveSAS(localFingerprint, remoteFingerprint) {
+      if (!localFingerprint || !remoteFingerprint) return null;
+      const [a, b] = [localFingerprint, remoteFingerprint].sort();
+      const digest = new Uint8Array(await crypto.subtle.digest(
+        'SHA-256',
+        enc.encode(a + '|' + b)
+      ));
+      return [digest[0], digest[1], digest[2], digest[3]]
+        .map(b => PGP_EVEN[b])
+        .join(' · ');
+    }
+
+    function suggestPassphrase() {
+      // Random 4-word suggestion. Using PGP_EVEN gives ~8 bits per word = 32-bit
+      // suggestion. PROD-TODO: target ~56 bits = 4 EFF-long-list words instead.
+      const r = crypto.getRandomValues(new Uint8Array(4));
+      const phrase = Array.from(r).map(b => PGP_EVEN[b]).join('-');
+      document.getElementById('passphrase').value = phrase;
+    }
+
+    // ── Mic ───────────────────────────────────────────────────────────
+
+    async function getMic() {
+      try {
+        localStream = await navigator.mediaDevices.getUserMedia({
+          audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
+        });
+        const ctx = new AudioContext();
+        const src = ctx.createMediaStreamSource(localStream);
+        micAnalyser = ctx.createAnalyser();
+        micAnalyser.fftSize = 256;
+        micData = new Uint8Array(micAnalyser.frequencyBinCount);
+        src.connect(micAnalyser);
+        document.getElementById('mic-meter-wrap').style.display = '';
+        document.getElementById('btn-mic').textContent = 'Microphone ready';
+        document.getElementById('btn-mic').disabled = true;
+        document.getElementById('step-role').classList.remove('hidden');
+        startMeters();
+        setStatus('idle', 'Microphone ready — enter passphrase & create or join');
+      } catch (e) {
+        setStatus('error', 'Microphone access denied: ' + e.message);
+      }
+    }
+
+    // ── WebRTC ────────────────────────────────────────────────────────
+
+    function createPC() {
+      pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+      localStream.getTracks().forEach(t => pc.addTrack(t, localStream));
+      pc.ontrack = (e) => {
+        remoteStream = e.streams[0];
+        document.getElementById('remote-audio').srcObject = remoteStream;
+        const ctx = new AudioContext();
+        const src = ctx.createMediaStreamSource(remoteStream);
+        remoteAnalyser = ctx.createAnalyser();
+        remoteAnalyser.fftSize = 256;
+        remoteData = new Uint8Array(remoteAnalyser.frequencyBinCount);
+        src.connect(remoteAnalyser);
+      };
+      pc.onconnectionstatechange = async () => {
+        if (pc.connectionState === 'connected') {
+          await showSAS();
+        }
+      };
+    }
+
+    async function waitForICE() {
+      await new Promise(resolve => {
+        if (pc.iceGatheringState === 'complete') return resolve();
+        pc.onicegatheringstatechange = () => {
+          if (pc.iceGatheringState === 'complete') resolve();
+        };
+        setTimeout(resolve, 5000);
+      });
+    }
+
+    // ── Flow: creator ─────────────────────────────────────────────────
+
+    async function startCreate() {
+      const pp = document.getElementById('passphrase').value.trim();
+      if (!pp) { setStatus('error', 'Enter a passphrase first.'); return; }
+      passKey = pp;
+      role = 'create';
+
+      setStatus('waiting', 'Creating encrypted room...');
+      createPC();
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+      await waitForICE();
+
+      const envelope = await sealSDP(passKey, pc.localDescription);
+      document.getElementById('offer-text').value = envelope;
+      document.getElementById('step-role').classList.add('hidden');
+      document.getElementById('step-offer').classList.remove('hidden');
+      document.getElementById('step-answer-input').classList.remove('hidden');
+      setStatus('waiting', 'Encrypted room code ready — send it & paste reply');
+    }
+
+    async function acceptAnswer() {
+      try {
+        const code = document.getElementById('answer-text').value.trim();
+        if (!code) { setStatus('error', 'Paste the reply code first.'); return; }
+        const answer = await openSDP(passKey, code);
+        await pc.setRemoteDescription(new RTCSessionDescription(answer));
+        setStatus('waiting', 'Reply accepted — establishing connection...');
+      } catch (e) {
+        setStatus('error', 'Decrypt failed — wrong passphrase or tampered reply');
+        console.error('[PAKE] decrypt error', e);
+      }
+    }
+
+    // ── Flow: joiner ──────────────────────────────────────────────────
+
+    function startJoin() {
+      const pp = document.getElementById('passphrase').value.trim();
+      if (!pp) { setStatus('error', 'Enter a passphrase first.'); return; }
+      passKey = pp;
+      role = 'join';
+
+      document.getElementById('step-role').classList.add('hidden');
+      document.getElementById('step-offer-input').classList.remove('hidden');
+      setStatus('waiting', 'Paste the room code below');
+    }
+
+    async function createAnswer() {
+      try {
+        const code = document.getElementById('remote-offer-text').value.trim();
+        if (!code) { setStatus('error', 'Paste the room code first.'); return; }
+
+        let offer;
+        try {
+          offer = await openSDP(passKey, code);
+        } catch (e) {
+          setStatus('error', 'Decrypt failed — wrong passphrase or tampered code');
+          console.error('[PAKE] decrypt error', e);
+          return;
+        }
+
+        setStatus('waiting', 'Generating reply...');
+        createPC();
+        await pc.setRemoteDescription(new RTCSessionDescription(offer));
+        const answer = await pc.createAnswer();
+        await pc.setLocalDescription(answer);
+        await waitForICE();
+
+        const envelope = await sealSDP(passKey, pc.localDescription);
+        document.getElementById('answer-out-text').value = envelope;
+        document.getElementById('step-offer-input').classList.add('hidden');
+        document.getElementById('step-answer').classList.remove('hidden');
+        setStatus('waiting', 'Reply encrypted — send it back to the creator');
+      } catch (e) {
+        setStatus('error', 'Error: ' + e.message);
+        console.error(e);
+      }
+    }
+
+    // ── SAS ───────────────────────────────────────────────────────────
+
+    async function showSAS() {
+      const localFP  = fingerprintOf(pc.localDescription.sdp);
+      const remoteFP = fingerprintOf(pc.remoteDescription.sdp);
+      const sas      = await deriveSAS(localFP, remoteFP);
+      if (!sas) {
+        setStatus('error', 'Could not derive safety phrase (no fingerprint in SDP)');
+        return;
+      }
+      document.getElementById('sas-text').textContent = sas;
+      document.getElementById('sas-text-confirmed').textContent = sas;
+      // Hide setup cards, show SAS verification
+      document.querySelectorAll('.card').forEach(c => c.classList.add('hidden'));
+      document.getElementById('step-sas').classList.remove('hidden');
+      setStatus('connected', 'Verify the safety phrase verbally with the other person');
+    }
+
+    function acknowledgeSAS() {
+      document.getElementById('step-sas').classList.add('hidden');
+      document.getElementById('step-connected').classList.remove('hidden');
+      setStatus('connected', 'Voice connected · end-to-end · verified');
+    }
+
+    // ── Connected controls ────────────────────────────────────────────
+
+    function toggleMute() {
+      muted = !muted;
+      localStream?.getAudioTracks().forEach(t => t.enabled = !muted);
+      const btn = document.getElementById('btn-mute');
+      btn.textContent = muted ? 'Unmute' : 'Mute';
+    }
+
+    function hangUp() {
+      if (pc) { pc.close(); pc = null; }
+      if (localStream) { localStream.getTracks().forEach(t => t.stop()); localStream = null; }
+      if (remoteStream) { remoteStream.getTracks().forEach(t => t.stop()); remoteStream = null; }
+      if (animFrame) cancelAnimationFrame(animFrame);
+      location.reload();
+    }
+
+    async function copyOffer() {
+      await navigator.clipboard.writeText(document.getElementById('offer-text').value);
+      setStatus('waiting', 'Encrypted code copied — send it to the other person.');
+    }
+    async function copyAnswer() {
+      await navigator.clipboard.writeText(document.getElementById('answer-out-text').value);
+      setStatus('waiting', 'Encrypted reply copied — send it back.');
+    }
+
+    function startMeters() {
+      function update() {
+        if (micAnalyser && micData) {
+          micAnalyser.getByteFrequencyData(micData);
+          const avg = micData.reduce((a, b) => a + b, 0) / micData.length;
+          const pct = Math.min(100, (avg / 100) * 100);
+          const e1 = document.getElementById('mic-meter');
+          const e2 = document.getElementById('mic-meter-live');
+          if (e1) e1.style.width = pct + '%';
+          if (e2) e2.style.width = pct + '%';
+        }
+        if (remoteAnalyser && remoteData) {
+          remoteAnalyser.getByteFrequencyData(remoteData);
+          const avg = remoteData.reduce((a, b) => a + b, 0) / remoteData.length;
+          const pct = Math.min(100, (avg / 100) * 100);
+          const e = document.getElementById('remote-meter');
+          if (e) e.style.width = pct + '%';
+        }
+        animFrame = requestAnimationFrame(update);
+      }
+      update();
+    }
+
+    function setStatus(cls, text) {
+      const el = document.getElementById('status');
+      el.className = 'status ' + cls;
+      el.textContent = text;
+    }
+  </script>
+</body>
+</html>

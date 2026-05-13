@@ -1,0 +1,133 @@
+= PAKE+SAS Prototype — `p2p-voice-pake.html`
+:toc: macro
+:icons: font
+
+toc::[]
+
+Companion to ADR-0003 (`docs/decisions/0003-pake-sas-tiered-auth.adoc`).
+This file demonstrates the **Tier 3 (one-shot, native↔browser)** flow:
+two parties open the page, agree on a shared passphrase out-of-band, and
+end up with an end-to-end-secure voice call with a human-verifiable
+safety phrase.
+
+The original `p2p-voice.html` stays untouched. This prototype lives
+alongside it so both can be served and A/B compared without disruption.
+
+== What the prototype demonstrates
+
+. **Passphrase UX** — a single text field on the role-choice screen with
+  a random 4-word suggestion button. Both ends must enter the same
+  passphrase or the call cannot connect.
+. **Encrypted signalling** — the SDP offer and answer are sealed in an
+  AES-GCM envelope keyed off the passphrase. The "room code" sent between
+  peers is the encrypted envelope, not the raw SDP. A relay or email
+  forwarder that intercepts the envelope cannot extract the SDP without
+  the passphrase.
+. **SAS (Safety Authentication String)** — after WebRTC connects, both
+  ends derive an identical 4-word phrase from the sorted DTLS
+  fingerprints and display it. Verbal comparison detects MITM directly.
+. **Hang-up on SAS mismatch** — the SAS verification step has an explicit
+  "they don't match" button that tears down the call.
+
+== Prototype-grade vs production-grade
+
+[cols="1,2,2"]
+|===
+| Aspect | Prototype (this file) | Production (ADR-0003 target)
+
+| Passphrase → key
+| HKDF(passphrase, salt)
+| **SPAKE2** or OPAQUE — provably resistant to offline brute-force by a passive relay
+
+| Envelope cipher
+| AES-GCM
+| Unchanged (already correct)
+
+| Random per-call salt
+| ✓
+| ✓
+
+| SAS source
+| Sorted DTLS fingerprints
+| DH session exporter (RFC 5705) when available, or Noise-wrapped channel exporter
+
+| Word list
+| PGP-even (256 words, ~8 bits/word)
+| EFF long list or PGP biometric full list (~11 bits/word)
+
+| Tier 2 pairing (recipient remembers caller)
+| Not implemented
+| "Remember this caller" toggle post-call; native side stores recipient session pubkey
+
+| Revocation
+| Not implemented
+| Trusted-peers list with revoke + last-seen
+|===
+
+Each `PROD-TODO` marker in the source identifies a specific change site.
+
+== Why HKDF-of-passphrase is wrong-but-acceptable for a prototype
+
+A passive observer (relay, email forwarder, ISP) sees:
+
+[source]
+----
+envelope = salt || nonce || AES-GCM(HKDF(passphrase, salt), nonce, SDP)
+----
+
+If the passphrase has low entropy (4 words ≈ 32 bits in this prototype's
+suggestion), an attacker who logs the envelope can offline-brute-force
+the passphrase: for each candidate phrase, re-derive the key and try to
+decrypt. Success = correct passphrase = call hijack on the next attempt.
+
+SPAKE2 eliminates this: the protocol transcript a relay sees does *not*
+permit offline brute-force, even with unlimited compute. That's the
+formal guarantee a PAKE provides that this prototype does not.
+
+For a prototype, the operational property ("link alone insufficient,
+passphrase alone insufficient") holds well enough to demonstrate the
+design and shake out UX bugs. Migrating to SPAKE2 is mechanical: replace
+`deriveKey()` and the envelope layout. The rest of the file is untouched.
+
+== Suggested SPAKE2 library for the migration
+
+https://github.com/paulmillr/noble-curves[`@noble/curves`] ships SPAKE2
+along with ed25519/x25519 — well-audited, no dependencies,
+TypeScript-friendly, works in browsers. Roughly:
+
+[source,javascript]
+----
+import { spake2 } from '@noble/curves/spake2';
+// sender:
+const a = spake2.SymmetricKey(passphrase);
+const A = a.computeShare();           // send A to peer
+const K = a.deriveKey(B);             // K = shared key after receiving B
+// receiver: mirror image with .computeShare() on the other side
+----
+
+After K is established, the envelope cipher (AES-GCM) is unchanged.
+
+== How to test the prototype
+
+. Open `https://raw.githack.com/hyperpolymath/burble/main/client/web/p2p-voice-pake.html`
+  in two browsers (or one browser, two tabs).
+. Both: allow microphone.
+. Both: enter the *same* passphrase. Use the `⟳` button on one to generate
+  a suggestion, then copy/paste to the other tab via a side channel.
+. One clicks *Create room* → copy the encrypted code → paste into the
+  other tab.
+. The other clicks *Join room*, pastes, clicks *Generate reply* →
+  copies the reply code → pastes back.
+. The creator pastes into "Paste their reply code" → clicks *Connect*.
+. Both tabs should now show the **same 4 PGP words**. Verbal verification —
+  if you'd shared the passphrase over a voice channel, you can read the
+  SAS over the same channel without leaking the underlying key.
+
+Wrong passphrase on either end produces a clear "Decrypt failed" error
+rather than a misleading connect-then-fail.
+
+== Related
+
+* link:../../docs/decisions/0003-pake-sas-tiered-auth.adoc[ADR-0003 PAKE+SAS tiered auth] — design specification
+* `p2p-voice.html` — original unmodified P2P flow (no PAKE)
+* `quick-join.html` — sibling flow
