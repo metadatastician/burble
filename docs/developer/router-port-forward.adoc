@@ -1,0 +1,207 @@
+= Router port-forward for Burble Bolt (UDP 7373 + 9)
+:toc: macro
+:icons: font
+
+toc::[]
+
+== What and why
+
+The Bolt listener binds UDP/7373 (and answers on UDP/9 for Wake-on-LAN
+compatibility) inside WSL on the host. Inbound UDP from the public
+internet must reach that listener for `burble bolt <user>@<domain>` to
+ring this host. The path is:
+
+[source]
+----
+Joshua's box → Joshua's ISP → public internet → your ISP →
+  your router (NAT) → WSL mirrored networking → Burble.Bolt.Listener
+----
+
+The router NAT step is the only piece a stranger to your network can't
+configure: it needs explicit *port-forward* (also called *destination
+NAT* / *dst-nat* / *virtual server*) rules.
+
+== Detected setup
+
+Confirmed by probing the default gateway on this host:
+
+[cols="1,3"]
+|===
+| Router | MikroTik RouterBoard, RouterOS v7.1.3
+| Admin URL | http://192.168.88.1 (WebFig)
+| LAN subnet | 192.168.88.0/24
+| Host LAN IP | 192.168.88.58 (eth0, the port-forward target)
+| WSL mode | mirrored networking (host LAN IP IS the WSL listener address — no second forward needed)
+|===
+
+== MikroTik RouterOS — CLI (recommended)
+
+Open the MikroTik terminal (SSH to `192.168.88.1`, WebFig → Terminal, or
+WinBox → New Terminal) and paste:
+
+[source,routeros]
+----
+/ip firewall nat
+add chain=dstnat protocol=udp dst-port=7373 \
+    action=dst-nat to-addresses=192.168.88.58 to-ports=7373 \
+    comment="Burble Bolt UDP (primary + QUIC)"
+add chain=dstnat protocol=udp dst-port=9 \
+    action=dst-nat to-addresses=192.168.88.58 to-ports=9 \
+    comment="Burble Bolt WoL-compat"
+----
+
+Verify with `/ip firewall nat print where comment~"Burble"` — should show
+both rules. They're persistent across reboots.
+
+To remove later: `/ip firewall nat remove [find comment~"Burble"]`.
+
+== MikroTik RouterOS — WebFig (point-and-click)
+
+. Open http://192.168.88.1 in a browser.
+. Log in (admin / your password).
+. IP → Firewall → NAT tab → click `+` (Add).
+. *General* tab:
+  * Chain: `dstnat`
+  * Protocol: `17 (udp)`
+  * Dst. Port: `7373`
+. *Action* tab:
+  * Action: `dst-nat`
+  * To Addresses: `192.168.88.58`
+  * To Ports: `7373`
+. Comment: `Burble Bolt UDP`
+. Click OK.
+. Repeat for port `9` with comment `Burble Bolt WoL-compat`.
+
+== MikroTik firewall — also allow the forwarded traffic
+
+By default the dst-nat rule rewrites the packet's destination, but the
+firewall *filter* chain may still drop it. Check `/ip firewall filter`:
+
+[source,routeros]
+----
+/ip firewall filter print where chain=forward
+----
+
+If you see a rule like `chain=forward action=drop in-interface=ether1`
+(WAN interface) without an explicit allow-related-established preceding
+it, add this allowance:
+
+[source,routeros]
+----
+/ip firewall filter
+add chain=forward action=accept protocol=udp dst-port=7373 \
+    place-before=[find chain=forward action=drop] \
+    comment="Burble Bolt allow UDP 7373"
+add chain=forward action=accept protocol=udp dst-port=9 \
+    place-before=[find chain=forward action=drop] \
+    comment="Burble Bolt allow UDP 9"
+----
+
+Most home MikroTik configs already permit forwarded UDP traffic by
+default, so this is usually unnecessary — but it's worth a quick look.
+
+== Generic instructions (non-MikroTik routers)
+
+If you later replace the router, the general shape is the same:
+
+. Admin panel → NAT / Port Forwarding / Virtual Server (varies by brand).
+. Add two rules:
+  * `External port 7373 (UDP) → Internal 192.168.88.58 port 7373 (UDP)`
+  * `External port 9 (UDP) → Internal 192.168.88.58 port 9 (UDP)`
+. Save and apply.
+
+Common-vendor naming hints:
+
+* **BT Smart Hub**: Advanced settings → Firewall → Port forwarding
+* **Sky Hub**: Settings → Wireless / Advanced → Port Forwarding
+* **Virgin Media Hub**: Advanced Settings → Security → Port Forwarding
+* **Asus**: WAN → Virtual Server / Port Forwarding
+* **TP-Link**: Advanced → NAT Forwarding → Virtual Servers
+* **OpenWrt / LuCI**: Network → Firewall → Port Forwards
+
+== Verification
+
+After adding the rules, two-stage test:
+
+=== Stage 1 — listener works locally
+
+In one WSL terminal:
+
+[source,bash]
+----
+nc -u -l -p 7373
+----
+
+In another WSL terminal:
+
+[source,bash]
+----
+echo hello | nc -u -w1 127.0.0.1 7373
+----
+
+The first terminal should print `hello`. This confirms the listener
+binds and WSL routing works (which it should, given mirrored networking
+is on).
+
+=== Stage 2 — listener is reachable from outside
+
+This is the test that proves the port-forward actually took effect.
+You need a packet from a *different* network — your phone on cellular
+data is the easiest.
+
+In WSL on the host:
+
+[source,bash]
+----
+./scripts/check-bolt-reachability.sh
+----
+
+The script prints your public IP and starts a UDP listener on 7373.
+From your phone, install Termux (Android) or iSH (iOS), then:
+
+[source,bash]
+----
+echo "burble-test" | nc -u -w1 <your-public-ip> 7373
+----
+
+If the WSL listener prints `burble-test`, you're done. If nothing
+arrives within 10 seconds, common causes:
+
+. Router rule didn't save — check `/ip firewall nat print` again.
+. ISP CGNAT — your "public IP" is actually a shared NAT'd address.
+  Test with `curl -4 ifconfig.me` and compare to your router's WAN IP
+  in `/ip address print where interface~"ether1"` (or your WAN interface
+  name). If they differ, you're on CGNAT and port-forwarding can't
+  work for inbound — see "CGNAT" section below.
+. WSL listener not actually bound — `ss -ulnp | grep 7373` in WSL.
+
+== CGNAT escape hatches
+
+If your ISP is CGNAT (common on mobile broadband, some FTTH plans, BT
+4G Hub, Three Home Broadband, etc.), inbound UDP from the public
+internet can never reach you directly. Three options:
+
+. **Ask your ISP for a public IPv4** — many provide one on request,
+  sometimes for a small fee.
+. **IPv6 instead** — if your ISP gives you a routable IPv6 prefix, use
+  AAAA records and forward UDP/7373 on v6. Joshua's ISP also needs
+  v6 end-to-end.
+. **Tunnel** — a VPS with a public IP running WireGuard reverse-tunneled
+  back to your WSL. Bolt rings the VPS, the tunnel relays to WSL. Adds
+  ~5-15 ms latency. Many small-fee providers (Hetzner, etc.) offer this.
+
+== Once verified
+
+Update the implementation status table in
+`docs/decisions/0003-pake-sas-tiered-auth.adoc` (Tier 1 row), then run
+task #13's end-to-end test from Joshua's machine.
+
+== Related
+
+* link:bolt-ddns.adoc[bolt-ddns.adoc] — keeps `bolt.jewell.nexus` A
+  record current so NAPTR resolves to the host even as the WAN IP drifts
+* link:bolt-dns-records.adoc[bolt-dns-records.adoc] — the NAPTR/SRV
+  records that announce this host as Bolt-reachable
+* link:wsl-mirrored-networking.adoc[wsl-mirrored-networking.adoc] — why
+  the LAN IP is the WSL listener's address (no second host→WSL forward)
+* `scripts/check-bolt-reachability.sh` — verification helper
