@@ -5,8 +5,8 @@
 
 [metadata]
 project = "burble"
-version = "1.1.0-pre"
-last-updated = "2026-04-21"
+version = "1.2.0-pre"
+last-updated = "2026-05-13"
 status = "active"
 
 [project-context]
@@ -17,7 +17,7 @@ completion-percentage = 97
 [position]
 phase = "hardening"
 maturity = "pre-production"
-rationale = "Foundations + SFU solid. LLM service fully wired. PTP clock correlator + multi-node alignment done (hardware validation pending I210 arrival). AffineScript compiler bundled, all 35 .res files ported to .affine. Remaining: PTP hardware validation, runtime AffineScript compilation verification."
+rationale = "Foundations + SFU solid. LLM service fully wired. PTP clock correlator + multi-node alignment done (hardware validation pending I210 arrival). AffineScript compiler bundled, all 35 .res files ported to .affine. Bolt magic-packet incoming-call shipped with UDP+QUIC dual-bind transport (ADR-0003, ADR-0004); STUN/TURN coturn relay, Mumble bridge, Assist API, generic circuit breaker, and browser extension landed. Remaining: PTP hardware validation, runtime AffineScript compilation verification."
 
 [route-to-mvp]
 milestones = [
@@ -29,7 +29,8 @@ milestones = [
   { name = "Phase 2b — server-side Burble.LLM (provider, circuit breaker, fixed parse_frame, NimblePool wired) — SECONDARY, not required for family use case", completion = 100 },
   { name = "Phase 3 — RTSP + signaling + text + AffineScript client start", completion = 85 },
   { name = "Phase 4 — PTP hardware clock via Zig NIF, phc2sys supervisor, multi-node align", completion = 85 },
-  { name = "Phase 5 — ReScript -> AffineScript completion", completion = 95 }
+  { name = "Phase 5 — ReScript -> AffineScript completion", completion = 95 },
+  { name = "Bolt — magic incoming-call packets (UDP+QUIC dual-bind, ALPN burble-bolt-v1)", completion = 100, date = "2026-05-13" }
 ]
 
 [migration]
@@ -103,6 +104,21 @@ open-failures = 0
 #             35 .res files migrated to .affine with linear/affine resource qualifiers,
 #             compiler bundled in Containerfile (OCaml + dune build → affinec on PATH).
 #             LLM Phase 2b closed — AnthropicProvider, circuit breaker, rate limit, SSE.
+# 2026-05-13: Bolt landed — magic incoming-call packets on UDP/7373 (07a4508, PR #19),
+#             wire format documented in EXPLAINME. Bolt-over-QUIC dual-bind follow-up:
+#             optional quicer NIF binds TLS 1.3 + RFC 9221 datagrams on the same port
+#             with ALPN "burble-bolt-v1" for sender authentication (ADR-0003, ADR-0004).
+#             New modules Burble.Bolt.{Listener,Sender,Quic}; scripts/gen-bolt-cert.sh
+#             for cert provisioning; docs/developer/wsl-mirrored-networking.adoc
+#             documents WSL mirrored-networking prereq for receiving LAN packets.
+#             Other features in window: coturn STUN/TURN relay + time-limited ICE
+#             credentials (b10283b), Mumble bridge — permissions, positional audio,
+#             UDP fix (d557742), Assist API + LLM diagnostics + event stream (7fc1a45),
+#             browser extension for AI bridge (054b651), MVP client mobile/accessibility
+#             + toast errors (7f5148c), generic Burble.CircuitBreaker + VeriSimDB
+#             automated backups (acbe88a), AffineScript Canary CI workflow (8eeed52),
+#             brand pack (ba23ec1). Android client + cross-repo Bluetooth plan landed
+#             as architecture doc (b1070af) — implementation deferred.
 
 [crg]
 grade = "C"
