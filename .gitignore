@@ -119,8 +119,10 @@ htmlcov/
 *.tmp
 *.bak
 
-# asdf version manager
-.tool-versions
+# asdf version manager — .tool-versions IS tracked in server/
+# (pins Elixir/OTP combo). If you don't use asdf, the file is
+# harmless to your toolchain. Out-of-repo .tool-versions stays ignored.
+/.tool-versions
 
 # Additional patterns for Burble
 # Server-specific
