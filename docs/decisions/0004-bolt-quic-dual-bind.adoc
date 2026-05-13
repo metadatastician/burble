@@ -1,0 +1,164 @@
+= Architecture Decision Record: 0004-bolt-quic-dual-bind
+:toc:
+:toclevels: 2
+
+// SPDX-License-Identifier: PMPL-1.0-or-later
+// Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+
+# 4. Bolt QUIC dual-bind alongside raw UDP
+
+Date: 2026-05-13
+
+## Status
+
+Accepted
+
+## Context
+
+`Burble.Bolt.Listener` originally bound only raw UDP on port 7373, while its
+own module docstring and `Burble.Bolt.Sender`'s "transport priority" comment
+described QUIC datagrams (RFC 9221) with TLS 1.3 authentication as the
+primary transport. That gap had two causes:
+
+1. *Deployment risk.* `:quicer` wraps msquic — a C library that is awkward
+   to build reproducibly across the supported targets. A `scripts/ensure-quicer-prereqs.sh`
+   guard already exists and intentionally short-circuits builds when the
+   toolchain is incomplete, so the optional `{:quicer, "~> 0.2", optional: true}`
+   dep was never wired into the Bolt code path.
+2. *Cold-bolt economics.* The classic Bolt use case is a Wake-on-LAN-style
+   poke at a recipient who is not yet in any session with us. A full QUIC
+   handshake (>= 1 RTT, TLS key derivation) on every cold poke is
+   dramatically slower than the UDP fire-and-forget the protocol is shaped
+   around. 0-RTT only helps once a session ticket has been cached, which by
+   definition does not exist on cold first contact.
+
+The QUIC branch nevertheless remains architecturally superior for *warm*
+bolts -- return acks, in-session pokes, peers that have advertised QUIC via
+NAPTR -- because the sender is cryptographically authenticated rather than
+trivially spoofable as in raw UDP. The codebase agreed on that all along; it
+just had not shipped the branch.
+
+## Decision
+
+Dual-bind raw UDP and QUIC on the same port 7373, with QUIC strictly opt-in
+for the sender.
+
+Three concrete moves:
+
+* New module `Burble.Bolt.Quic` encapsulates *all* quicer interaction
+  (predicate, cert resolution, listen, accept loop, one-shot client datagram
+  send). Every public function tolerates the NIF being absent and returns
+  `{:error, :quicer_not_available}` -- callers never have to branch on
+  `Code.ensure_loaded?/1` themselves.
+* `Burble.Bolt.Listener` always opens raw UDP and additionally opens a QUIC
+  listener iff (`Quic.available?/0` AND `Quic.cert_paths/0` resolves to
+  existing files). `transport/0` returns `{:ok, [:quic, :udp]}` so
+  telemetry, tests, and operators can see which transports are live.
+* `Burble.Bolt.Sender` gains a `:transport` option (`:auto` / `:udp` /
+  `:quic`) and a `:try_quic` boolean. The default stays UDP so cold pokes
+  remain cheap. Opt-in QUIC paths are `Sender.send_quic/2` and
+  `Sender.send/2` with `transport: :auto, try_quic: true` (the latter falls
+  back to UDP on any QUIC error).
+
+### Why these specific shapes
+
+* *Same port for both.* QUIC rides on UDP, so 7373 already accepts both
+  flavors. Splitting them across ports would have forced firewall and
+  NAPTR-record changes that are not justified by the upgrade.
+* *Single GenServer owns both sockets.* The existing `Burble.Transport.QUIC`
+  voice listener proved the pattern works in this codebase. Splitting Bolt's
+  listener into two processes would duplicate state (NAPTR knowledge,
+  packet-decode dispatch into `Burble.Bolt.Notify`) for no gain.
+* *Helper module rather than inlining.* `Burble.Transport.QUIC` is voice-
+  specific (Bebop signaling, voice datagrams, room state). Bolt's QUIC needs
+  are a strict subset (datagrams only, no streams), so a dedicated helper
+  keeps both call-sites readable and lets tests exercise the client and
+  server halves independently.
+* *Cert kept out of code.* A `scripts/gen-bolt-cert.sh` script generates
+  Ed25519 (P-256 fallback) self-signed PEMs into `server/priv/cert/`. We do
+  not auto-generate at boot because (a) writing into `priv` from a release
+  is a footgun and (b) operators replacing the self-signed cert with a
+  trust-rooted one should be a deliberate step. The listener silently
+  disables QUIC (with an info-level log naming the script) when the cert is
+  missing.
+* *Broadcast refuses QUIC explicitly.* QUIC has no LAN-broadcast semantics.
+  Silently downgrading to UDP would surprise callers; instead
+  `Sender.send(:broadcast, transport: :quic, ...)` returns
+  `{:error, :quic_broadcast_unsupported}`.
+
+### Wire protocol details (for the next reader)
+
+* ALPN identifier: `"burble-bolt-v1"`. Distinct from voice
+  (`"burble-voice-v1"`) so the two listeners can share a host without ALPN
+  collision.
+* Idle timeout: 10 s server-side (bolts are one-shot -- a connection that
+  has not delivered a datagram in 10 s is dead).
+* Client handshake budget: 800 ms. Longer than a typical sub-200 ms RTT +
+  TLS but short enough that auto-fallback to UDP feels responsive.
+* Server listen opts: `peer_unidi_stream_count: 0`,
+  `peer_bidi_stream_count: 0`, `datagram_receive_enabled: true`,
+  `server_resumption_level: 2`. Bolts are pure datagrams; if a peer ever
+  opens a stream, treat it as a protocol violation and drop.
+* The listener handles quicer's `:dgram` tag (3-tuple
+  `{:quic, :dgram, conn, data}`), not `:datagram`. The legacy doc comment
+  had the wrong spelling -- fixed in this change.
+
+## Consequences
+
+### Positive
+
+* The aspirational comments in `bolt/listener.ex` and `bolt/sender.ex` are
+  now matched by code that actually executes the QUIC path when the
+  prerequisites are met.
+* Warm bolts (return acks, in-session pokes) can be authenticated end-to-end
+  with TLS 1.3, closing the spoofing window that raw UDP leaves open.
+* Operators who can ship msquic enable QUIC by running one script
+  (`scripts/gen-bolt-cert.sh`) and rebuilding with quicer fetched. No config
+  change needed; the listener autodetects on boot.
+
+### Negative
+
+* Two transport surfaces means two attack surfaces. msquic has its own CVE
+  history; operators who do not need QUIC bolts should leave `:quicer`
+  un-fetched (the existing default) rather than ship a cert they do not use.
+* `Sender.send/2` arity is unchanged but the option list grew. Existing
+  callers continue to work because `:transport` defaults to `:auto` with
+  `:try_quic` false, which is byte-for-byte equivalent to the previous
+  UDP-only behavior.
+* `Burble.Bolt.Listener.transport/0` now returns a list rather than a single
+  atom. Any downstream that pattern-matched on `{:ok, :udp}` needs updating.
+  (No such caller existed at the time of this change.)
+
+### Neutral
+
+* Cert resolution is filesystem-based (`priv/cert/bolt.pem` +
+  `priv/cert/bolt_key.pem`). An overlay via
+  `config :burble, Burble.Bolt.Quic, certfile: ..., keyfile: ...` is honored
+  when set but no default is wired through `config/runtime.exs`.
+* Tests in `bolt_test.exs` exercise the no-NIF branch unconditionally and
+  skip the with-NIF assertions when `Quic.available?/0` is false. CI
+  without msquic will still pass; CI with msquic will exercise the full
+  path automatically.
+
+## File map for the next reader
+
+* `server/lib/burble/bolt/quic.ex` -- all quicer interaction lives here.
+* `server/lib/burble/bolt/listener.ex` -- dual-bind, transport reporting.
+* `server/lib/burble/bolt/sender.ex` -- `:transport` / `:try_quic` opts,
+  `send_quic/2` helper, broadcast refusal.
+* `scripts/gen-bolt-cert.sh` -- Ed25519 (or P-256) self-signed cert into
+  `server/priv/cert/bolt.{pem,key.pem}`. Idempotent; `--force` to redo.
+* `server/test/burble/bolt/bolt_test.exs` -- new describe blocks for
+  `Quic.available?`, `Quic.cert_paths`, `Sender` transport matrix.
+
+## Out of scope (deliberate)
+
+* NAPTR/SRV advertising of QUIC support. The recipient-side NAPTR record in
+  `Burble.Bolt.NAPTR` does not yet expose ALPN; once it does,
+  `Sender.send/2` should switch its default to `:auto` with `try_quic` set
+  when the resolved record says QUIC is available.
+* msquic packaging via Guix/Nix. The existing
+  `scripts/ensure-quicer-prereqs.sh` guard remains the gate.
+* Mutual-auth certificates. Self-signed is fine for the Bolt threat model
+  (sender authentication, not trust); inter-server trust roots are a
+  separate decision.
