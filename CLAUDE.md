@@ -106,6 +106,16 @@ Your Claude ←curl→ Deno bridge (:6474) ←WS→ Browser ←WebRTC→ Their B
                                          Voice (DTLS-SRTP, encrypted P2P)
 ```
 
+## Running the server side (Bolt + voice) under WSL2
+
+The Bolt listener binds udp/7373 (`Burble.Bolt.Listener`, also QUIC via
+`Burble.Bolt.Quic` when the `:quicer` NIF is present). Under WSL2's
+default NAT mode, inbound LAN UDP never reaches the listener. If you're
+on Windows + WSL2 and the server side won't accept Bolt datagrams from
+another host, see `docs/developer/wsl-mirrored-networking.adoc` —
+`networkingMode=mirrored` in the host `.wslconfig` plus a Defender
+firewall rule for udp/7373.
+
 ## Do not
 
 - Do not modify files outside `burble/`

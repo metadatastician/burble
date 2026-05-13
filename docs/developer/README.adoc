@@ -1,1 +1,12 @@
 = developer Unit
+
+Developer-facing guides for working on Burble locally.
+
+== Contents
+
+* link:ABI-FFI-README.adoc[ABI-FFI-README] — Zig FFI surface + Idris2
+  validations the Zig side mirrors.
+* link:wsl-mirrored-networking.adoc[wsl-mirrored-networking] — host
+  `.wslconfig` setup for inbound UDP on the Bolt listener (udp/7373)
+  when running the server side under WSL2. Read this before debugging
+  "Bolt datagrams aren't arriving" on a Windows dev host.
