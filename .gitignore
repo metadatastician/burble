@@ -43,7 +43,9 @@ client/desktop/src-tauri/target/
 ffi/zig/zig-out/
 ffi/zig/zig-cache/
 ffi/zig/.zig-cache/
+ffi/zig/zig-out/
 server/priv/burble_coprocessor.*
+server/priv/libburble_coprocessor.*
 
 # Idris2 build artifacts
 src/abi/build/
