@@ -16,12 +16,12 @@
 // with explicit lifetime control (no GC interference with BEAM).
 
 const std = @import("std");
-const audio = @import("audio.zig");
-const dsp = @import("dsp.zig");
-const neural = @import("neural.zig");
-const compression = @import("compression.zig");
-const firewall = @import("firewall.zig");
-const ptp = @import("ptp.zig");
+const audio = @import("audio");
+const dsp = @import("dsp");
+const neural = @import("neural");
+const compression = @import("compression");
+const firewall = @import("firewall");
+const ptp = @import("ptp");
 
 const c = @cImport({
     @cInclude("erl_nif.h");
@@ -94,7 +94,7 @@ fn get_float_list(env: ?*ErlNifEnv, term: ERL_NIF_TERM, buf: []f32) ?usize {
 // NIF: nif_available/0
 // ---------------------------------------------------------------------------
 
-fn nif_available(env: ?*ErlNifEnv, _: c_int, _ : [*c]const ERL_NIF_TERM) callconv(.c) ERL_NIF_TERM {
+fn nif_available(env: ?*ErlNifEnv, _: c_int, _: [*c]const ERL_NIF_TERM) callconv(.c) ERL_NIF_TERM {
     return make_atom(env, "true");
 }
 
@@ -431,7 +431,7 @@ fn nif_dsp_mix(env: ?*ErlNifEnv, _: c_int, argv: [*c]const ERL_NIF_TERM) callcon
 // NIF: nif_neural_init_model/1 — (sample_rate)
 // ---------------------------------------------------------------------------
 
-fn nif_neural_init_model(env: ?*ErlNifEnv, _: c_int, _ : [*c]const ERL_NIF_TERM) callconv(.c) ERL_NIF_TERM {
+fn nif_neural_init_model(env: ?*ErlNifEnv, _: c_int, _: [*c]const ERL_NIF_TERM) callconv(.c) ERL_NIF_TERM {
     // Serialize the initial denoiser state to a portable binary format.
     // No unsafe pointer casts — uses explicit byte-level serialization.
     const state = neural.DenoiserState.init();

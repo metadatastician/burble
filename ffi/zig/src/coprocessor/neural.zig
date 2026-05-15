@@ -23,7 +23,7 @@
 
 const std = @import("std");
 const math = std.math;
-const dsp = @import("dsp.zig");
+const dsp = @import("dsp");
 
 /// Denoiser model state — persisted across frames for temporal continuity.
 pub const DenoiserState = struct {
