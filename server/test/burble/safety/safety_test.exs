@@ -17,8 +17,12 @@ defmodule Burble.Safety.ProvenBridgeTest do
       assert Code.ensure_loaded?(Burble.Safety.ProvenBridge)
     end
 
-    test "proven_available?/0 returns a boolean" do
-      assert is_boolean(ProvenBridge.proven_available?())
+    test "proven_available?/0 reports the NIF absent in the test environment" do
+      # This file's moduledoc states the proven NIF is not installed under
+      # test, so every other test here exercises the stdlib fallback. If
+      # this ever returns true in CI, those fallback tests are silently
+      # testing the wrong path — so pin the documented invariant.
+      refute ProvenBridge.proven_available?()
     end
   end
 
