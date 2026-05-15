@@ -146,7 +146,14 @@ up:
     # selur-compose v0.1 does not yet resolve relative paths against the
     # compose file location — TODO file an issue and remove the cd once fixed.
     cd "{{justfile_directory()}}/containers"
-    exec "$SELUR_BIN" -f compose.toml up -d
+    # --no-pull: selur-compose v0.1 pulls image-based services unconditionally
+    # (no pull_policy=missing). ghcr.io/hyperpolymath/verisimdb:latest is not
+    # published yet (the publish-verisimdb.yml workflow has not run), so a pull
+    # 403s and aborts `up`. The image exists locally (built + tagged from the
+    # nextgen-databases source earlier; coturn pinned-digest already pulled).
+    # Remove --no-pull once (a) the GHCR image is published AND (b) selur-compose
+    # v0.2 implements pull_policy=missing. Tracked in selur-compose v0.2 backlog.
+    exec "$SELUR_BIN" -f compose.toml up -d --no-pull
 
 # Stop containers via selur-compose.
 # Builds selur-compose from tools/selur-compose/ if the binary is missing.
@@ -164,6 +171,23 @@ down:
 # Full deploy: build selur-compose if needed, then bring the stack up.
 # Equivalent to 'just up' but makes the build step explicit.
 deploy: build-selur-compose up
+
+# Smoke-test the full deploy: clean slate, `just up`, wait 40s, then assert the
+# stack is ACTUALLY healthy — not merely "no nxdomain string". A grep for the
+# absence of one error string false-passes when a deeper error crash-loops the
+# server (learned 2026-05-15: WS-1.6 fixed nxdomain but a migrator bug kept the
+# server looping while smoke reported PASS). Real criteria:
+#   1. burble_server RestartCount low (≤2) and state=running
+#   2. POST /api/v1/auth/guest returns HTTP 200 (server actually serving)
+#   3. no nxdomain in logs (regression guard for WS-1.6)
+# The `down` makes this idempotent — selur-compose v0.1 cannot recreate an
+# existing-named container (no --replace logic), so a leftover from a prior
+# partial run would 125-error `up`. `-` prefix: `down` errors when nothing runs.
+smoke-deploy:
+    -just down
+    just up
+    sleep 40
+    bash scripts/smoke-check.sh
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # TEST

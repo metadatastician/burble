@@ -15,7 +15,7 @@
 # Protocol: Discord uses two WebSocket connections and a UDP socket:
 #   1. Gateway WebSocket — events (identify, voice_state_update, presence)
 #   2. Voice Gateway WebSocket — voice session (identify, select_protocol, speaking)
-#   3. Voice UDP — RTP with Opus frames, encrypted with xsalsa20_poly1305
+#   3. Voice UDP — RTP with Opus frames, encrypted with aead_xchacha20_poly1305_rtpsize
 #
 # Architecture:
 #   Burble Room ↔ DiscordBridge GenServer ↔ Discord Voice Channel
@@ -54,7 +54,7 @@ defmodule Burble.Bridges.Discord do
   3. Sends voice_state_update to join the voice channel
   4. Receives VOICE_SERVER_UPDATE with voice endpoint + token
   5. Connects to Voice Gateway WebSocket, identifies, selects protocol
-  6. Opens UDP socket for RTP/Opus audio (xsalsa20_poly1305 encrypted)
+  6. Opens UDP socket for RTP/Opus audio (aead_xchacha20_poly1305_rtpsize encrypted)
   7. Audio from Burble → Opus frames → RTP → encrypted → UDP to Discord
   8. Audio from Discord → UDP → decrypt → RTP → Opus frames → Burble room
   9. Discord users appear as phantom participants in Burble
@@ -66,8 +66,25 @@ defmodule Burble.Bridges.Discord do
   - Auth: "Bot TOKEN" in Authorization header
   - Heartbeat: sent every heartbeat_interval ms (from HELLO event)
   - Voice Gateway: wss://{endpoint}/?v=4
-  - Voice UDP: RTP header + xsalsa20_poly1305 encrypted Opus
+  - Voice UDP: RTP header + aead_xchacha20_poly1305_rtpsize encrypted Opus
   - Text: POST /channels/{id}/messages for outbound, MESSAGE_CREATE event for inbound
+
+  ## Cipher policy
+
+  This bridge requires `aead_xchacha20_poly1305_rtpsize` mode, implemented via
+  `:crypto.crypto_one_time_aead(:xchacha20_poly1305, ...)` from OTP `:crypto`.
+  The older `xsalsa20_poly1305` mode (NaCl secretbox) is NOT supported because
+  OTP `:crypto` does not provide it and adding `:enacl` is a Phase 2 decision.
+  If Discord's Voice READY payload does not include `aead_xchacha20_poly1305_rtpsize`
+  in its `modes` list, the bridge refuses to start the session and logs an error.
+
+  The startup probe in `init/1` verifies that `:crypto.crypto_one_time_aead/6`
+  works for `:xchacha20_poly1305` before the bridge accepts any connections.
+  If the probe fails, the bridge returns `{:stop, :cipher_unavailable}`.
+
+  Under no circumstances does this bridge transmit a plaintext Opus frame as if
+  it were encrypted. On cipher failure the bridge process crashes — the supervisor
+  restart is the correct response.
 
   ## Limitations
 
@@ -75,7 +92,7 @@ defmodule Burble.Bridges.Discord do
   - Discord permissions (roles) are not enforced in Burble
   - Discord-specific features (reactions, threads, embeds) are not bridged
   - Requires a Discord bot token with voice + message intents
-  - xsalsa20_poly1305 encryption required by Discord voice protocol
+  - Requires `aead_xchacha20_poly1305_rtpsize` mode support from Discord
   """
 
   use GenServer
@@ -219,47 +236,81 @@ defmodule Burble.Bridges.Discord do
 
   @impl true
   def init(opts) do
-    config = %{
-      room_id: Keyword.fetch!(opts, :room_id),
-      bot_token: Keyword.fetch!(opts, :bot_token),
-      guild_id: Keyword.fetch!(opts, :guild_id),
-      voice_channel_id: Keyword.fetch!(opts, :voice_channel_id),
-      text_channel_id: Keyword.get(opts, :text_channel_id)
-    }
+    # Startup probe: verify the xchacha20_poly1305 cipher is available in this
+    # OTP installation before accepting any connections.  If :crypto raises, the
+    # bridge refuses to start — sending plaintext as if it were encrypted is not
+    # an acceptable fallback.
+    probe_key   = :crypto.strong_rand_bytes(32)
+    probe_nonce = :crypto.strong_rand_bytes(24)
+    probe_plain = <<"burble-cipher-probe">>
 
-    state = %{
-      config: config,
-      gateway_ws: nil,
-      voice_ws: nil,
-      voice_udp: nil,
-      session_id: nil,
-      voice_token: nil,
-      voice_endpoint: nil,
-      voice_ssrc: nil,
-      voice_secret_key: nil,
-      voice_ip: nil,
-      voice_port: nil,
-      heartbeat_interval: nil,
-      heartbeat_ref: nil,
-      voice_heartbeat_ref: nil,
-      last_sequence: nil,
-      rtp_sequence: 0,
-      rtp_timestamp: 0,
-      discord_users: %{},
-      connected: false,
-      voice_connected: false,
-      speaking: false
-    }
+    probe_result =
+      try do
+        {_ct, _tag} = :crypto.crypto_one_time_aead(
+          :xchacha20_poly1305,
+          probe_key,
+          probe_nonce,
+          probe_plain,
+          <<>>,
+          true
+        )
+        :ok
+      rescue
+        exn ->
+          Logger.error(
+            "[DiscordBridge] Startup cipher probe failed — " <>
+              ":xchacha20_poly1305 unavailable in this OTP build: #{inspect(exn)}"
+          )
+          {:error, :cipher_unavailable}
+      end
 
-    # Connect asynchronously to avoid blocking the supervisor.
-    send(self(), :connect_gateway)
+    case probe_result do
+      {:error, :cipher_unavailable} ->
+        {:stop, :cipher_unavailable}
 
-    Logger.info(
-      "[DiscordBridge] Starting bridge: #{config.room_id} ↔ " <>
-        "Discord guild=#{config.guild_id} voice=#{config.voice_channel_id}"
-    )
+      :ok ->
+        config = %{
+          room_id: Keyword.fetch!(opts, :room_id),
+          bot_token: Keyword.fetch!(opts, :bot_token),
+          guild_id: Keyword.fetch!(opts, :guild_id),
+          voice_channel_id: Keyword.fetch!(opts, :voice_channel_id),
+          text_channel_id: Keyword.get(opts, :text_channel_id)
+        }
 
-    {:ok, state}
+        state = %{
+          config: config,
+          gateway_ws: nil,
+          voice_ws: nil,
+          voice_udp: nil,
+          session_id: nil,
+          voice_token: nil,
+          voice_endpoint: nil,
+          voice_ssrc: nil,
+          voice_secret_key: nil,
+          voice_ip: nil,
+          voice_port: nil,
+          heartbeat_interval: nil,
+          heartbeat_ref: nil,
+          voice_heartbeat_ref: nil,
+          last_sequence: nil,
+          rtp_sequence: 0,
+          rtp_timestamp: 0,
+          discord_users: %{},
+          connected: false,
+          voice_connected: false,
+          speaking: false
+        }
+
+        # Connect asynchronously to avoid blocking the supervisor.
+        send(self(), :connect_gateway)
+
+        Logger.info(
+          "[DiscordBridge] Starting bridge: #{config.room_id} ↔ " <>
+            "Discord guild=#{config.guild_id} voice=#{config.voice_channel_id}"
+        )
+
+        {:ok, state}
+    end
   end
 
   # -- Gateway connection lifecycle ------------------------------------------
@@ -662,45 +713,64 @@ defmodule Burble.Bridges.Discord do
     %{state | voice_heartbeat_ref: ref}
   end
 
+  # The only cipher mode this bridge supports (requires OTP :crypto xchacha20_poly1305).
+  @preferred_cipher_mode "aead_xchacha20_poly1305_rtpsize"
+
   # Voice READY — we have our SSRC, IP, and port. Perform IP discovery, then select protocol.
   defp handle_voice_gateway_payload(%{"op" => @voice_op_ready, "d" => data}, state) do
     ssrc = data["ssrc"]
     voice_ip = data["ip"]
     voice_port = data["port"]
-    _modes = data["modes"]
+    modes = data["modes"] || []
 
     Logger.info(
-      "[DiscordBridge] Voice READY: ssrc=#{ssrc} ip=#{voice_ip} port=#{voice_port}"
+      "[DiscordBridge] Voice READY: ssrc=#{ssrc} ip=#{voice_ip} port=#{voice_port} " <>
+        "offered_modes=#{inspect(modes)}"
     )
 
-    # Open UDP socket for voice.
-    {:ok, udp_socket} = :gen_udp.open(0, [:binary, active: true])
+    if @preferred_cipher_mode not in modes do
+      # Refuse to connect — the server does not offer our required cipher mode.
+      # Transmitting with the wrong cipher (or no cipher) is not acceptable.
+      # Return state unchanged without opening a UDP socket; the voice session
+      # will time out naturally and the voice gateway disconnect handler will
+      # trigger a reconnect attempt.
+      Logger.error(
+        "[DiscordBridge] Voice READY does not include required cipher mode " <>
+          "#{@preferred_cipher_mode} (offered: #{inspect(modes)}). " <>
+          "Refusing voice session."
+      )
 
-    # Perform IP discovery: send a 74-byte packet with our SSRC.
-    # Discord responds with our external IP and port.
-    ip_discovery_packet = <<
-      0x0001::16-big,
-      70::16-big,
-      ssrc::32-big,
-      0::512
-    >>
-
-    :gen_udp.send(
-      udp_socket,
-      String.to_charlist(voice_ip),
-      voice_port,
-      ip_discovery_packet
-    )
-
-    # After IP discovery response (handled in UDP handler), we send select_protocol.
-    # For now, store the info and let the UDP handler complete the handshake.
-    %{
       state
-      | voice_udp: udp_socket,
-        voice_ssrc: ssrc,
-        voice_ip: voice_ip,
-        voice_port: voice_port
-    }
+    else
+      # Open UDP socket for voice.
+      {:ok, udp_socket} = :gen_udp.open(0, [:binary, active: true])
+
+      # Perform IP discovery: send a 74-byte packet with our SSRC.
+      # Discord responds with our external IP and port.
+      ip_discovery_packet = <<
+        0x0001::16-big,
+        70::16-big,
+        ssrc::32-big,
+        0::512
+      >>
+
+      :gen_udp.send(
+        udp_socket,
+        String.to_charlist(voice_ip),
+        voice_port,
+        ip_discovery_packet
+      )
+
+      # After IP discovery response (handled in UDP handler), we send select_protocol.
+      # For now, store the info and let the UDP handler complete the handshake.
+      %{
+        state
+        | voice_udp: udp_socket,
+          voice_ssrc: ssrc,
+          voice_ip: voice_ip,
+          voice_port: voice_port
+      }
+    end
   end
 
   # Voice SESSION_DESCRIPTION — we have the secret key for encryption.
@@ -747,7 +817,7 @@ defmodule Burble.Bridges.Discord do
   defp handle_voice_gateway_payload(_payload, state), do: state
 
   # ---------------------------------------------------------------------------
-  # Private: Voice UDP handling (RTP + xsalsa20_poly1305)
+  # Private: Voice UDP handling (RTP + aead_xchacha20_poly1305_rtpsize)
   # ---------------------------------------------------------------------------
 
   # Handle incoming UDP packet from Discord Voice.
@@ -780,6 +850,8 @@ defmodule Burble.Bridges.Discord do
     Logger.info("[DiscordBridge] IP discovery: external=#{external_ip}:#{port}")
 
     # Now send select_protocol to the Voice Gateway with our external address.
+    # We always negotiate aead_xchacha20_poly1305_rtpsize — the voice READY handler
+    # already verified this mode is in the server's offered list.
     select_protocol =
       Jason.encode!(%{
         "op" => @voice_op_select_protocol,
@@ -788,7 +860,7 @@ defmodule Burble.Bridges.Discord do
           "data" => %{
             "address" => external_ip,
             "port" => port,
-            "mode" => "xsalsa20_poly1305"
+            "mode" => @preferred_cipher_mode
           }
         }
       })
@@ -807,12 +879,12 @@ defmodule Burble.Bridges.Discord do
     <<_flags::8, _pt::8, _seq::16-big, _ts::32-big, _ssrc::32-big,
       encrypted_audio::binary>> = packet
 
-    # Build nonce from RTP header (first 12 bytes, padded to 24 bytes for xsalsa20_poly1305).
+    # Build nonce from RTP header (first 12 bytes, padded to 24 bytes for xchacha20_poly1305).
     <<rtp_header::binary-size(@rtp_header_size), _::binary>> = packet
     nonce = rtp_header <> <<0::96>>
 
-    # Decrypt the audio using xsalsa20_poly1305.
-    case decrypt_xsalsa20_poly1305(encrypted_audio, secret_key, nonce) do
+    # Decrypt the audio using xchacha20_poly1305 (aead_xchacha20_poly1305_rtpsize mode).
+    case decrypt_xchacha20_poly1305(encrypted_audio, secret_key, nonce) do
       {:ok, opus_frame} ->
         # Relay the Opus frame to the Burble room via PubSub.
         Phoenix.PubSub.broadcast(
@@ -861,8 +933,9 @@ defmodule Burble.Bridges.Discord do
     # Build nonce (RTP header padded to 24 bytes).
     nonce = rtp_header <> <<0::96>>
 
-    # Encrypt the Opus frame using xsalsa20_poly1305.
-    encrypted = encrypt_xsalsa20_poly1305(opus_frame, key, nonce)
+    # Encrypt the Opus frame using xchacha20_poly1305 (aead_xchacha20_poly1305_rtpsize mode).
+    # This call raises on cipher failure — the supervisor restart is the correct response.
+    encrypted = encrypt_xchacha20_poly1305(opus_frame, key, nonce)
 
     # Send RTP header + encrypted audio over UDP.
     packet = rtp_header <> encrypted
@@ -933,37 +1006,52 @@ defmodule Burble.Bridges.Discord do
   end
 
   # ---------------------------------------------------------------------------
-  # Private: xsalsa20_poly1305 encryption/decryption
+  # Private: xchacha20_poly1305 encryption/decryption
+  #
+  # Discord voice uses "aead_xchacha20_poly1305_rtpsize" mode (introduced 2024).
+  # OTP :crypto exposes this as :xchacha20_poly1305 via crypto_one_time_aead/6.
+  #
+  # Wire format:
+  #   encrypt output  →  tag (16 bytes) <> ciphertext
+  #   decrypt input   →  tag (16 bytes) <> ciphertext
+  #
+  # The nonce is always the 12-byte RTP header zero-padded to 24 bytes.
+  # The key is the 32-byte secret_key from the SESSION_DESCRIPTION payload.
+  #
+  # SECURITY INVARIANT: encrypt_xchacha20_poly1305/3 MUST NEVER return a
+  # plaintext frame.  On any cipher failure it raises, which crashes the
+  # GenServer.  The supervisor restart is the correct response.  Sending
+  # plaintext over the encrypted voice channel is an unacceptable
+  # confidentiality failure and is explicitly prohibited.
   # ---------------------------------------------------------------------------
 
-  # Encrypt data using xsalsa20_poly1305.
-  # Discord voice uses this cipher for all audio packets.
-  # The key is 32 bytes, nonce is 24 bytes.
-  defp encrypt_xsalsa20_poly1305(plaintext, key, nonce) do
-    # Use Erlang :crypto for NaCl-compatible xsalsa20_poly1305.
-    # The encrypted output is: 16-byte Poly1305 MAC + ciphertext.
-    :crypto.crypto_one_time_aead(
-      :xchacha20_poly1305,
-      key,
-      nonce,
-      plaintext,
-      <<>>,
-      true
-    )
-    |> case do
-      {ciphertext, tag} -> tag <> ciphertext
-    end
+  # Encrypt an Opus frame using xchacha20_poly1305.
+  # Raises on any cipher error — the caller must NOT rescue this.
+  defp encrypt_xchacha20_poly1305(plaintext, key, nonce) do
+    # OTP :crypto.crypto_one_time_aead/6 returns {ciphertext, tag}.
+    # We prepend the 16-byte Poly1305 MAC so the wire format matches Discord.
+    {ciphertext, tag} =
+      :crypto.crypto_one_time_aead(
+        :xchacha20_poly1305,
+        key,
+        nonce,
+        plaintext,
+        <<>>,
+        true
+      )
+
+    tag <> ciphertext
   rescue
-    # Fallback: if :xchacha20_poly1305 is not available in this OTP version,
-    # log a warning. In production, a NIF or `:enacl` library would be used.
-    _error ->
-      Logger.warning("[DiscordBridge] xsalsa20_poly1305 not available in :crypto, using stub")
-      plaintext
+    exn ->
+      raise "Discord bridge cipher unavailable: #{inspect(exn)} — " <>
+              "refusing to send unencrypted voice frame"
   end
 
-  # Decrypt data using xsalsa20_poly1305.
-  defp decrypt_xsalsa20_poly1305(ciphertext, key, nonce) do
-    # The first 16 bytes are the Poly1305 MAC, remainder is encrypted audio.
+  # Decrypt an incoming RTP audio payload using xchacha20_poly1305.
+  # Returns {:ok, plaintext} | {:error, reason}.
+  # Decrypt failures are honest — a bad packet is dropped, not a crash.
+  defp decrypt_xchacha20_poly1305(ciphertext, key, nonce) do
+    # The first 16 bytes are the Poly1305 MAC, remainder is ciphertext.
     if byte_size(ciphertext) < 16 do
       {:error, :too_short}
     else
@@ -983,8 +1071,8 @@ defmodule Burble.Bridges.Discord do
       end
     end
   rescue
-    _error ->
-      Logger.warning("[DiscordBridge] xsalsa20_poly1305 decrypt not available")
+    _exn ->
+      Logger.warning("[DiscordBridge] xchacha20_poly1305 decrypt not available in this OTP build")
       {:error, :not_available}
   end
 

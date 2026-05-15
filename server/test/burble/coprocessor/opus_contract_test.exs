@@ -17,9 +17,9 @@
 defmodule Burble.Coprocessor.OpusContractTest do
   use ExUnit.Case, async: true
 
-  alias Burble.Coprocessor.{ElixirBackend, SmartBackend, ZigBackend}
+  alias Burble.Coprocessor.{ElixirBackend, SmartBackend, SNIFBackend, ZigBackend}
 
-  describe "opus_transcode/4 contract" do
+  describe "opus_transcode/4 contract — all backends return {:error, :not_implemented}" do
     test "ElixirBackend returns {:error, :not_implemented}" do
       pcm = [0.0, 0.5, -0.5, 0.25]
       assert {:error, :not_implemented} =
@@ -38,10 +38,78 @@ defmodule Burble.Coprocessor.OpusContractTest do
                SmartBackend.opus_transcode(pcm, 48_000, 1, 32_000)
     end
 
+    test "SNIFBackend returns {:error, :not_implemented}" do
+      pcm = [0.0, 0.5, -0.5, 0.25]
+      assert {:error, :not_implemented} =
+               SNIFBackend.opus_transcode(pcm, 48_000, 1, 32_000)
+    end
+
     test "opus_available?/0 is false on every backend" do
       refute ElixirBackend.opus_available?()
       refute ZigBackend.opus_available?()
       refute SmartBackend.opus_available?()
+      refute SNIFBackend.opus_available?()
+    end
+  end
+
+  describe "opus_transcode/4 error handling — no silent failures" do
+    test "error tuple is returned to caller, not logged and swallowed (ElixirBackend)" do
+      pcm = [0.0, 0.5, -0.5]
+      logs = ExUnit.CaptureLog.capture_log(fn ->
+        result = ElixirBackend.opus_transcode(pcm, 48_000, 1, 32_000)
+        assert {:error, :not_implemented} = result
+      end)
+      # No log output should be emitted — the error is the caller's to handle.
+      assert logs == ""
+    end
+
+    test "error tuple is returned to caller, not logged and swallowed (ZigBackend)" do
+      pcm = [0.0, 0.5, -0.5]
+      logs = ExUnit.CaptureLog.capture_log(fn ->
+        result = ZigBackend.opus_transcode(pcm, 48_000, 1, 32_000)
+        assert {:error, :not_implemented} = result
+      end)
+      assert logs == ""
+    end
+
+    test "error tuple is returned to caller, not logged and swallowed (SmartBackend)" do
+      pcm = [0.0, 0.5, -0.5]
+      logs = ExUnit.CaptureLog.capture_log(fn ->
+        result = SmartBackend.opus_transcode(pcm, 48_000, 1, 32_000)
+        assert {:error, :not_implemented} = result
+      end)
+      assert logs == ""
+    end
+
+    test "error tuple is returned to caller, not logged and swallowed (SNIFBackend)" do
+      pcm = [0.0, 0.5, -0.5]
+      logs = ExUnit.CaptureLog.capture_log(fn ->
+        result = SNIFBackend.opus_transcode(pcm, 48_000, 1, 32_000)
+        assert {:error, :not_implemented} = result
+      end)
+      assert logs == ""
+    end
+  end
+
+  describe "regression: opus_transcode has no production callers outside coprocessor/" do
+    test "no opus_transcode reference exists in lib/ outside coprocessor/" do
+      # WS-1.5 invariant: opus_transcode must not be called from production
+      # code outside the coprocessor module. A caller elsewhere needs explicit
+      # {:error, reason} handling and a documented reason — fail the build here
+      # so review can't miss it.
+      lib_root = Path.expand("../../../../lib/burble", __DIR__)
+
+      offenders =
+        Path.wildcard(Path.join(lib_root, "**/*.ex"))
+        |> Enum.reject(&String.contains?(&1, "/coprocessor/"))
+        |> Enum.filter(fn file ->
+          File.read!(file) =~ "opus_transcode"
+        end)
+
+      assert offenders == [],
+             "opus_transcode referenced outside coprocessor/: #{inspect(offenders)}. " <>
+               "If intentional, add explicit error handling at the call site and " <>
+               "update the WS-1.5 invariant."
     end
   end
 

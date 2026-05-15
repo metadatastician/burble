@@ -80,7 +80,14 @@ RUN mix deps.get --only prod
 # Patch: elmdb's Makefile hard-codes -lerl_interface which was removed from the Wolfi
 # erlang-27-dev package (only libei.a / libei_st.a are shipped). Strip the obsolete
 # flag; -lei (which remains in the link command) provides all the needed symbols.
-RUN sed -i 's/-lerl_interface //g' deps/elmdb/c_src/Makefile
+# Guarded with a file-exists test: as of mix.exs commit 3109405 elmdb is
+# commented out (optional NIF disabled for this host), so deps/elmdb/ is not
+# fetched and the unconditional sed would abort the build with "No such file".
+# The guard keeps this patch correct for the documented "re-enable elmdb
+# individually" path without breaking the elmdb-absent build.
+RUN if [ -f deps/elmdb/c_src/Makefile ]; then \
+        sed -i 's/-lerl_interface //g' deps/elmdb/c_src/Makefile; \
+    fi
 
 RUN mix deps.compile
 

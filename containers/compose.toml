@@ -25,7 +25,15 @@ image = "ghcr.io/hyperpolymath/verisimdb:latest"
 restart = "unless-stopped"
 networks = ["burble-net"]
 volumes = ["burble-verisimdb-data:/data"]
-healthcheck = { test = "wget -q --spider http://localhost:8080/health || exit 1", interval = "30s", timeout = "5s", retries = 3 }
+# Healthcheck tightened (2026-05-13, WS-1.6): start_period gives VeriSimDB
+# 10s to bind its port before the first check fires; retries=5 tolerates
+# brief restarts without marking the service unhealthy prematurely.
+# NOTE: `start_interval` (faster polling during the start window) was dropped
+# — selur-compose v0.1's Healthcheck schema does not model it and rejects
+# unknown fields. The Burble.Store.init/1 retry loop (WS-1.6) is the real
+# race fix; start_interval was only a polling-speed optimization. Re-add
+# once selur-compose v0.2 supports it (tracked in v0.2 backlog).
+healthcheck = { test = "wget -q --spider http://localhost:8080/health || exit 1", interval = "30s", timeout = "5s", retries = 5, start_period = "10s" }
 
 [services.server]
 build = { context = "..", dockerfile = "containers/Containerfile.server" }
@@ -35,7 +43,12 @@ networks = ["burble-net"]
 environment = [
   "PHX_SERVER=true",
   "PORT=4020",
-  "VERISIMDB_URL=http://verisimdb:8080",
+  # Uses the podman --name (burble_verisimdb), NOT the service name
+  # (verisimdb). selur-compose v0.1 does not emit `--network-alias
+  # <service>` the way Docker Compose does, so only the project-prefixed
+  # --name is DNS-registered by aardvark-dns. Revert to "verisimdb" once
+  # selur-compose v0.2 adds service-name network aliases.
+  "VERISIMDB_URL=http://burble_verisimdb:8080",
   "BURBLE_TOPOLOGY=monarchic",
   # Proven NIF shared objects directory — pinned to mix.exs's @version.
   "PROVEN_LIB_DIR=/app/lib/burble-1.0.0/priv",

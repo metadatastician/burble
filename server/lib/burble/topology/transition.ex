@@ -13,6 +13,16 @@
 defmodule Burble.Topology.Transition do
   @moduledoc """
   Logic for room-level topology transitions and governance mergers.
+
+  ## Topology Transition Modes
+
+  Monarchic and oligarchic transitions are fully supported. Distributed and serverless
+  transitions currently return `{:error, :fork_not_implemented}`. The Vext chain forking
+  and cross-server AVOW coordination required for these modes are scheduled for Phase 2.
+
+  Attempts to transition to distributed or serverless will fail loudly with a clear error,
+  enabling callers to handle the limitation explicitly rather than proceeding with an
+  incomplete state.
   """
 
   require Logger
@@ -22,23 +32,26 @@ defmodule Burble.Topology.Transition do
   @doc """
   Transition a room to a new topology mode.
   Handles Vext chain forking if the new mode is 'Distributed' or 'Serverless'.
+
+  Returns:
+    :ok — transition succeeded (for monarchic/oligarchic modes, or when chain fork is implemented)
+    {:error, :fork_not_implemented} — chain fork requested but not yet implemented (Phase 2)
+    {:error, reason} — room lookup or other failure
   """
   def transition_room(room_id, new_mode) do
     Logger.info("[Topology] Transitioning room #{room_id} to #{new_mode}")
-    
+
     # 1. Get current state
     case Room.get_state(room_id) do
       {:ok, state} ->
         # 2. If transitioning to a sovereign mode, fork the chain
-        if new_mode in [:distributed, :serverless] do
-          fork_vext_chain(room_id, state)
+        with :ok <- fork_chain_if_needed(new_mode, room_id, state) do
+          # 3. Update room process state
+          send_transition_signal(room_id, new_mode)
+          :ok
         end
 
-        # 3. Update room process state
-        send_transition_signal(room_id, new_mode)
-        :ok
-
-      error -> 
+      error ->
         Logger.error("[Topology] Failed to transition room: #{inspect(error)}")
         error
     end
@@ -59,9 +72,19 @@ defmodule Burble.Topology.Transition do
 
   # --- Internal ---
 
+  defp fork_chain_if_needed(mode, _room_id, _state) when mode in [:monarchic, :oligarchic] do
+    # No chain fork needed for hierarchical modes
+    :ok
+  end
+
+  defp fork_chain_if_needed(mode, room_id, state) when mode in [:distributed, :serverless] do
+    # Chain fork is required but not yet implemented (Phase 2)
+    fork_vext_chain(room_id, state)
+  end
+
   defp fork_vext_chain(room_id, state) do
     Logger.info("[Vext] Forking chain for room #{room_id} at position #{state[:position] || 0}")
-    {:ok, :stub}
+    {:error, :fork_not_implemented}
   end
 
   defp send_transition_signal(room_id, new_mode) do

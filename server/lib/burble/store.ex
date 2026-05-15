@@ -216,6 +216,10 @@ defmodule Burble.Store do
   # GenServer callbacks
   # ---------------------------------------------------------------------------
 
+  # Maximum number of VeriSimDB health-check attempts before giving up at boot.
+  # Delays follow exponential backoff: 1s, 2s, 4s, 8s, 16s (total up to ~31s).
+  @health_check_max_attempts 5
+
   @impl true
   def init(_opts) do
     config = Application.get_env(:burble, __MODULE__, [])
@@ -227,22 +231,62 @@ defmodule Burble.Store do
       {:ok, client} ->
         Logger.info("[Burble.Store] Connected to VeriSimDB at #{url}")
 
-        # Run pending VeriSimDB migrations (idempotent setup scripts).
-        case Burble.Store.Migrator.run(client) do
+        # Wait for VeriSimDB to be reachable before running migrations.
+        # The server may start before VeriSimDB's DNS entry propagates in the
+        # container bridge network — retry with exponential backoff to absorb
+        # the startup race.
+        case await_verisimdb(client, @health_check_max_attempts, 1_000) do
           :ok ->
-            {:ok, %{client: client}}
+            # Run pending VeriSimDB migrations (idempotent setup scripts).
+            # Migration failure is fatal: the store must not start with an
+            # uninitialised schema — callers would silently operate against
+            # a broken data layer.
+            case Burble.Store.Migrator.run(client) do
+              :ok ->
+                {:ok, %{client: client}}
 
-          {:error, reason} ->
-            Logger.error("[Burble.Store] Migration failed: #{inspect(reason)}")
-            # Continue anyway — the migration failure is logged but non-fatal.
-            # VeriSimDB is schemaless, so the app can still function with
-            # degraded migration tracking.
-            {:ok, %{client: client}}
+              {:error, reason} ->
+                Logger.error("[Burble.Store] Migration failed: #{inspect(reason)}")
+                {:stop, {:migration_failed, reason}}
+            end
+
+          {:error, :unreachable} ->
+            Logger.error(
+              "[Burble.Store] VeriSimDB at #{url} did not become healthy after " <>
+                "#{@health_check_max_attempts} attempts — refusing to start"
+            )
+
+            {:stop, :verisimdb_unreachable}
         end
 
       {:error, reason} ->
         Logger.error("[Burble.Store] Failed to connect to VeriSimDB: #{inspect(reason)}")
         {:stop, {:verisimdb_connection_failed, reason}}
+    end
+  end
+
+  # Poll VeriSimDB health endpoint with exponential backoff.
+  # Returns :ok when the endpoint responds, {:error, :unreachable} when all
+  # attempts are exhausted.
+  defp await_verisimdb(_client, 0, _delay_ms) do
+    {:error, :unreachable}
+  end
+
+  defp await_verisimdb(client, attempts_left, delay_ms) do
+    case VeriSimClient.health(client) do
+      {:ok, true} ->
+        :ok
+
+      other ->
+        Logger.warning(
+          "[Burble.Store] VeriSimDB not ready (#{inspect(other)}); " <>
+            "retrying in #{delay_ms}ms (#{attempts_left - 1} attempt(s) remaining)"
+        )
+
+        Process.sleep(delay_ms)
+        # Exponential backoff: double the delay each attempt, capped at 16s.
+        next_delay = min(delay_ms * 2, 16_000)
+        await_verisimdb(client, attempts_left - 1, next_delay)
     end
   end
 

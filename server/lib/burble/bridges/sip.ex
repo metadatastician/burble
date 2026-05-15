@@ -39,8 +39,8 @@ defmodule Burble.Bridges.SIP do
   - Register with a SIP registrar for inbound call routing
   - Accept inbound SIP INVITEs and route them to Burble rooms
   - Place outbound SIP calls from Burble rooms
-  - Negotiate media via SDP (Opus preferred, G.711 fallback)
-  - Relay RTP audio bidirectionally with codec transcoding
+  - Negotiate media via SDP (Opus only — see codec policy below)
+  - Relay RTP audio bidirectionally
   - Handle DTMF digits via RFC 2833 telephone-event
 
   ## Starting a bridge
@@ -66,13 +66,19 @@ defmodule Burble.Bridges.SIP do
   - RTP transports audio on negotiated ports
   - Dialog model: INVITE → 100 Trying → 180 Ringing → 200 OK → ACK
 
-  ## Codec negotiation
+  ## Codec policy (Phase 1 — Opus-only)
 
-  The bridge offers these codecs in SDP (preference order):
-  1. Opus/48000/2 (payload type 111) — native to Burble
-  2. PCMU/8000 (payload type 0) — G.711 µ-law (universal SIP support)
-  3. PCMA/8000 (payload type 8) — G.711 A-law (ITU markets)
-  4. telephone-event/8000 (payload type 101) — DTMF relay per RFC 2833
+  The bridge advertises and accepts **only** `opus/48000/2` (payload type 111)
+  plus `telephone-event/8000` for DTMF.
+
+  If a peer's SDP offer contains no Opus payload type, the bridge responds with
+  `488 Not Acceptable Here` and tears the call down immediately. No G.711
+  (PCMU/PCMA) transcoding is performed. A transcoder is not wired; previous
+  stub code that returned silence was removed in Phase 1 Workstream 1.1.
+
+  SIP peers that support only G.711 (e.g. PSTN gateways) cannot currently
+  reach Burble rooms via this bridge. Phase 4 (Option A) will add a real
+  libopus NIF to unblock that interop path.
 
   ## Limitations
 
@@ -81,6 +87,7 @@ defmodule Burble.Bridges.SIP do
   - No T.38 fax support
   - No SRTP (RTP media is unencrypted) — use VPN for security
   - DNS SRV lookup not implemented (direct host:port only)
+  - G.711 (PCMU/PCMA) transcoding not implemented — Opus-capable peers only
   """
 
   use GenServer
@@ -515,45 +522,59 @@ defmodule Burble.Bridges.SIP do
     # Parse SDP from the body to get remote media info.
     {remote_ip, remote_port, codec} = parse_sdp(body)
 
-    # Send 100 Trying.
-    send_sip_response(state.sip_socket, 100, "Trying", headers, src_ip, src_port, state)
+    case codec do
+      :no_opus ->
+        # Refuse offers that contain no Opus payload type.
+        # We have no G.711 transcoder; sending silence would be worse than refusing.
+        Logger.warning(
+          "[SIPBridge] Rejecting INVITE #{call_id} — peer offered no Opus codec (488 Not Acceptable Here)"
+        )
 
-    # Send 180 Ringing.
-    send_sip_response(state.sip_socket, 180, "Ringing", headers, src_ip, src_port, state)
+        send_sip_response(state.sip_socket, 488, "Not Acceptable Here", headers, src_ip, src_port, state)
 
-    # Build SDP answer and send 200 OK.
-    sdp_answer = build_sdp_answer(state.config.local_ip, state.config.local_rtp_port, codec)
+        state
 
-    send_sip_response_with_body(
-      state.sip_socket, 200, "OK", headers,
-      "application/sdp", sdp_answer,
-      src_ip, src_port, state
-    )
+      :opus ->
+        # Send 100 Trying.
+        send_sip_response(state.sip_socket, 100, "Trying", headers, src_ip, src_port, state)
 
-    # Set up the call state.
-    call = %{
-      call_id: call_id,
-      from_tag: extract_tag(from),
-      to_tag: generate_tag(),
-      remote_uri: extract_uri(from),
-      cseq: 1,
-      state: :active,
-      remote_rtp_ip: remote_ip || to_string(:inet.ntoa(src_ip)),
-      remote_rtp_port: remote_port || 0,
-      negotiated_codec: codec || :pcmu,
-      rtp_sequence: 0,
-      rtp_timestamp: 0,
-      rtp_ssrc: :rand.uniform(0xFFFFFFFF)
-    }
+        # Send 180 Ringing.
+        send_sip_response(state.sip_socket, 180, "Ringing", headers, src_ip, src_port, state)
 
-    # Notify the Burble room that a SIP call has connected.
-    Phoenix.PubSub.broadcast(
-      Burble.PubSub,
-      "room:#{state.config.room_id}",
-      {:sip_call, %{action: :connected, from: from, call_id: call_id, bridge: true}}
-    )
+        # Build SDP answer with Opus only and send 200 OK.
+        sdp_answer = build_sdp_answer(state.config.local_ip, state.config.local_rtp_port, :opus)
 
-    %{state | call: call}
+        send_sip_response_with_body(
+          state.sip_socket, 200, "OK", headers,
+          "application/sdp", sdp_answer,
+          src_ip, src_port, state
+        )
+
+        # Set up the call state.
+        call = %{
+          call_id: call_id,
+          from_tag: extract_tag(from),
+          to_tag: generate_tag(),
+          remote_uri: extract_uri(from),
+          cseq: 1,
+          state: :active,
+          remote_rtp_ip: remote_ip || to_string(:inet.ntoa(src_ip)),
+          remote_rtp_port: remote_port || 0,
+          negotiated_codec: :opus,
+          rtp_sequence: 0,
+          rtp_timestamp: 0,
+          rtp_ssrc: :rand.uniform(0xFFFFFFFF)
+        }
+
+        # Notify the Burble room that a SIP call has connected.
+        Phoenix.PubSub.broadcast(
+          Burble.PubSub,
+          "room:#{state.config.room_id}",
+          {:sip_call, %{action: :connected, from: from, call_id: call_id, bridge: true}}
+        )
+
+        %{state | call: call}
+    end
   end
 
   # Handle BYE — the remote side is hanging up.
@@ -647,35 +668,63 @@ defmodule Burble.Bridges.SIP do
     end
   end
 
+  # Promote a pending call to :active with the negotiated peer transport.
+  # Codec is always :opus after Opus-only SDP negotiation.
+  defp activate_call(call, to_tag, remote_ip, remote_port) do
+    %{
+      call
+      | state: :active,
+        to_tag: to_tag,
+        remote_rtp_ip: remote_ip,
+        remote_rtp_port: remote_port,
+        negotiated_codec: :opus
+    }
+  end
+
   # Handle 200 OK for our outbound INVITE — extract SDP, send ACK.
+  # If the peer answered without Opus, we send BYE immediately and error out.
   defp handle_invite_success(headers, body, state) do
     {remote_ip, remote_port, codec} = parse_sdp(body)
     to_tag = extract_tag(headers["to"] || "")
 
-    if state.call do
-      call = %{
-        state.call
-        | state: :active,
-          to_tag: to_tag,
-          remote_rtp_ip: remote_ip,
-          remote_rtp_port: remote_port,
-          negotiated_codec: codec || :pcmu
-      }
+    cond do
+      codec == :no_opus ->
+        Logger.error(
+          "[SIPBridge] Outbound call answered without Opus — sending BYE (no transcoder available)"
+        )
 
-      # Send ACK.
-      send_ack(call, state)
+        active = state.call && activate_call(state.call, to_tag, remote_ip, remote_port)
 
-      Logger.info("[SIPBridge] Call established, codec: #{call.negotiated_codec}")
+        # ACK the 200 OK first (required by RFC 3261), then BYE.
+        if active, do: send_ack(active, state)
 
-      Phoenix.PubSub.broadcast(
-        Burble.PubSub,
-        "room:#{state.config.room_id}",
-        {:sip_call, %{action: :connected, call_id: call.call_id, bridge: true}}
-      )
+        Phoenix.PubSub.broadcast(
+          Burble.PubSub,
+          "room:#{state.config.room_id}",
+          {:sip_call, %{action: :failed, reason: "no_opus_in_answer", bridge: true}}
+        )
 
-      %{state | call: call}
-    else
-      state
+        send_bye(%{state | call: active})
+        %{state | call: nil}
+
+      state.call ->
+        call = activate_call(state.call, to_tag, remote_ip, remote_port)
+
+        # Send ACK.
+        send_ack(call, state)
+
+        Logger.info("[SIPBridge] Call established, codec: opus")
+
+        Phoenix.PubSub.broadcast(
+          Burble.PubSub,
+          "room:#{state.config.room_id}",
+          {:sip_call, %{action: :connected, call_id: call.call_id, bridge: true}}
+        )
+
+        %{state | call: call}
+
+      true ->
+        state
     end
   end
 
@@ -771,7 +820,7 @@ defmodule Burble.Bridges.SIP do
       state: :inviting,
       remote_rtp_ip: nil,
       remote_rtp_port: nil,
-      negotiated_codec: :pcmu,
+      negotiated_codec: :opus,
       rtp_sequence: 0,
       rtp_timestamp: 0,
       rtp_ssrc: :rand.uniform(0xFFFFFFFF)
@@ -828,7 +877,9 @@ defmodule Burble.Bridges.SIP do
   # Private: SDP (Session Description Protocol)
   # ---------------------------------------------------------------------------
 
-  # Build an SDP offer with our supported codecs.
+  # Build an SDP offer advertising Opus only.
+  # G.711 (PCMU/PCMA) is intentionally omitted: no transcoder is wired.
+  # Peers that cannot accept Opus will refuse and we will error out cleanly.
   defp build_sdp_offer(local_ip, rtp_port) do
     session_id = System.system_time(:second)
 
@@ -838,10 +889,8 @@ defmodule Burble.Bridges.SIP do
       "s=Burble Bridge",
       "c=IN IP4 #{local_ip}",
       "t=0 0",
-      "m=audio #{rtp_port} RTP/AVP #{@pt_opus} #{@pt_pcmu} #{@pt_pcma} #{@pt_dtmf}",
+      "m=audio #{rtp_port} RTP/AVP #{@pt_opus} #{@pt_dtmf}",
       "a=rtpmap:#{@pt_opus} opus/48000/2",
-      "a=rtpmap:#{@pt_pcmu} PCMU/8000",
-      "a=rtpmap:#{@pt_pcma} PCMA/8000",
       "a=rtpmap:#{@pt_dtmf} telephone-event/8000",
       "a=fmtp:#{@pt_dtmf} 0-16",
       "a=ptime:20",
@@ -903,25 +952,30 @@ defmodule Burble.Bridges.SIP do
         end
       end)
 
-    # Determine preferred codec from payload types.
+    # Require Opus — refuse G.711-only or codec-less offers.
+    # Returns {:error, :no_opus} when the peer offers no Opus payload type,
+    # so the INVITE handler can reply 488 Not Acceptable Here.
     codec =
-      cond do
-        @pt_opus in payload_types -> :opus
-        @pt_pcmu in payload_types -> :pcmu
-        @pt_pcma in payload_types -> :pcma
-        true -> :pcmu
+      if @pt_opus in payload_types do
+        :opus
+      else
+        :no_opus
       end
 
     {remote_ip, remote_port, codec}
   end
 
-  defp parse_sdp(_), do: {nil, nil, :pcmu}
+  defp parse_sdp(_), do: {nil, nil, :no_opus}
 
   # Convert a codec atom to SDP rtpmap string.
   defp codec_to_sdp(:opus), do: {@pt_opus, "opus/48000/2"}
-  defp codec_to_sdp(:pcmu), do: {@pt_pcmu, "PCMU/8000"}
-  defp codec_to_sdp(:pcma), do: {@pt_pcma, "PCMA/8000"}
-  defp codec_to_sdp(_), do: {@pt_pcmu, "PCMU/8000"}
+
+  # Opus-only after Phase-1 SDP negotiation. A non-Opus codec here means the
+  # negotiation logic regressed — fail loudly rather than silently emit G.711
+  # (mirrors the send_rtp_audio guard).
+  defp codec_to_sdp(other) do
+    raise "[SIPBridge] Unexpected codec #{inspect(other)} when building SDP — Opus-only after negotiation"
+  end
 
   # ---------------------------------------------------------------------------
   # Private: RTP media handling
@@ -962,27 +1016,18 @@ defmodule Burble.Bridges.SIP do
   # Send an RTP audio frame to the SIP endpoint.
   defp send_rtp_audio(opus_frame, %{call: call, rtp_socket: socket} = state)
        when not is_nil(socket) and not is_nil(call) do
-    # Determine payload type and encode audio based on negotiated codec.
+    # Only :opus is reachable here after Opus-only SDP negotiation.
+    # Any other codec atom means codec selection logic has a bug — raise loudly
+    # rather than sending silence or corrupted audio on the wire.
     {pt, audio_payload} =
       case call.negotiated_codec do
         :opus ->
           # Opus is native — send as-is.
           {@pt_opus, opus_frame}
 
-        :pcmu ->
-          # Transcode: Opus → PCM → G.711 µ-law.
-          # In production, this would use a proper Opus decoder.
-          # For now, send Opus-decoded PCM through µ-law encoder.
-          pcm = opus_to_pcm_stub(opus_frame)
-          {@pt_pcmu, encode_ulaw(pcm)}
-
-        :pcma ->
-          # Transcode: Opus → PCM → G.711 A-law.
-          pcm = opus_to_pcm_stub(opus_frame)
-          {@pt_pcma, encode_alaw(pcm)}
-
-        _ ->
-          {@pt_pcmu, opus_frame}
+        other ->
+          raise "[SIPBridge] Unexpected codec #{inspect(other)} after Opus-only negotiation — " <>
+                  "codec selection bug; no transcoder is available"
       end
 
     # Build and send RTP packet.
@@ -999,17 +1044,11 @@ defmodule Burble.Bridges.SIP do
     remote_ip_charlist = String.to_charlist(call.remote_rtp_ip)
     :gen_udp.send(socket, remote_ip_charlist, call.remote_rtp_port, packet)
 
-    # Advance sequence and timestamp.
-    samples_per_frame =
-      case call.negotiated_codec do
-        :opus -> 960   # 48kHz, 20ms
-        _ -> 160       # 8kHz, 20ms
-      end
-
+    # Advance sequence and timestamp: Opus at 48kHz, 20ms = 960 samples/frame.
     new_call = %{
       call
       | rtp_sequence: rem(call.rtp_sequence + 1, 0x10000),
-        rtp_timestamp: rem(call.rtp_timestamp + samples_per_frame, 0x100000000)
+        rtp_timestamp: rem(call.rtp_timestamp + 960, 0x100000000)
     }
 
     %{state | call: new_call}
@@ -1300,12 +1339,6 @@ defmodule Burble.Bridges.SIP do
     send_sip(socket, response, src_ip, src_port)
   end
 
-  # Resolve a SIP domain via DNS SRV (_sip._udp.<domain>).
-  # Not implemented: direct host:port is required.
-  defp resolve_sip_srv(_domain) do
-    {:error, :dns_srv_not_implemented}
-  end
-
   # Send a raw SIP message over UDP.
   defp send_sip(socket, message, host, port) when is_binary(host) do
     send_sip(socket, message, String.to_charlist(host), port)
@@ -1390,13 +1423,6 @@ defmodule Burble.Bridges.SIP do
       _ ->
         "127.0.0.1"
     end
-  end
-
-  # No Opus decoder is wired: returns silence samples (8kHz, 20ms = 160 samples).
-  # Wire a real Opus NIF or port to decode actual audio.
-  defp opus_to_pcm_stub(_opus_frame) do
-    frame_size = 160
-    List.duplicate(0.0, frame_size)
   end
 
   # Convert DTMF digit character to RFC 2833 event code.

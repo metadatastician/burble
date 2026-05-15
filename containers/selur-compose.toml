@@ -34,7 +34,13 @@ name = "burble"
 image = "ghcr.io/hyperpolymath/verisimdb:latest"
 restart = "unless-stopped"
 networks = ["burble-internal"]
-healthcheck = { test = "wget -q --spider http://localhost:8080/health || exit 1", interval = "30s", timeout = "5s", retries = 3 }
+# Healthcheck tightened (2026-05-13, WS-1.6): start_period gives VeriSimDB
+# 10s to bind its port before the first check fires; retries=5 tolerates
+# brief restarts without marking the service unhealthy prematurely.
+# NOTE: `start_interval` dropped — selur-compose v0.1 schema rejects it
+# (deny_unknown_fields). The Burble.Store.init/1 retry loop is the real
+# race fix. Re-add once selur-compose v0.2 models start_interval.
+healthcheck = { test = "wget -q --spider http://localhost:8080/health || exit 1", interval = "30s", timeout = "5s", retries = 5, start_period = "10s" }
 # Volume name follows upstream convention. The nextgen-databases CLAUDE.md
 # port-and-volume table reserves "burble-verisimdb-data" for this consumer.
 volumes = ["burble-verisimdb-data:/data"]
@@ -51,7 +57,9 @@ environment = [
   "PHX_SERVER=true",
   "PORT=4020",
   "PHX_HOST=localhost",
-  "VERISIMDB_URL=http://verisimdb:8080",
+  # podman --name (burble_verisimdb), not service name — selur-compose v0.1
+  # omits `--network-alias <service>`. Revert once selur-compose v0.2 lands.
+  "VERISIMDB_URL=http://burble_verisimdb:8080",
   "BURBLE_TOPOLOGY=monarchic",
   # Proven NIF shared objects directory.
   "PROVEN_LIB_DIR=/app/lib/burble-0.1.0/priv",

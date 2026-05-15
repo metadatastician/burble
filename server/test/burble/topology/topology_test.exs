@@ -125,10 +125,24 @@ defmodule Burble.Topology.TopologyTest do
   # ---------------------------------------------------------------------------
 
   describe "Topology.Transition" do
-    test "transition_room/2 does not crash — returns :ok or {:error, _}" do
-      # Room registry is empty in tests; expect an error tuple (not a crash).
-      result = Transition.transition_room("nonexistent_room", :distributed)
-      assert result == :ok or match?({:error, _}, result)
+    test "transition to monarchic returns :ok (no chain fork needed)" do
+      result = Transition.transition_room("test_room", :monarchic)
+      assert result == :ok or match?({:error, :not_found}, result)
+    end
+
+    test "transition to oligarchic returns :ok (no chain fork needed)" do
+      result = Transition.transition_room("test_room", :oligarchic)
+      assert result == :ok or match?({:error, :not_found}, result)
+    end
+
+    test "transition to distributed returns fork_not_implemented error (Phase 2)" do
+      result = Transition.transition_room("test_room", :distributed)
+      assert {:error, :fork_not_implemented} = result
+    end
+
+    test "transition to serverless returns fork_not_implemented error (Phase 2)" do
+      result = Transition.transition_room("test_room", :serverless)
+      assert {:error, :fork_not_implemented} = result
     end
 
     test "merge_rooms/3 returns :ok for any valid target mode" do
