@@ -1,5 +1,25 @@
 # SPDX-License-Identifier: PMPL-1.0-or-later
 # Hypatia Neurosymbolic CI/CD Security Scan
+#
+# Failure-class policy (two classes, deliberately distinct):
+#
+#   1. External infrastructure failures — provisioning the scanner itself:
+#      `setup-beam`, cloning `hyperpolymath/hypatia`, `mix deps.get`,
+#      `mix escript.build`, or cloning `gitbot-fleet`. These depend on
+#      upstream services and repositories outside this repo's control.
+#      A flake there says nothing about *this* repository's health, so it
+#      MUST NOT gate unrelated PRs. On any such failure we emit a warning,
+#      record a non-gating note in the job summary, skip the scan, and
+#      exit green.
+#
+#   2. Scan findings — produced once the scanner actually runs against
+#      this repo. These are real, repo-owned signal. We preserve the
+#      existing fix-forward behaviour: surface them loudly (summary, PR
+#      comment, artifact, fleet submission) but never hard-gate. Findings
+#      feed Hypatia's learning engine and the Phase 3 automaton.
+#
+# Net effect: a Hypatia outage can never block a PR; a Hypatia finding
+# never silently disappears.
 name: Hypatia Security Scan
 
 on:
@@ -25,80 +45,130 @@ jobs:
         with:
           fetch-depth: 0  # Full history for better pattern analysis
 
+      # --- Failure class 1: external infrastructure (non-gating) ---------
+
       - name: Setup Elixir for Hypatia scanner
+        id: setup_beam
+        continue-on-error: true
         uses: erlef/setup-beam@e6d7c94229049569db56a7ad5a540c051a010af9 # v1.18.2
         with:
           elixir-version: '1.19.4'
           otp-version: '28.3'
 
-      # Hypatia lives in an external repo; clone/build can fail for reasons
-      # outside this repository's control. The scan is advisory (it does not
-      # gate merges and does not feed code-scanning), so external failures
-      # must degrade to an empty result rather than hard-fail every PR.
-      - name: Clone Hypatia
-        id: clone
-        continue-on-error: true
+      - name: Provision Hypatia scanner
+        id: scanner
+        # Single tolerant provisioning step: clone + build, guarded so any
+        # upstream/infra hiccup degrades to ready=false instead of failing
+        # the job. Never use `set -e` here on purpose.
         run: |
-          if [ ! -d "$HOME/hypatia" ]; then
-            git clone --depth 1 https://github.com/hyperpolymath/hypatia.git "$HOME/hypatia"
+          set +e
+          ready=false
+          reason=""
+
+          if [ "${{ steps.setup_beam.outcome }}" != "success" ]; then
+            reason="setup-beam (Elixir/OTP provisioning) failed upstream"
+          else
+            if [ ! -d "$HOME/hypatia" ]; then
+              echo "Cloning hyperpolymath/hypatia..."
+              git clone --depth 1 https://github.com/hyperpolymath/hypatia.git "$HOME/hypatia"
+              clone_rc=$?
+            else
+              clone_rc=0
+            fi
+
+            if [ "$clone_rc" -ne 0 ] || [ ! -d "$HOME/hypatia" ]; then
+              reason="cloning hyperpolymath/hypatia failed (upstream/network)"
+            else
+              build_rc=0
+              if [ ! -f "$HOME/hypatia/hypatia-v2" ]; then
+                echo "Building hypatia-v2 scanner..."
+                ( cd "$HOME/hypatia/scanner" \
+                  && mix deps.get \
+                  && mix escript.build \
+                  && mv hypatia ../hypatia-v2 )
+                build_rc=$?
+              fi
+
+              if [ "$build_rc" -ne 0 ] || [ ! -f "$HOME/hypatia/hypatia-v2" ]; then
+                reason="building the Hypatia scanner failed (mix deps.get / escript.build)"
+              elif [ ! -x "$HOME/hypatia/hypatia-cli.sh" ] && [ ! -f "$HOME/hypatia/hypatia-cli.sh" ]; then
+                reason="Hypatia CLI entrypoint (hypatia-cli.sh) missing after build"
+              else
+                ready=true
+              fi
+            fi
           fi
 
-      - name: Build Hypatia scanner (if needed)
-        id: build
-        continue-on-error: true
-        run: |
-          # Use the shell $HOME, not ${{ env.HOME }}: the latter reads the
-          # workflow `env:` map (never set here) and resolves to an empty
-          # string, so `working-directory` became "/hypatia" and the step
-          # failed with "No such file or directory". The clone (above) and
-          # scan (below) steps already use the shell "$HOME/hypatia"; this
-          # makes the build step consistent with them.
-          cd "$HOME/hypatia"
-          if [ ! -f hypatia-v2 ] && [ -d scanner ]; then
-            echo "Building hypatia-v2 scanner..."
-            cd scanner
-            mix deps.get
-            mix escript.build
-            mv hypatia ../hypatia-v2
+          if [ "$ready" = "true" ]; then
+            echo "Hypatia scanner provisioned successfully."
+          else
+            echo "::warning title=Hypatia self-scan skipped::${reason}. This is an external-infrastructure failure and is non-gating."
           fi
+
+          echo "ready=$ready"   >> "$GITHUB_OUTPUT"
+          echo "reason=$reason" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - name: Note skipped scan
+        if: steps.scanner.outputs.ready != 'true'
+        run: |
+          {
+            echo "## Hypatia Scan: skipped (non-gating)"
+            echo ""
+            echo "The Hypatia neurosymbolic self-scan was **skipped** because an"
+            echo "external infrastructure step failed:"
+            echo ""
+            echo "> ${{ steps.scanner.outputs.reason }}"
+            echo ""
+            echo "This is a **failure-class 1** event (upstream/provisioning)."
+            echo "It says nothing about this repository and deliberately does"
+            echo "**not** gate this PR. The scan will run again on the next"
+            echo "push, schedule, or once upstream recovers."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # --- Failure class 2: scan findings (surfaced, never hard-gated) ---
 
       - name: Run Hypatia scan
         id: scan
+        if: steps.scanner.outputs.ready == 'true'
         run: |
+          set +e
           echo "Scanning repository: ${{ github.repository }}"
 
-          # Run scanner if it built; otherwise emit an empty (advisory) result.
-          if [ -x "$HOME/hypatia/hypatia-cli.sh" ]; then
-            HYPATIA_FORMAT=json "$HOME/hypatia/hypatia-cli.sh" scan . > hypatia-findings.json \
-              || echo '[]' > hypatia-findings.json
-          else
-            echo "::warning::Hypatia scanner unavailable (external clone/build failed) — emitting empty findings. This scan is advisory and does not gate merges."
+          HYPATIA_FORMAT=json "$HOME/hypatia/hypatia-cli.sh" scan . > hypatia-findings.json
+          scan_rc=$?
+
+          if [ "$scan_rc" -ne 0 ] || [ ! -s hypatia-findings.json ] || ! jq -e . hypatia-findings.json >/dev/null 2>&1; then
+            echo "::warning title=Hypatia scanner runtime error::scanner exited $scan_rc or produced no valid JSON; treating as non-gating skip."
             echo '[]' > hypatia-findings.json
+            echo "scan_ok=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "scan_ok=true" >> "$GITHUB_OUTPUT"
           fi
 
-          # Guard against non-JSON / partial output corrupting downstream jq.
-          jq -e . hypatia-findings.json >/dev/null 2>&1 || echo '[]' > hypatia-findings.json
-
-          # Count findings
           FINDING_COUNT=$(jq '. | length' hypatia-findings.json 2>/dev/null || echo 0)
-          echo "findings_count=$FINDING_COUNT" >> $GITHUB_OUTPUT
+          CRITICAL=$(jq '[.[] | select(.severity == "critical")] | length' hypatia-findings.json 2>/dev/null || echo 0)
+          HIGH=$(jq '[.[] | select(.severity == "high")] | length' hypatia-findings.json 2>/dev/null || echo 0)
+          MEDIUM=$(jq '[.[] | select(.severity == "medium")] | length' hypatia-findings.json 2>/dev/null || echo 0)
 
-          # Extract severity counts
-          CRITICAL=$(jq '[.[] | select(.severity == "critical")] | length' hypatia-findings.json)
-          HIGH=$(jq '[.[] | select(.severity == "high")] | length' hypatia-findings.json)
-          MEDIUM=$(jq '[.[] | select(.severity == "medium")] | length' hypatia-findings.json)
+          {
+            echo "findings_count=$FINDING_COUNT"
+            echo "critical=$CRITICAL"
+            echo "high=$HIGH"
+            echo "medium=$MEDIUM"
+          } >> "$GITHUB_OUTPUT"
 
-          echo "critical=$CRITICAL" >> $GITHUB_OUTPUT
-          echo "high=$HIGH" >> $GITHUB_OUTPUT
-          echo "medium=$MEDIUM" >> $GITHUB_OUTPUT
-
-          echo "## Hypatia Scan Results" >> $GITHUB_STEP_SUMMARY
-          echo "- Total findings: $FINDING_COUNT" >> $GITHUB_STEP_SUMMARY
-          echo "- Critical: $CRITICAL" >> $GITHUB_STEP_SUMMARY
-          echo "- High: $HIGH" >> $GITHUB_STEP_SUMMARY
-          echo "- Medium: $MEDIUM" >> $GITHUB_STEP_SUMMARY
+          {
+            echo "## Hypatia Scan Results"
+            echo "- Total findings: $FINDING_COUNT"
+            echo "- Critical: $CRITICAL"
+            echo "- High: $HIGH"
+            echo "- Medium: $MEDIUM"
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit 0
 
       - name: Upload findings artifact
+        if: steps.scanner.outputs.ready == 'true'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: hypatia-findings
@@ -106,35 +176,36 @@ jobs:
           retention-days: 90
 
       - name: Submit findings to gitbot-fleet (Phase 2)
-        if: steps.scan.outputs.findings_count > 0
+        if: steps.scanner.outputs.ready == 'true' && steps.scan.outputs.findings_count > 0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
           GITHUB_SHA: ${{ github.sha }}
         run: |
-          echo "📤 Submitting ${{ steps.scan.outputs.findings_count }} findings to gitbot-fleet..."
+          set +e
+          echo "Submitting ${{ steps.scan.outputs.findings_count }} findings to gitbot-fleet..."
 
-          # Clone gitbot-fleet to temp directory
           FLEET_DIR="/tmp/gitbot-fleet-$$"
-          git clone https://github.com/hyperpolymath/gitbot-fleet.git "$FLEET_DIR"
+          git clone --depth 1 https://github.com/hyperpolymath/gitbot-fleet.git "$FLEET_DIR"
+          if [ $? -ne 0 ]; then
+            echo "::warning title=Fleet submission skipped::cloning gitbot-fleet failed (upstream/network); non-gating."
+            exit 0
+          fi
 
-          # Run submission script
-          bash "$FLEET_DIR/scripts/submit-finding.sh" hypatia-findings.json
+          bash "$FLEET_DIR/scripts/submit-finding.sh" hypatia-findings.json \
+            || echo "::warning title=Fleet submission failed::submit-finding.sh errored; non-gating."
 
-          # Cleanup
           rm -rf "$FLEET_DIR"
-
-          echo "✅ Finding submission complete"
+          echo "Finding submission step complete"
+          exit 0
 
       - name: Check for critical issues
-        if: steps.scan.outputs.critical > 0
+        if: steps.scanner.outputs.ready == 'true' && steps.scan.outputs.critical > 0
         run: |
-          echo "⚠️  Critical security issues found!"
-          echo "Review hypatia-findings.json for details"
-          # Don't fail the build yet - just warn
-          # exit 1
+          echo "::warning title=Hypatia critical findings::${{ steps.scan.outputs.critical }} critical issue(s) found. Review hypatia-findings.json. Non-gating (fix-forward)."
 
       - name: Generate scan report
+        if: steps.scanner.outputs.ready == 'true'
         run: |
           cat << EOF > hypatia-report.md
           # Hypatia Security Scan Report
@@ -166,10 +237,10 @@ jobs:
           *Powered by [Hypatia](https://github.com/hyperpolymath/hypatia) - Neurosymbolic CI/CD Intelligence*
           EOF
 
-          cat hypatia-report.md >> $GITHUB_STEP_SUMMARY
+          cat hypatia-report.md >> "$GITHUB_STEP_SUMMARY"
 
       - name: Comment on PR with findings
-        if: github.event_name == 'pull_request' && steps.scan.outputs.findings_count > 0
+        if: github.event_name == 'pull_request' && steps.scanner.outputs.ready == 'true' && steps.scan.outputs.findings_count > 0
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v7
         with:
           script: |
