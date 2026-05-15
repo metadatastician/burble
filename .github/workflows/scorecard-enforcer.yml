@@ -35,6 +35,27 @@ jobs:
         with:
           sarif_file: results.sarif
 
+      # Hand the SARIF to the enforce-score job. This must be a `uses:`
+      # step: ossf/scorecard-action with publish_results: true requires
+      # the scorecard job to contain ONLY `uses:` steps, or the results
+      # webapp rejects publication with HTTP 400. The score gate that was
+      # an inline `run:` here is therefore moved to enforce-score below.
+      - name: Upload results for score gate
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: scorecard-sarif
+          path: results.sarif
+          retention-days: 1
+
+  enforce-score:
+    runs-on: ubuntu-latest
+    needs: scorecard
+    steps:
+      - name: Download Scorecard results
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: scorecard-sarif
+
       - name: Check minimum score
         run: |
           # Parse score from results
@@ -42,8 +63,14 @@ jobs:
 
           echo "OpenSSF Scorecard Score: $SCORE"
 
-          # Minimum acceptable score (0-10 scale)
-          MIN_SCORE=5
+          # Minimum acceptable score (0-10 scale).
+          # Lowered 5 -> 4 on 2026-05-15 by maintainer request: the real
+          # measured score is 4.6 (genuine gaps: required code review,
+          # branch protection, signed releases). 4 lets the current
+          # posture pass while still failing on regression below today's
+          # floor. This tracks reality; it is not a posture fix. Re-raise
+          # toward 8+ as the underlying gaps are closed.
+          MIN_SCORE=4
 
           if [ "$(echo "$SCORE < $MIN_SCORE" | bc -l)" = "1" ]; then
             echo "::error::Scorecard score $SCORE is below minimum $MIN_SCORE"
