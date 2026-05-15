@@ -9,8 +9,22 @@ const std = @import("std");
 
 const APT_FALLBACK = "/usr/lib/erlang/usr/include";
 
+fn dirHasNifHeader(b: *std.Build, dir: []const u8) bool {
+    const hdr = std.fs.path.join(b.allocator, &.{ dir, "erl_nif.h" }) catch return false;
+    std.fs.accessAbsolute(hdr, .{}) catch return false;
+    return true;
+}
+
 /// Locate the directory containing erl_nif.h without hardcoding an
-/// install layout. See the call site in build() for resolution order.
+/// install layout. Resolution order:
+///   1. -Derl-include=... build option (explicit override, trusted as-is)
+///   2. $ERL_NIF_INCLUDE_DIR (if it actually contains the header)
+///   3. ask `erl` for code:root_dir() + system version, then probe both
+///      known OTP header layouts (usr/include and erts-<vsn>/include) and
+///      return whichever actually contains erl_nif.h. This is what makes
+///      erlef/setup-beam (CI), kerl and asdf work — none of which use the
+///      Debian apt path.
+///   4. fall back to the apt path (dev convenience).
 fn resolveErlInclude(b: *std.Build) []const u8 {
     if (b.option(
         []const u8,
@@ -19,17 +33,33 @@ fn resolveErlInclude(b: *std.Build) []const u8 {
     )) |opt| return opt;
 
     if (std.process.getEnvVarOwned(b.allocator, "ERL_NIF_INCLUDE_DIR")) |env_dir| {
-        if (env_dir.len > 0) return env_dir;
+        if (env_dir.len > 0 and dirHasNifHeader(b, env_dir)) return env_dir;
     } else |_| {}
 
+    // Print "<root_dir>|<erts version>" so we can build both candidate dirs.
     const argv = [_][]const u8{
-        "erl",   "-noshell",
-        "-eval", "io:format(\"~s\", [filename:join([code:root_dir(), \"usr\", \"include\"])]), halt().",
+        "erl",                                                                           "-noshell", "-eval",
+        "io:format(\"~s|~s\", [code:root_dir(), erlang:system_info(version)]), halt().",
     };
     if (std.process.Child.run(.{ .allocator = b.allocator, .argv = &argv })) |res| {
         if (res.term == .Exited and res.term.Exited == 0) {
-            const trimmed = std.mem.trim(u8, res.stdout, " \t\r\n");
-            if (trimmed.len > 0) return b.dupe(trimmed);
+            const out = std.mem.trim(u8, res.stdout, " \t\r\n");
+            var it = std.mem.splitScalar(u8, out, '|');
+            const root = it.next() orelse "";
+            const vsn = it.next() orelse "";
+            if (root.len > 0) {
+                const usr = std.fs.path.join(b.allocator, &.{ root, "usr", "include" }) catch "";
+                if (usr.len > 0 and dirHasNifHeader(b, usr)) return usr;
+                if (vsn.len > 0) {
+                    const erts_dir = std.fmt.allocPrint(b.allocator, "erts-{s}", .{vsn}) catch "";
+                    const erts = std.fs.path.join(b.allocator, &.{ root, erts_dir, "include" }) catch "";
+                    if (erts.len > 0 and dirHasNifHeader(b, erts)) return erts;
+                }
+                // Header not found under either layout but we have a root:
+                // usr/include is the canonical install location — return it
+                // so the compile error names a real, diagnosable path.
+                if (usr.len > 0) return usr;
+            }
         }
     } else |_| {}
 
@@ -40,15 +70,8 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
-    // Erlang NIF header include path.
-    //
-    // Must NOT be hardcoded: `erlef/setup-beam` (CI) and kerl/asdf install
-    // OTP into a tool cache, not the Debian apt path `/usr/lib/erlang`.
-    // Resolution order:
-    //   1. -Derl-include=... build option (explicit override)
-    //   2. $ERL_NIF_INCLUDE_DIR environment variable
-    //   3. ask `erl` for code:root_dir() and append usr/include
-    //   4. fall back to the apt path (last resort, dev convenience)
+    // Erlang NIF header include path — resolved dynamically; see
+    // resolveErlInclude. Hardcoding breaks erlef/setup-beam (CI).
     const erl_include = resolveErlInclude(b);
 
     // Zig 0.15 requires every .zig file to belong to exactly one module.
