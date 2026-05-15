@@ -78,8 +78,14 @@ function disconnect(client) {
   client.config.onConnectionChange("Disconnected");
 }
 
+function secureIdSuffix() {
+  const b = new Uint8Array(4);
+  crypto.getRandomValues(b);
+  return Array.from(b, x => x.toString(16).padStart(2, "0")).join("");
+}
+
 function guestLogin(client, displayName) {
-  let guestId = "guest_" + Math.random().toString().slice(2, 10);
+  let guestId = "guest_" + secureIdSuffix();
   client.auth = {
     TAG: "Guest",
     id: guestId,

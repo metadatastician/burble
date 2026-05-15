@@ -186,7 +186,7 @@ jobs:
           git add -A
           git commit -m "fix(rhodibot): automated RSR compliance fixes
 
-          ${{ steps.fix.outputs.FIXES }}
+          $FIXES
 
           Co-Authored-By: rhodibot <rhodibot@hyperpolymath.dev>"
 
@@ -195,20 +195,20 @@ jobs:
           BODY="## 🤖 Rhodibot — RSR Compliance Fixes
 
           ### Changes Made
-          ${{ steps.fix.outputs.FIXES }}
+          $FIXES
           "
 
-          if [ -n "${{ steps.fix.outputs.ISSUES }}" ]; then
+          if [ -n "$ISSUES" ]; then
             BODY="$BODY
           ### Issues Found (manual fix needed)
-          ${{ steps.fix.outputs.ISSUES }}
+          $ISSUES
           "
           fi
 
-          if [ -n "${{ steps.fix.outputs.DANGEROUS }}" ]; then
+          if [ -n "$DANGEROUS" ]; then
             BODY="$BODY
           ### ⚠️ Dangerous Patterns Detected
-          ${{ steps.fix.outputs.DANGEROUS }}
+          $DANGEROUS
 
           _These bypass formal verification. See \`proven\` repo for alternatives._
           "
@@ -221,16 +221,22 @@ jobs:
             --head "$BRANCH"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          FIXES: ${{ steps.fix.outputs.FIXES }}
+          ISSUES: ${{ steps.fix.outputs.ISSUES }}
+          DANGEROUS: ${{ steps.fix.outputs.DANGEROUS }}
 
       - name: Report (no changes needed)
         if: steps.fix.outputs.CHANGED != 'true'
+        env:
+          ISSUES: ${{ steps.fix.outputs.ISSUES }}
+          DANGEROUS: ${{ steps.fix.outputs.DANGEROUS }}
         run: |
           echo "✅ Repository is RSR-compliant. No fixes needed."
-          if [ -n "${{ steps.fix.outputs.ISSUES }}" ]; then
+          if [ -n "$ISSUES" ]; then
             echo "⚠️ Issues found (manual fix needed):"
-            echo -e "${{ steps.fix.outputs.ISSUES }}"
+            echo -e "$ISSUES"
           fi
-          if [ -n "${{ steps.fix.outputs.DANGEROUS }}" ]; then
+          if [ -n "$DANGEROUS" ]; then
             echo "⚠️ Dangerous patterns:"
-            echo -e "${{ steps.fix.outputs.DANGEROUS }}"
+            echo -e "$DANGEROUS"
           fi
