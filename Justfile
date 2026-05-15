@@ -36,15 +36,46 @@ info:
 # Build everything (FFI + server deps)
 build: build-ffi build-server
 
+# Resolve the Erlang NIF include dir in the *shell* (where erlef/setup-beam's
+# PATH reliably applies, unlike a subprocess spawned from inside `zig build`)
+# and echo it. build.zig keeps its own detection as a fallback.
+_erl-include:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if command -v erl >/dev/null 2>&1; then
+      root=$(erl -noshell -eval 'io:format("~s",[code:root_dir()]),halt().' 2>/dev/null || true)
+      vsn=$(erl -noshell -eval 'io:format("~s",[erlang:system_info(version)]),halt().' 2>/dev/null || true)
+      for d in "$root/usr/include" "$root/erts-$vsn/include"; do
+        if [ -f "$d/erl_nif.h" ]; then echo "$d"; exit 0; fi
+      done
+    fi
+    echo ""
+
 # Build Zig coprocessor NIFs
 build-ffi:
-    cd ffi/zig && zig build -Doptimize=ReleaseFast
-    cp ffi/zig/zig-out/lib/libburble_coprocessor.so server/priv/ 2>/dev/null || true
+    #!/usr/bin/env bash
+    set -euo pipefail
+    erl_inc="$(just _erl-include)"
+    cd ffi/zig
+    if [ -n "$erl_inc" ]; then
+      zig build -Doptimize=ReleaseFast -Derl-include="$erl_inc"
+    else
+      zig build -Doptimize=ReleaseFast
+    fi
+    cp zig-out/lib/libburble_coprocessor.so ../../server/priv/ 2>/dev/null || true
 
 # Build Zig coprocessor (debug mode)
 build-ffi-debug:
-    cd ffi/zig && zig build
-    cp ffi/zig/zig-out/lib/libburble_coprocessor.so server/priv/ 2>/dev/null || true
+    #!/usr/bin/env bash
+    set -euo pipefail
+    erl_inc="$(just _erl-include)"
+    cd ffi/zig
+    if [ -n "$erl_inc" ]; then
+      zig build -Derl-include="$erl_inc"
+    else
+      zig build
+    fi
+    cp zig-out/lib/libburble_coprocessor.so ../../server/priv/ 2>/dev/null || true
 
 # Fetch Elixir deps and compile server
 build-server:
