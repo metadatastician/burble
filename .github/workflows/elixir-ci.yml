@@ -28,10 +28,10 @@ jobs:
           otp-version: '27'
           elixir-version: '1.17'
 
-      - name: Set up Zig 0.13
+      - name: Set up Zig 0.15
         uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29  # v2.2.1
         with:
-          version: '0.13.0'
+          version: '0.15.1'
 
       - name: Install just
         uses: taiki-e/install-action@899b013517f9e7774591216672bf75a46bb9a481  # v2.9.4
