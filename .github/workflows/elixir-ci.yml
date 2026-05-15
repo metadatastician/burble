@@ -28,10 +28,15 @@ jobs:
           otp-version: '27'
           elixir-version: '1.17'
 
-      - name: Set up Zig 0.13
+      - name: Set up Zig 0.15
         uses: mlugg/setup-zig@53fc45b17fe98b52f92ee5ea08ff48a85a3e7eb7  # v1.2.2
         with:
-          version: '0.13'
+          # Must be an exact published Zig tag. '0.13' is not a release
+          # artefact (only '0.13.0' is) AND ffi/zig/build.zig is written
+          # for Zig 0.15; the prior '0.13' value 404'd at setup, so the
+          # test job never reached `just test-server`. Pinned exact (not
+          # 'latest') for deterministic CI; tracks build.zig's declared 0.15.
+          version: '0.15.2'
 
       - name: Install just
         uses: taiki-e/install-action@899b013517f9e7774591216672bf75a46bb9a481  # v2.9.4

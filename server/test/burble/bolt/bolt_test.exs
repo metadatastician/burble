@@ -195,15 +195,18 @@ defmodule Burble.BoltTest do
 
   describe "Burble.Bolt.Quic.cert_paths/0" do
     test "returns {:ok, cert, key} when the dev cert is present" do
+      # Contract: either both cert files genuinely exist, or the function
+      # degrades with *exactly* {:error, :no_cert} (acceptable in CI
+      # without the dev cert). Asserting the exact error tuple catches a
+      # regression to any other failure mode, which the old `assert true`
+      # silently swallowed.
       case Quic.cert_paths() do
         {:ok, cert, key} ->
           assert File.exists?(cert)
           assert File.exists?(key)
 
-        {:error, :no_cert} ->
-          # Acceptable in CI environments without the cert; flag so
-          # operators don't silently ship without it.
-          assert true
+        other ->
+          assert other == {:error, :no_cert}
       end
     end
   end

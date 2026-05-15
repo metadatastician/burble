@@ -120,11 +120,14 @@ defmodule Burble.Coprocessor.SignalScienceTest do
     test "detects tone in speech band as potential speech" do
       # 1 kHz tone — in the speech frequency range.
       tone = for i <- 1..@frame_length, do: :math.sin(2.0 * :math.pi() * 1000.0 * i / @sample_rate) * 0.5
-      {_is_speech, _confidence, _state} = ElixirBackend.audio_spectral_vad(tone, @sample_rate, %{})
+      {is_speech, confidence, state} = ElixirBackend.audio_spectral_vad(tone, @sample_rate, %{})
 
-      # A pure tone has low spectral flatness (good) but may not pass all speech criteria.
-      # This test just verifies the function runs without error on tonal input.
-      assert true
+      # A pure tone may or may not satisfy every speech criterion, so the
+      # classification itself is not asserted. The documented return
+      # contract is: {boolean, confidence in 0.0..1.0, state map}.
+      assert is_boolean(is_speech)
+      assert is_float(confidence) and confidence >= 0.0 and confidence <= 1.0
+      assert is_map(state)
     end
 
     test "detects white noise as non-speech" do
