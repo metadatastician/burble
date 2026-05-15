@@ -51,18 +51,13 @@ defmodule Burble.StoreTest do
   end
 
   describe "GenServer registration" do
-    test "Burble.Store is registered when the application is running" do
+    test "Burble.Store whereis returns nil or a live pid, never crashing" do
       # The Store may not be started if VeriSimDB is unavailable in CI.
-      # We just check that the name is either registered (live) or absent —
-      # either way the call should not crash the test process.
-      case GenServer.whereis(Burble.Store) do
-        nil ->
-          # Not started — acceptable in environments without VeriSimDB.
-          assert true
-
-        pid when is_pid(pid) ->
-          assert Process.alive?(pid)
-      end
+      # Contract under test: whereis/1 yields nil or a live pid and does
+      # not raise. Assert that invariant directly instead of a vacuous
+      # branch that passed unconditionally.
+      result = GenServer.whereis(Burble.Store)
+      assert is_nil(result) or (is_pid(result) and Process.alive?(result))
     end
   end
 end

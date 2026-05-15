@@ -47,6 +47,12 @@ jobs:
         id: build
         continue-on-error: true
         run: |
+          # Use the shell $HOME, not ${{ env.HOME }}: the latter reads the
+          # workflow `env:` map (never set here) and resolves to an empty
+          # string, so `working-directory` became "/hypatia" and the step
+          # failed with "No such file or directory". The clone (above) and
+          # scan (below) steps already use the shell "$HOME/hypatia"; this
+          # makes the build step consistent with them.
           cd "$HOME/hypatia"
           if [ ! -f hypatia-v2 ] && [ -d scanner ]; then
             echo "Building hypatia-v2 scanner..."
