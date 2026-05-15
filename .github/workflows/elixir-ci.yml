@@ -56,7 +56,15 @@ jobs:
 
       - name: Build Zig FFI
         working-directory: ${{ github.workspace }}
-        run: just build-ffi
+        run: |
+          # erlef/setup-beam installs OTP under the tool cache, not at
+          # build.zig's hardcoded /usr/lib/erlang default. Derive the real
+          # NIF header dir from the running Erlang so erl_nif.h is found.
+          ERL_INCLUDE="$(erl -noshell -eval 'io:format("~ts/usr/include", [code:root_dir()])' -s init stop)"
+          echo "erl_nif.h include dir: $ERL_INCLUDE"
+          test -f "$ERL_INCLUDE/erl_nif.h" || { echo "::error::erl_nif.h not found at $ERL_INCLUDE"; exit 1; }
+          ( cd ffi/zig && zig build -Doptimize=ReleaseFast -Derl-include="$ERL_INCLUDE" )
+          cp ffi/zig/zig-out/lib/libburble_coprocessor.so server/priv/ 2>/dev/null || true
 
       - name: Run server tests
         working-directory: ${{ github.workspace }}
