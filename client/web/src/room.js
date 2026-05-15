@@ -30,11 +30,23 @@ export function generateRoomName() {
 
 /**
  * Pick a random word from the word list
- * 
+ *
+ * Uses the Web Crypto CSPRNG rather than Math.random(): room names gate
+ * access to a private voice room, so they must not be predictable. Uniform
+ * selection via rejection sampling to avoid modulo bias.
+ *
  * @returns {string} Random word
  */
 function pickRandomWord() {
-  return WORD_LIST[Math.floor(Math.random() * WORD_LIST.length)];
+  const range = WORD_LIST.length;
+  const limit = Math.floor(0x100000000 / range) * range;
+  const buf = new Uint32Array(1);
+  let n;
+  do {
+    crypto.getRandomValues(buf);
+    n = buf[0];
+  } while (n >= limit);
+  return WORD_LIST[n % range];
 }
 
 /**
