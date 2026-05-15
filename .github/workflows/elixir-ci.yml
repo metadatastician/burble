@@ -67,11 +67,23 @@ jobs:
         # The build still RUNS and every error stays visible in this
         # step's log and as a step annotation; only the pass/fail gate
         # is severed (consistent with the non-gating "Run server tests"
-        # step below). Deliberate, temporary signal suppression while
-        # the Zig 0.15 / setup-beam build is stabilised — not a fix. To
-        # re-arm the gate, delete the single line below.
+        # and "Run Dialyzer" steps). Deliberate, temporary signal
+        # suppression while the Zig 0.15 / setup-beam build is
+        # stabilised — not a fix. To re-arm the gate, delete the single
+        # continue-on-error line below.
         continue-on-error: true
-        run: just build-ffi
+        run: |
+          # erlef/setup-beam installs OTP under the tool cache, not at
+          # build.zig's hardcoded /usr/lib/erlang default. Derive the real
+          # NIF header dir from the running Erlang so erl_nif.h is found.
+          # build.zig also resolves this dynamically (-Derl-include is
+          # mode 1 of its 4-mode probe); passing it explicitly keeps CI
+          # deterministic and independent of the fallback chain.
+          ERL_INCLUDE="$(erl -noshell -eval 'io:format("~ts/usr/include", [code:root_dir()])' -s init stop)"
+          echo "erl_nif.h include dir: $ERL_INCLUDE"
+          test -f "$ERL_INCLUDE/erl_nif.h" || { echo "::error::erl_nif.h not found at $ERL_INCLUDE"; exit 1; }
+          ( cd ffi/zig && zig build -Doptimize=ReleaseFast -Derl-include="$ERL_INCLUDE" )
+          cp ffi/zig/zig-out/lib/libburble_coprocessor.so server/priv/ 2>/dev/null || true
 
       - name: Run server tests
         working-directory: ${{ github.workspace }}
