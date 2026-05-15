@@ -231,9 +231,17 @@ let disconnect = (client: client): unit => {
 // Auth
 // ---------------------------------------------------------------------------
 
+/// Cryptographically strong guest-id suffix (8 hex chars).
+/// Math.random() is not a CSPRNG; guest ids are identity tokens.
+let secureIdSuffix: unit => string = %raw(`function () {
+  const b = new Uint8Array(4);
+  crypto.getRandomValues(b);
+  return Array.from(b, x => x.toString(16).padStart(2, "0")).join("");
+}`)
+
 /// Authenticate as a guest.
 let guestLogin = (client: client, displayName: string): unit => {
-  let guestId = "guest_" ++ Float.toString(Math.random())->String.slice(~start=2, ~end=10)
+  let guestId = "guest_" ++ secureIdSuffix()
   client.auth = Guest({id: guestId, displayName})
   client.config.onAuthChange(client.auth)
 }
