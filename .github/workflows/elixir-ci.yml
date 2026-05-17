@@ -43,7 +43,13 @@ jobs:
       - name: Install just
         uses: taiki-e/install-action@899b013517f9e7774591216672bf75a46bb9a481  # v2.9.4
         with:
-          tool: just
+          # Pin an explicit modern just: the Justfile uses `import?`
+          # (optional import, just >= 1.19.0). Unversioned `tool: just`
+          # resolves via this action's bundled manifest, which shipped
+          # just 1.14.0 -> `error: Unknown start of token` at
+          # `import? "contractile.just"`, so `mix test --no-start`
+          # never ran (root cause of the dead Elixir gate, burble#39).
+          tool: just@1.34.0
 
       - name: Install system prerequisites for quicer/msquic
         run: |
