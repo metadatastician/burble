@@ -56,11 +56,11 @@ $script:TaskName = 'BurbleBoltUdpForward'
 
 function Resolve-WslIp {
     param([string]$Distro)
-    $args = @()
-    if ($Distro) { $args += @('-d', $Distro) }
-    $args += @('--', 'hostname', '-I')
+    $wslArgs = @()
+    if ($Distro) { $wslArgs += @('-d', $Distro) }
+    $wslArgs += @('--', 'hostname', '-I')
     try {
-        $out = (& wsl.exe @args) 2>$null
+        $out = (& wsl.exe @wslArgs) 2>$null
     } catch { return $null }
     if (-not $out) { return $null }
     foreach ($tok in ($out -split '\s+')) {
