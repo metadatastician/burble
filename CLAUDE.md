@@ -113,8 +113,8 @@ The Bolt listener binds udp/7373 (`Burble.Bolt.Listener`, also QUIC via
 default NAT mode, inbound LAN UDP never reaches the listener. If you're
 on Windows + WSL2 and the server side won't accept Bolt datagrams from
 another host, see `docs/developer/wsl-mirrored-networking.adoc` —
-`networkingMode=mirrored` in the host `.wslconfig` plus a Defender
-firewall rule for udp/7373.
+default NAT + the `scripts/wsl-bolt-udp-forward.ps1` host forwarder
+(recommended) plus a Defender firewall rule for udp/7373.
 
 ## Do not
 
