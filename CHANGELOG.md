@@ -10,6 +10,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- README/ROADMAP claims scoped to the shipped build per ADR-0007: QUIC & SNIF marked experimental (optional NIFs disabled by default), PTP <1µs flagged hardware-gated, Idris2 proofs flagged type-check-only (runtime enforcement = ADR-0008 Option C), latency/scale flagged unbenchmarked; added a README Status section. Closes the STATE.a2ml doc-reality-drift entries (issue #51)
+
 ### Added
 - ADR-0007 (Accepted): claims-to-evidence discipline & optional-dependency policy — every headline claim maps to code+test or is labelled experimental; optional NIF deps are experimental-until-wired. Closes the recurring `doc-reality-drift` blocker. Earn-the-Core epic #53
 - ADR-0008 (Accepted, Option C): scope the "formally verified" claim now (per ADR-0007) and fund a single-module runtime-enforcement PoC (issue #55)
