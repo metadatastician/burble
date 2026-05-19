@@ -14,15 +14,10 @@ defmodule Burble.Chat.MessageStoreTest do
 
   alias Burble.Chat.MessageStore
 
-  # Start a fresh MessageStore for each test so ETS state doesn't bleed.
+  # Shared-app strategy (burble#62): the application owns MessageStore.
+  # Every test uses a unique random room id (room_id/0) so ETS state
+  # cannot bleed between tests without restarting the process.
   setup do
-    # Stop any existing instance (e.g. from Application startup in test env).
-    case Process.whereis(MessageStore) do
-      nil -> :ok
-      pid -> GenServer.stop(pid)
-    end
-
-    {:ok, _pid} = start_supervised!(MessageStore)
     :ok
   end
 

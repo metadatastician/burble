@@ -54,6 +54,22 @@ defmodule Burble.TestHelpers do
     "user-" <> Base.encode16(:crypto.strong_rand_bytes(4), case: :lower)
   end
 
+  @doc """
+  Start a child spec for the test, or reuse it if the application already
+  owns it (shared-app+reset test strategy, burble#62). Returns `{:ok, pid}`
+  whether freshly started or already running, so setups never crash on
+  `:already_started` for app-owned singletons.
+  """
+  @spec ensure_started(tuple() | module()) :: {:ok, pid()}
+  def ensure_started(spec) do
+    case ExUnit.Callbacks.start_supervised(spec) do
+      {:ok, pid} -> {:ok, pid}
+      {:error, {:already_started, pid}} -> {:ok, pid}
+      {:error, {{:already_started, pid}, _spec}} -> {:ok, pid}
+      {:error, reason} -> raise "ensure_started failed: #{inspect(reason)}"
+    end
+  end
+
   @doc "Build a Plug.Conn for testing API endpoints."
   @spec build_conn(String.t(), String.t(), map()) :: Plug.Conn.t()
   def build_conn(method, path, params \\ %{}) do
