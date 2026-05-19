@@ -35,9 +35,9 @@ defmodule Burble.Concurrency.SessionConcurrencyTest do
 
     # Use start_supervised! so ExUnit owns the lifecycle and restarts these
     # processes between tests, giving each test a clean slate.
-    start_supervised!({Phoenix.PubSub, name: Burble.PubSub})
-    start_supervised!({Registry, keys: :unique, name: Burble.RoomRegistry})
-    start_supervised!({DynamicSupervisor, name: Burble.RoomSupervisor, strategy: :one_for_one})
+    ensure_started({Phoenix.PubSub, name: Burble.PubSub})
+    ensure_started({Registry, keys: :unique, name: Burble.RoomRegistry})
+    ensure_started({DynamicSupervisor, name: Burble.RoomSupervisor, strategy: :one_for_one})
 
     :ok
   end

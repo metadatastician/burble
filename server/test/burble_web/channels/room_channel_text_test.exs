@@ -29,20 +29,15 @@ defmodule BurbleWeb.Channels.RoomChannelTextTest do
   setup do
     Application.ensure_all_started(:phoenix_pubsub)
 
-    start_supervised!({Phoenix.PubSub, name: Burble.PubSub})
-    start_supervised!({Registry, keys: :unique, name: Burble.RoomRegistry})
-    start_supervised!({DynamicSupervisor, name: Burble.RoomSupervisor, strategy: :one_for_one})
-    start_supervised!(Burble.Presence)
-    start_supervised!(Burble.Media.Engine)
-    start_supervised!(Burble.Text.NNTPSBackend)
+    ensure_started({Phoenix.PubSub, name: Burble.PubSub})
+    ensure_started({Registry, keys: :unique, name: Burble.RoomRegistry})
+    ensure_started({DynamicSupervisor, name: Burble.RoomSupervisor, strategy: :one_for_one})
+    ensure_started(Burble.Presence)
+    ensure_started(Burble.Media.Engine)
+    ensure_started(Burble.Text.NNTPSBackend)
 
-    # MessageStore — stop any existing instance first so we get a clean ETS table.
-    case Process.whereis(Burble.Chat.MessageStore) do
-      nil -> :ok
-      pid -> GenServer.stop(pid)
-    end
-
-    start_supervised!(Burble.Chat.MessageStore)
+    # MessageStore is application-owned; unique room ids isolate (#62).
+    ensure_started(Burble.Chat.MessageStore)
 
     case BurbleWeb.Endpoint.start_link() do
       {:ok, _pid} -> :ok

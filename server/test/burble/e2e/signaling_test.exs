@@ -45,15 +45,15 @@ defmodule Burble.E2E.SignalingTest do
     Application.ensure_all_started(:phoenix_pubsub)
 
     # start_supervised! ensures ExUnit owns the lifecycle and tears down between tests.
-    start_supervised!({Phoenix.PubSub, name: Burble.PubSub})
-    start_supervised!({Registry, keys: :unique, name: Burble.RoomRegistry})
-    start_supervised!({DynamicSupervisor, name: Burble.RoomSupervisor, strategy: :one_for_one})
+    ensure_started({Phoenix.PubSub, name: Burble.PubSub})
+    ensure_started({Registry, keys: :unique, name: Burble.RoomRegistry})
+    ensure_started({DynamicSupervisor, name: Burble.RoomSupervisor, strategy: :one_for_one})
 
     # Presence tracker — required by RoomChannel.handle_info(:after_join).
-    start_supervised!(Burble.Presence)
+    ensure_started(Burble.Presence)
 
     # Media.Engine — required by RoomChannel.join/3 (add_peer call).
-    start_supervised!(Burble.Media.Engine)
+    ensure_started(Burble.Media.Engine)
 
     # Start Endpoint last — depends on PubSub.
     # BurbleWeb.Endpoint is configured with server: false in test config so
