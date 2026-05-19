@@ -1,0 +1,83 @@
+= Architecture Decision Record: 0006-proven-frame-not-applicable-to-bolt-packet
+<!-- SPDX-License-Identifier: PMPL-1.0-or-later -->
+<!-- Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk> -->
+
+# 6. proven-frame is not applicable to Burble.Bolt.Packet
+
+Date: 2026-05-19
+
+## Status
+
+Accepted
+
+Closes the "proven-frame hardening of `Burble.Bolt.Packet`" backlog item
+deferred by ADR-0005.
+
+## Context
+
+ADR-0005 deferred, as a low-priority backlog item, the idea of hardening
+`Burble.Bolt.Packet`'s decoder with the formally-verified `proven-frame`
+core from `proven-servers`, describing it as a "weak impedance match".
+This ADR records the outcome of actually scoping that.
+
+`proven-frame` is a verified **stream-framing** primitive. It models
+`FrameStrategy` (LineDelimited, LengthPrefixed, HTTPFrame, FixedSize,
+ChunkEncoded, RawBytes, TLVFrame), `Delimiter`, `LengthEncoding`,
+`FrameState`, `FrameError`, with roundtrip proofs on the tag encodings,
+and a Zig FFI that is an **incremental stream parser**
+(`frame_parser_create` / `frame_feed` / `frame_emit` / `frame_reset`).
+Its entire purpose is answering "where does one message end in a
+continuous byte stream".
+
+`Burble.Bolt.Packet` has no stream-framing problem:
+
+* Bolt is **one datagram = one message**. The UDP / QUIC-datagram
+  (RFC 9221) boundary *is* the message boundary. There is nothing to
+  delimit; `FrameStrategy` does not apply (the nearest value is
+  literally `RawBytes` — "no framing").
+* The header is a **fixed-offset binary record**, decoded in a single
+  Elixir binary pattern match in `decode/1`.
+* That decoder is **already total and memory-safe by construction**.
+  BEAM binary pattern matching cannot overrun a buffer; non-matching
+  input falls through to `{:error, :bad_magic | :too_short |
+  :truncated_payload | :invalid_json}`. The C-style parser bug class
+  `proven-frame` exists to eliminate is *unreachable* here.
+
+## Decision
+
+Do **not** integrate `proven-frame` into `Burble.Bolt.Packet`, and close
+the ADR-0005 backlog item. This is a category mismatch (stream-framing
+core vs. fixed-layout single-datagram record), not a tuning question.
+
+Wrapping Bolt bytes through a Zig/wasm FFI frame parser would *introduce*
+an unsafe foreign boundary in order to replace code that is already safe
+— a net regression in both safety and simplicity, contrary to the
+project's real-fix-over-stub principle.
+
+If verified hardening of the Bolt path is ever desired, the only
+non-trivial parse is the JSON payload (`Jason.decode/1`, already safe)
+and `parse_mac/1`; that is a different question, a different core, and
+explicitly out of scope here.
+
+## Consequences
+
+### Positive
+
+* No unsafe FFI boundary added; `Burble.Bolt.Packet` stays a single
+  total Elixir function.
+* The backlog item is closed with a recorded rationale rather than
+  lingering as perpetual "someday" debt.
+
+### Negative
+
+* None material. `Burble.Bolt.Packet` gains no formal proof — but it did
+  not need one; its safety is already structural.
+
+### Neutral
+
+* `proven-frame` remains the right tool for genuine stream-framing
+  protocols elsewhere (line/length/TLV/chunked) — this ADR scopes only
+  its (non-)applicability to Bolt.
+* Crash isolation for the Zig DSP NIFs is handled by the SNIF/Wasmex
+  path (`Burble.Coprocessor.SNIFBackend`), which is unrelated to Bolt
+  packet parsing.

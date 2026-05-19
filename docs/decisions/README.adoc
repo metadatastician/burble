@@ -31,4 +31,8 @@ New ADRs copy `0000-template.adoc` and take the next number.
 | link:0005-wsl-bolt-inbound-udp-no-mirrored.adoc[0005]
 | WSL2 Bolt inbound UDP via a host forwarder, not mirrored networking
 | Accepted
+
+| link:0006-proven-frame-not-applicable-to-bolt-packet.adoc[0006]
+| proven-frame is not applicable to Burble.Bolt.Packet
+| Accepted
 |===
