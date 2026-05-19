@@ -1,0 +1,31 @@
+// SPDX-License-Identifier: PMPL-1.0-or-later
+= server — Elixir/Phoenix control plane
+:toc: preamble
+
+== Purpose
+
+The OTP control plane: auth, sessions, rooms, presence, permissions,
+signaling, moderation, audit, the Bolt listener, the LLM service, and the
+WebRTC SFU orchestration. Everything runs under a supervision tree so a
+crashed room never takes the node down.
+
+== Contents
+
+`lib/burble/`:: Core application (Bolt, circuit breaker, groove, llm,
+presence, store, telemetry, topology, timing, chat, transport, media,
+verification). Each implementation subtree has its own README.
+`lib/burble_web/`:: Phoenix endpoint, router, channels, controllers, CDN.
+`config/`:: Compile- and runtime-config (`runtime.exs` reads env vars).
+`priv/`:: Static assets, the Zig NIF (`libburble_coprocessor.so`), certs.
+`rel/`:: Release definitions (`mix release` / Containerfile).
+`test/`:: ExUnit suite (222+ tests; property, e2e, contract, concurrency).
+`mix.exs` / `mix.lock`:: Deps. Optional NIFs (`quicer`, `wasmex`) are
+intentionally disabled — see ADR-0004/0007; runtime degrades gracefully.
+
+`_build/`, `deps/`, `erl_crash.dump` are build/runtime artefacts, not
+tracked.
+
+== Run
+
+`cd server && mix deps.get && mix phx.server` (see root `README.adoc` for
+the full prerequisite list and one-command container path).

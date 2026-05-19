@@ -1,0 +1,29 @@
+// SPDX-License-Identifier: PMPL-1.0-or-later
+= scripts — operational helpers
+:toc: preamble
+
+== Purpose
+
+Operator/maintainer scripts for deployment, Bolt reachability, and build
+prerequisites. None are required for `just deploy`; they support
+specific deployment topologies.
+
+== Contents
+
+*Bolt reachability:*
+`cf-bolt-dns.sh`, `cf-ddns.sh`, `cf-worker-deploy.sh`:: Cloudflare NAPTR/
+SRV + DDNS provisioning and worker deploy for public Bolt reach.
+`gen-bolt-cert.sh`:: Ed25519/P-256 self-signed cert for Bolt-over-QUIC
+(ADR-0004).
+`check-bolt-reachability.sh`:: Verify udp/7373 is reachable end-to-end.
+`mikrotik-bolt-nat.sh`:: Router dst-NAT rule for udp/7373.
+`wsl-bolt-udp-forward.ps1`:: Windows-host UDP forwarder for running the
+Bolt listener under WSL2 without mirrored networking (ADR-0005).
+
+*Build / deploy:*
+`ensure-msquic-version.sh`, `ensure-quicer-prereqs.sh`:: Guard the
+optional QUIC toolchain (msquic/quicer; experimental — ADR-0007).
+`docker-to-podman-image.sh`, `install-desktop.sh`, `smoke-check.sh`::
+Deploy/build utilities.
+
+`burble-launcher.sh.deprecated-2026-04-10`:: Retained, deprecated.

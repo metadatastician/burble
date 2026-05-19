@@ -1,0 +1,22 @@
+// SPDX-License-Identifier: PMPL-1.0-or-later
+= ffi — foreign-function surface
+:toc: preamble
+
+== Purpose
+
+Native code bridged into the BEAM. The Zig SIMD coprocessor is the only
+FFI surface (the former V-lang layer was removed 2026-04-16; Zig is
+canonical).
+
+== Contents
+
+`zig/`:: SIMD audio/DSP/compression/neural NIFs compiled to
+`libburble_coprocessor.so`, loaded by `Burble.Coprocessor.ZigBackend`.
+Mirrors the Idris2 ABI proofs in `verification/`. See `ffi/zig/README.adoc`
+for the per-file breakdown and benchmarks.
+
+== Note
+
+WASM crash-isolation of these kernels (SNIF, `Burble.Coprocessor.SNIFBackend`)
+is an optional experimental path that degrades to this Zig backend when
+the `wasmex` NIF is absent (ADR-0007; PR #46).

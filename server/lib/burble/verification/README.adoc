@@ -1,0 +1,25 @@
+// SPDX-License-Identifier: PMPL-1.0-or-later
+= server/lib/burble/verification — attestation & integrity
+:toc: preamble
+
+== Purpose
+
+Runtime consent attestation and capability/integrity chains. These
+mirror Idris2 ABI proofs in `verification/` (repo root) and
+`src/Burble/ABI/`.
+
+== Key files
+
+`avow.ex`:: Consent attestation hash-chain (room join/leave). Enforces
+hash-chain linkage and data-type integrity at runtime. *Dependent-type
+enforcement is not yet wired* — the Idris2 proofs compile/type-check but
+runtime enforcement is roadmap (ADR-0008, Option C; PoC issue #55).
+`vext.ex`:: Capability hash chain + subsumption (extension sandboxing);
+backed by the `Vext.idr` proofs (capability transitivity).
+`vext_groove.ex`:: Vext integration with the Groove health/feedback mesh.
+
+== Honest status
+
+Safe-by-construction for current use cases; the proof→runtime
+enforcement bridge is the subject of ADR-0008. Do not describe this tree
+as "formally enforced" until #55 reports (per ADR-0007).
