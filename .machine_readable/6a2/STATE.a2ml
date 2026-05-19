@@ -127,6 +127,17 @@ open-failures = 0
 #             (NAT+forwarder default, bridged alt, mirrored last-resort); ADR-0005.
 #             proven-stun NAT traversal scoped + rejected (cold bolts target
 #             offline peers — hole-punching structurally impossible).
+# 2026-05-19: #39 test-gate root cause FOUND + total-collapse fixed —
+#             Burble.Store refused to start without VeriSimDB (first
+#             supervised child), collapsing the whole tree so every
+#             app-dependent test failed at boot. Added config-gated
+#             offline_ok (test.exs) -> app now boots (65 children).
+#             Also fixed 3 test-file compile errors (snif_backend_test
+#             x2, room_property_test check-all). Suite now RUNS: 707
+#             tests, 156 failures (was: would not compile/boot at all).
+#             Gate still NOT re-armed (continue-on-error kept per #39);
+#             remaining 156 = genuine test debt + OTP25-vs-CI-OTP27
+#             skew, needs authoritative CI run to triage.
 
 [crg]
 grade = "C"

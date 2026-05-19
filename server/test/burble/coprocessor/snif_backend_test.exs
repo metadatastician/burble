@@ -3,14 +3,13 @@ defmodule Burble.Coprocessor.SNIFBackendTest do
   use ExUnit.Case, async: true
   alias Burble.Coprocessor.{SNIFBackend, ZigBackend, ElixirBackend}
 
-  describe "SNIFBackend" do
-    test "backend_type returns :snif" do
+  test "backend_type returns :snif" do
       assert SNIFBackend.backend_type() == :snif
     end
 
     test "available? returns false when WASM file missing" do
-      # Temporarily change path to non-existent file
-      original_path = SNIFBackend.__info__(:functions)[:available?][]
+      # No WASM file and no :wasmex NIF in the test env, so the backend
+      # must report unavailable (see ADR-0007 / PR #46).
       
       # Mock the path check
       assert SNIFBackend.available?() == false
@@ -75,5 +74,4 @@ defmodule Burble.Coprocessor.SNIFBackendTest do
         assert result == [1.0, 0.5, 0.25]
       end
     end
-  end
 end
