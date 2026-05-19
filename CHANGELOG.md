@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- ADR-0006: scoped and formally declined `proven-frame` hardening of `Burble.Bolt.Packet` (category mismatch — stream-framing core vs. a single-datagram record already total/safe via BEAM binary matching); closes the ADR-0005 backlog item
 - Typed `NifEvent` ADT for Zig NIF audio events (VadStateChange, AgcLevelChange, DenoiserConfidence)
 - Safe `pollEvents` returning `Maybe NifEvent` instead of raw `Bits64`
 - Bidirectional PositionUpdate (tag 8) decode with Vec3 + orientation relay via PubSub
