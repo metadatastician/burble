@@ -187,9 +187,14 @@ function Install-Task {
     param([string]$Distro, [int[]]$Ports, [switch]$Firewall)
     $self = $MyInvocation.MyCommand.Path
     if (-not $self) { $self = $PSCommandPath }
-    $argline = "-NoProfile -ExecutionPolicy Bypass -File `"$self`" -Run"
-    if ($Distro) { $argline += " -Distro `"$Distro`"" }
-    if ($Ports)  { $argline += " -Ports $($Ports -join ',')" }
+    # NOTE: use -Command, not -File. With -File, `-Ports 7373,9` is passed
+    # as the literal string "7373,9" which cannot bind to [int[]]$Ports and
+    # the task aborts before binding (LastTaskResult=1). -Command parses the
+    # array argument correctly.
+    $inner = "& '$self' -Run"
+    if ($Distro) { $inner += " -Distro '$Distro'" }
+    if ($Ports)  { $inner += " -Ports $($Ports -join ',')" }
+    $argline = "-NoProfile -ExecutionPolicy Bypass -Command `"$inner`""
 
     $action  = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument $argline
     $trigger = New-ScheduledTaskTrigger -AtLogOn
