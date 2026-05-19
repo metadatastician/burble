@@ -1,0 +1,67 @@
+= Architecture Decision Record: 0007-claims-to-evidence-discipline
+<!-- SPDX-License-Identifier: PMPL-1.0-or-later -->
+<!-- Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk> -->
+
+# 7. Claims-to-evidence discipline & optional-dependency policy
+
+Date: 2026-05-19
+
+## Status
+
+Accepted
+
+Formalises the recurring `STATE.a2ml [blockers-and-issues] doc-reality-drift`
+problem. Implements the doc-honesty half of the "Earn the Core" program
+(tracking epic + issue #51).
+
+## Context
+
+Doc-reality drift is a recurring, self-acknowledged failure mode: the
+README/ROADMAP have repeatedly claimed as DONE things that are partial in
+the shipped build (Formal Proofs "DONE" but no runtime enforcement; PTP
+"sub-microsecond" but the hardware clock NIF is unvalidated and absent;
+QUIC and SNIF marketed while `quicer`/`wasmex` are disabled optional deps;
+"<10 ms" / "500+ concurrent" unbenchmarked).
+
+Each overclaim taxes the credibility of the *true* core claims. The
+`EXPLAINME.adoc` "show me the receipts, with honest caveats" pattern is
+the correct instinct but is not enforced repo-wide, and "optional" NIF
+dependencies are described as if always present.
+
+## Decision
+
+1. **Claims map to evidence.** Every capability stated as fact in
+   `README.adoc` / `ROADMAP.adoc` / marketing-facing docs MUST map to (a)
+   a concrete code path and (b) an automated test. Anything not meeting
+   both goes in an explicit **Experimental** or **Aspirational** section,
+   clearly labelled as such.
+2. **Optional dependencies are experimental-until-wired.** A capability
+   that depends on an optional/disabled NIF (`quicer`/msquic,
+   `wasmex`/SNIF, `elmdb`, …) is **Experimental** in user-facing docs
+   until the dependency is built, enabled, and covered by a test in CI.
+   Runtime code already degrades gracefully (the `:quicer` /
+   `Burble.Bolt.Quic` pattern, ADR-0004; SNIF/`Wasmex`, PR #46) — the
+   *claims* must match that reality.
+3. **Drift is a release gate.** Re-attaining/holding CRG C includes a
+   check that headline claims have not regressed against this policy.
+
+## Consequences
+
+### Positive
+
+- The README's core claims become trustworthy; the strong core stops
+  being obscured by the augmented layer's ambition.
+- A single, citable policy to close `doc-reality-drift` entries against.
+
+### Negative
+
+- The README will, in the short term, *look* less impressive: several
+  features move under "Experimental". This is the point — honest scope
+  is the asset.
+
+### Neutral
+
+- No code change. Enforcement is editorial + a CI doc-claim check
+  (scoped under issue #51 / CRG-C #50).
+- The formal-proof "DONE vs enforced" claim is the subject of its own
+  decision — see ADR-0008.
