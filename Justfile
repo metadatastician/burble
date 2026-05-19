@@ -85,7 +85,9 @@ build-server:
 # Module collision note: src/interface/abi/ also declares Burble.ABI.Types
 # and is excluded from this recipe (deferred to Phase 1 module-path cleanup).
 build-proofs:
-    cd src/Burble/ABI && idris2 --build burble-abi.ipkg
+    # idris2 binaries built elsewhere bake in a wrong prefix; derive it
+    # from the idris2 on PATH (override with IDRIS2_PREFIX if needed).
+    cd src/Burble/ABI && IDRIS2_PREFIX="${IDRIS2_PREFIX:-$(dirname "$(dirname "$(command -v idris2)")")}" idris2 --build burble-abi.ipkg
 
 # Build web client
 build-client:

@@ -1,7 +1,7 @@
 <!-- SPDX-License-Identifier: PMPL-1.0-or-later -->
 # Burble Proof Status
 
-**Short version.** All six Idris2 ABI proof modules compile and type-check. See `PROOF-NEEDS.md` for the current proof inventory, and `STATE.a2ml` for any in-progress work.
+**Short version (verified 2026-05-19, Idris2 0.8.0).** 6 of 7 ABI modules compile and type-check: `Types`, `Foreign`, `WebRTCSignaling`, `Permissions`, `Avow`, `Vext`. **`MediaPipeline.idr` does NOT compile** — it uses the Idris1 `postulate` keyword, removed in Idris2 (parse error at the `resampleFrame` declaration). The aggregate `just build-proofs` now works (ipkg `sourcedir` + `IDRIS2_PREFIX` were both broken — fixed) but the build still aborts at `MediaPipeline`. Tracked: see the proofs issue under epic #53. Per ADR-0007 the "formally verified" claim is type-check-level for 6/7 modules, NOT all-six.
 
 ## Current ABI proofs (all compile)
 
@@ -60,9 +60,7 @@ The `src/interface/abi/` tree is marked **deferred to Phase 1 module-path cleanu
 **Unsafe FFI debt:**
 - `prim__registerCallback` in `Burble.ABI.Foreign` is intentionally unexposed. C→Idris callbacks require `believe_me` casts (tracked upstream in idris2#3182). Phase 0 replaces callback usage with `pollEvents` (lock-free ring buffer polling). No `believe_me` or `assert_total` in any module.
 
-**Local smoke-test result:** `tool-blocked: idris2 not installed` on development machine.
-The recipe and package file are correct; install `idris2` (v0.7+) to run locally.
-CI validation is gated on Workstream 0.1 stabilising (see §4.5 of the Phase 0 plan).
+**Local smoke-test result (2026-05-19):** idris2 0.8.0 IS installed (`dev/tools/provers/idris2/0.8.0`); the prior "not installed" note was wrong. The recipe and package file were NOT correct: ipkg `sourcedir` resolved modules to a non-existent path and idris2's baked-in prefix pointed at a missing `~/.asdf` path. Both fixed. Verified per-module result above.
 
 ## Phase 0 deploy-smoke status (Workstream 0.4)
 
