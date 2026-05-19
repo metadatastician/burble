@@ -153,6 +153,14 @@ open-failures = 0
 #             "no process"). NOT random debt. Decision + taxonomy:
 #             issue #62 (epic #53); ~15 genuine standalone bugs noted
 #             there. Gate stays disarmed pending decision + CI.
+# 2026-05-19: #39 local work exhausted. Genuine decision-free bugs
+#             fixed (PRs #59/#64/#65: boot collapse, #62 isolation
+#             cascade, String.Chars/Tuple, Discord OTP-portability).
+#             Residual is systemic: app singletons (Groove etc.)
+#             intermittently dead under the full async run -> local
+#             total non-deterministic (99..165). Cannot be
+#             authoritatively measured/validated without CI. #39 now
+#             HARD-BLOCKED on the stuck GitHub Actions queue (user).
 
 [crg]
 grade = "C"
