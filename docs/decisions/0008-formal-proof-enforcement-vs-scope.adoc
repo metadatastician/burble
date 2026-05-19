@@ -1,0 +1,69 @@
+= Architecture Decision Record: 0008-formal-proof-enforcement-vs-scope
+<!-- SPDX-License-Identifier: PMPL-1.0-or-later -->
+<!-- Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk> -->
+
+# 8. Formal-proof enforcement vs. scoping the "formally verified" claim
+
+Date: 2026-05-19
+
+## Status
+
+Proposed
+
+This ADR frames a genuine open strategic decision for the maintainer; it
+deliberately does **not** pre-decide it. Part of the "Earn the Core"
+program.
+
+## Context
+
+Burble markets a "Majestic / Dual-Track" formally-verified posture. The
+reality (`BURBLE-PROOF-STATUS.md`, `PROOF-NEEDS.md`, `READINESS.adoc`):
+
+- All six Idris2 ABI proof modules **compile and type-check**
+  (Types, Permissions, Avow, Vext, MediaPipeline, WebRTCSignaling).
+- But **runtime enforcement is not wired**: `Burble.Verification.Avow`
+  is data-type-only; there is no bridge making the Elixir runtime reject
+  values that violate the proven types. `READINESS.adoc`: *"safe by
+  construction for current use cases. Dependent-type enforcement is a
+  correctness hardening measure, not a security boundary."*
+
+So "formally verified" is true at the *type-check* level and aspirational
+at the *runtime-enforcement* level. ADR-0007 requires this gap be either
+closed or scoped honestly; which one is a strategic choice with real cost.
+
+## Decision
+
+**To be decided by the maintainer.** Options:
+
+* **Option A — Wire enforcement.** Build the Idris2→runtime enforcement
+  bridge (proof-derived validators at the Elixir/Zig ABI boundary) as a
+  scheduled phase. Highest rigor; substantial effort; turns the
+  differentiator into a real moat (supports Route B "Majestic").
+* **Option B — Scope the claim.** State precisely: "ABI proofs compile
+  and type-check; runtime enforcement is on the roadmap." Cheap, honest,
+  immediately removes the overclaim; keeps the proofs as design
+  assurance rather than a runtime guarantee.
+* **Option C — Hybrid.** Scope the claim now (Option B wording) **and**
+  schedule enforcement for one high-value module (e.g. `Permissions` or
+  `Avow`) as a proof-of-concept before committing to the full bridge.
+
+Recommendation (non-binding): **Option C** — it satisfies ADR-0007
+immediately (no overclaim) while preserving the Majestic differentiator
+as a funded, scoped experiment rather than perpetual aspiration.
+
+## Consequences
+
+### Positive
+
+- Removes a long-standing overclaim regardless of which option is chosen.
+- Forces an explicit, recorded decision instead of silent drift.
+
+### Negative
+
+- Option A is expensive; Option B narrows the marketing story.
+
+### Neutral
+
+- Until accepted, ADR-0007 governs: the "formally verified" claim must
+  read as type-check-level only, with runtime enforcement labelled
+  Experimental/Aspirational.
