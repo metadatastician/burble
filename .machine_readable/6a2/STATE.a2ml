@@ -138,6 +138,13 @@ open-failures = 0
 #             Gate still NOT re-armed (continue-on-error kept per #39);
 #             remaining 156 = genuine test debt + OTP25-vs-CI-OTP27
 #             skew, needs authoritative CI run to triage.
+# 2026-05-19: Idris2 proofs VERIFIED (idris2 0.8.0, prefix fixed) —
+#             6/7 ABI modules compile (Types/Foreign/WebRTCSignaling/
+#             Permissions/Avow/Vext); MediaPipeline.idr FAILS (Idris1
+#             `postulate`, invalid in Idris2). BURBLE-PROOF-STATUS
+#             'all six compile' was false (now corrected, ADR-0007).
+#             ipkg sourcedir + Justfile IDRIS2_PREFIX fixed so the
+#             harness runs. MediaPipeline fix tracked under epic #53.
 
 [crg]
 grade = "C"
