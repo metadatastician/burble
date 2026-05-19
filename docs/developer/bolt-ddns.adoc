@@ -121,6 +121,6 @@ same providers and writes an AAAA record.
 
 * link:bolt-dns-records.adoc[bolt-dns-records.adoc] — NAPTR/SRV records
   that depend on this hostname resolving to the current host
-* link:wsl-mirrored-networking.adoc[wsl-mirrored-networking.adoc] — the
-  WSL2 networking mode that makes UDP/7373 reachable on the host LAN IP
+* link:wsl-mirrored-networking.adoc[wsl-mirrored-networking.adoc] — how
+  UDP/7373 reaches the WSL listener on the host LAN IP (NAT forwarder)
 * `scripts/cf-bolt-dns.sh` — the NAPTR/SRV provisioner

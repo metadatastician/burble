@@ -110,7 +110,7 @@ open-failures = 0
 #             with ALPN "burble-bolt-v1" for sender authentication (ADR-0003, ADR-0004).
 #             New modules Burble.Bolt.{Listener,Sender,Quic}; scripts/gen-bolt-cert.sh
 #             for cert provisioning; docs/developer/wsl-mirrored-networking.adoc
-#             documents WSL mirrored-networking prereq for receiving LAN packets.
+#             documents WSL inbound-UDP options for the listener (superseded 2026-05-19).
 #             Other features in window: coturn STUN/TURN relay + time-limited ICE
 #             credentials (b10283b), Mumble bridge — permissions, positional audio,
 #             UDP fix (d557742), Assist API + LLM diagnostics + event stream (7fc1a45),
@@ -119,6 +119,14 @@ open-failures = 0
 #             automated backups (acbe88a), AffineScript Canary CI workflow (8eeed52),
 #             brand pack (ba23ec1). Android client + cross-repo Bluetooth plan landed
 #             as architecture doc (b1070af) — implementation deferred.
+# 2026-05-19: WSL Bolt inbound networking reworked — mirrored mode caused
+#             recurring Hyper-V VmSwitch port-restore failures + intermittent
+#             Wsl/Service/E_UNEXPECTED on Win11 24H2/Insider. New
+#             scripts/wsl-bolt-udp-forward.ps1 host UDP forwarder (default NAT,
+#             bidirectional, udp/7373+9); wsl-mirrored-networking.adoc rewritten
+#             (NAT+forwarder default, bridged alt, mirrored last-resort); ADR-0005.
+#             proven-stun NAT traversal scoped + rejected (cold bolts target
+#             offline peers — hole-punching structurally impossible).
 
 [crg]
 grade = "C"

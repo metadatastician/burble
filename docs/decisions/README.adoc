@@ -1,1 +1,34 @@
-= decisions Unit
+// SPDX-License-Identifier: PMPL-1.0-or-later
+= Architecture Decision Records
+
+This is Burble's decision log. Each ADR captures one significant
+architectural decision, its context, and its consequences. ADRs are
+immutable once Accepted; a later ADR supersedes an earlier one rather
+than editing it.
+
+New ADRs copy `0000-template.adoc` and take the next number.
+
+[cols="1,3,1",options="header"]
+|===
+| ADR | Title | Status
+
+| link:0001-adopt-rsr-standard.adoc[0001]
+| Adopt the RSR standard
+| Accepted
+
+| link:0002-indieweb-native-optional-integration.adoc[0002]
+| IndieWeb-native optional integration
+| Accepted
+
+| link:0003-pake-sas-tiered-auth.adoc[0003]
+| PAKE/SAS tiered authentication
+| Accepted
+
+| link:0004-bolt-quic-dual-bind.adoc[0004]
+| Bolt QUIC dual-bind alongside raw UDP
+| Accepted
+
+| link:0005-wsl-bolt-inbound-udp-no-mirrored.adoc[0005]
+| WSL2 Bolt inbound UDP via a host forwarder, not mirrored networking
+| Accepted
+|===

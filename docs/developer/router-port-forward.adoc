@@ -202,6 +202,6 @@ task #13's end-to-end test from Joshua's machine.
   record current so NAPTR resolves to the host even as the WAN IP drifts
 * link:bolt-dns-records.adoc[bolt-dns-records.adoc] — the NAPTR/SRV
   records that announce this host as Bolt-reachable
-* link:wsl-mirrored-networking.adoc[wsl-mirrored-networking.adoc] — why
-  the LAN IP is the WSL listener's address (no second host→WSL forward)
+* link:wsl-mirrored-networking.adoc[wsl-mirrored-networking.adoc] — how
+  the host LAN IP reaches the WSL listener (NAT + host UDP forwarder)
 * `scripts/check-bolt-reachability.sh` — verification helper
