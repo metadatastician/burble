@@ -145,6 +145,14 @@ open-failures = 0
 #             'all six compile' was false (now corrected, ADR-0007).
 #             ipkg sourcedir + Justfile IDRIS2_PREFIX fixed so the
 #             harness runs. MediaPipeline fix tracked under epic #53.
+# 2026-05-19: #39 triage complete — 165 test failures root-caused to
+#             ONE test-isolation mismatch: PR #59's Store fix made the
+#             app boot in test, so ~13 modules that start_supervised
+#             app-owned singletons (PubSub/RoomRegistry/MessageStore/
+#             Alignment/Groove) collide (already_started -> 59 cascading
+#             "no process"). NOT random debt. Decision + taxonomy:
+#             issue #62 (epic #53); ~15 genuine standalone bugs noted
+#             there. Gate stays disarmed pending decision + CI.
 
 [crg]
 grade = "C"
