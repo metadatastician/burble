@@ -157,9 +157,17 @@ defmodule Burble.Coprocessor.SNIFBackend do
   3. Verify configuration in `config/runtime.exs`
   4. Check `BURBLE_SNIF_PATH` environment variable
   """
+  # Optional WASM runtime. Referenced via apply/3 (see call_snif_module/3)
+  # so the compiler does not warn when :wasmex is absent at build time —
+  # mirrors the Burble.Bolt.Quic / :quicer pattern (ADR-0004). When absent,
+  # available?/0 is false so every kernel transparently uses ZigBackend.
+  @wasmex Wasmex
+
   @impl true
   def available? do
-    File.exists?(@snif_path)
+    File.exists?(@snif_path) and
+      Code.ensure_loaded?(@wasmex) and
+      function_exported?(@wasmex, :start_link, 1)
   end
 
   # ---------------------------------------------------------------------------
@@ -512,9 +520,9 @@ defmodule Burble.Coprocessor.SNIFBackend do
   # `{:error, reason}` so the caller can fall back gracefully.
   defp call_snif_module(path, function, args) do
     try do
-      case Wasmex.start_link(%{bytes: File.read!(path)}) do
+      case apply(@wasmex, :start_link, [%{bytes: File.read!(path)}]) do
         {:ok, pid} ->
-          result = Wasmex.call_function(pid, function, args)
+          result = apply(@wasmex, :call_function, [pid, function, args])
           GenServer.stop(pid, :normal)
           result
         {:error, reason} -> {:error, {:wasm_load_failed, reason}}

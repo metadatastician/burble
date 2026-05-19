@@ -21,6 +21,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `prim__registerCallback` made module-private (unsafe boundary, awaits idris2#3182)
 - `docs/developer/wsl-mirrored-networking.adoc` rewritten — NAT + host forwarder is the recommended WSL2 Bolt path; mirrored networking demoted to last-resort (Win11 24H2/Insider `Wsl/Service/E_UNEXPECTED` instability)
 
+### Fixed
+- SNIF: `Burble.Coprocessor.SNIFBackend` no longer emits a compile warning for the optional `Wasmex` runtime and no longer mis-fails when it is absent — `Wasmex` is referenced via `apply/3` and `available?/0` now gates on it loadable, so kernels degrade cleanly to `ZigBackend` (mirrors the `:quicer` pattern, ADR-0004)
+
 ### Removed
 - TODO.md (superseded by CLAUDE-WORK.md — 0 TODOs remain in codebase)
 

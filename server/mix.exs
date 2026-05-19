@@ -196,10 +196,14 @@ defmodule Burble.MixProject do
       #   quicer  — needs msquic (Microsoft QUIC C library)
       #   elmdb   — links liberl_interface which was dropped in OTP 23+
       #   ex_lmdb — depends on elmdb
+      #   wasmex  — Rust NIF (wasmtime); needs a Rust toolchain. SNIF
+      #             (Burble.Coprocessor.SNIFBackend) transparently degrades
+      #             to ZigBackend when absent — available?/0 gates on it.
       #
       # {:quicer, github: "emqx/quic", tag: "0.2.15", submodules: true, optional: true},
       # {:elmdb, "~> 0.4", optional: true},
       # {:ex_lmdb, "~> 0.1", optional: true},
+      # {:wasmex, "~> 0.9", optional: true},
 
       # Media plane — ex_webrtc SFU (audio-only, Opus)
       {:ex_webrtc, "~> 0.16"},
