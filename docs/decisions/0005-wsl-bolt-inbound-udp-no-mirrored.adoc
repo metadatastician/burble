@@ -1,0 +1,100 @@
+= Architecture Decision Record: 0005-wsl-bolt-inbound-udp-no-mirrored
+<!-- SPDX-License-Identifier: PMPL-1.0-or-later -->
+<!-- Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk> -->
+
+# 5. WSL2 Bolt inbound UDP via a host forwarder, not mirrored networking
+
+Date: 2026-05-19
+
+## Status
+
+Accepted
+
+Relates to ADR-0004 (Bolt QUIC dual-bind — same udp/7373).
+
+## Context
+
+`Burble.Bolt.Listener` binds udp/7373 (and udp/9 WoL-compat), optionally
+QUIC on the same port (ADR-0004). When the server runs inside WSL2 — the
+default developer environment on Windows — its default NAT networking
+drops inbound LAN UDP at the host: the distro sits behind an internal
+vEthernet adapter and only outbound flows + replies are forwarded. Cold
+bolts and cross-host QUIC bolts never reach the listener.
+
+`docs/developer/wsl-mirrored-networking.adoc` previously instructed every
+contributor to set `networkingMode=mirrored` in `%USERPROFILE%\.wslconfig`,
+together with `dnsTunneling=true`, `autoProxy=true`, and experimental
+`hostAddressLoopback=true`.
+
+That guidance is actively harmful on current Windows. On Windows 11 24H2
+and Insider builds, mirrored mode plus those companions causes recurring
+Hyper-V VmSwitch `Failed to restore configuration for port … Object Name
+not found` errors and intermittent `Wsl/Service/E_UNEXPECTED`
+catastrophic failures — the WSL vNIC flaps and the utility VM bounces
+every few hours. The development environment becomes, in the words of the
+report that triggered this ADR, "incredibly unstable". Anyone following
+the documented setup inherits the instability.
+
+Constraints on the fix:
+
+* `netsh interface portproxy` is TCP-only; it cannot forward UDP, so the
+  classic port-forward shortcut is unavailable.
+* Bolt's primary path is stateless fire-and-forget raw UDP (cold poke),
+  but the QUIC path (ADR-0004) needs the reply datagram to return to the
+  original sender, so a one-directional forward is insufficient.
+* The WSL2 NAT IP changes on every distro boot.
+
+STUN/ICE NAT traversal (`proven-servers` `proven-stun`) was considered
+and rejected: a cold bolt by design wakes a recipient who is *not* in any
+session and may be offline, so hole-punching — which needs both peers
+coordinating through a rendezvous simultaneously — cannot serve it. Bolt
+is deliberately a server-reachability design (NAPTR/SRV + DDNS + router
+port-forward), not symmetric P2P.
+
+## Decision
+
+Stop requiring mirrored networking. The recommended path is **default
+WSL2 NAT plus a userspace UDP forwarder on the Windows host**:
+
+* `scripts/wsl-bolt-udp-forward.ps1` — a bidirectional UDP relay binding
+  udp/7373 + udp/9 on the host, with a per-client ephemeral upstream
+  socket and idle expiry so QUIC handshakes and acks return to the
+  original sender. It re-resolves the WSL NAT IP every 15 s and rebuilds
+  upstream sockets when the distro reboots onto a new address. `-Install`
+  registers a logon scheduled task; `-Firewall` (elevated) adds the
+  Defender allow rules.
+* Bridged networking (`networkingMode=bridged` + an external vSwitch) is
+  documented as a forwarder-free alternative for wired workstations.
+* Mirrored networking is demoted to fallback-of-last-resort, retained
+  only for older stable Windows builds, with an explicit 24H2/Insider
+  instability warning, and pared to `networkingMode=mirrored` +
+  `firewall=true` (the crash-implicated companions removed).
+
+`docs/developer/wsl-mirrored-networking.adoc` is rewritten accordingly;
+its filename is deliberately kept (five inbound references, including
+machine-readable state, made a rename pure breakage risk).
+
+## Consequences
+
+### Positive
+
+* The default contributor dev environment is stable on every supported
+  Windows build — the instability class is removed at the source.
+* The forwarder is portable: no Insider-specific config, works on Wi-Fi
+  and Ethernet, no admin needed for the relay itself.
+* Bidirectional relay keeps the ADR-0004 QUIC return path working.
+
+### Negative
+
+* An extra Windows-host moving part (a scheduled task + a long-running
+  relay process) that contributors must install.
+* A stateless localhost-adjacent hop is added to the cold-poke path
+  (negligible latency, but it exists).
+
+### Neutral
+
+* The on-machine `~/.wslconfig` revert from mirrored to plain NAT is an
+  operational step, tracked outside the repo; it is gated on a
+  reachability check (`scripts/check-bolt-reachability.sh`).
+* `proven-frame` (verified framing of `Burble.Bolt.Packet`) remains a
+  separate, low-priority hardening opportunity, out of scope here.

@@ -15,9 +15,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Safe `pollEvents` returning `Maybe NifEvent` instead of raw `Bits64`
 - Bidirectional PositionUpdate (tag 8) decode with Vec3 + orientation relay via PubSub
 - SpeakingStart/Stop (tags 6-7) diagnostic decode with server-only enforcement
+- `scripts/wsl-bolt-udp-forward.ps1` — host UDP forwarder for the WSL2 Bolt listener (default NAT, no mirrored networking; ADR-0005)
 
 ### Changed
 - `prim__registerCallback` made module-private (unsafe boundary, awaits idris2#3182)
+- `docs/developer/wsl-mirrored-networking.adoc` rewritten — NAT + host forwarder is the recommended WSL2 Bolt path; mirrored networking demoted to last-resort (Win11 24H2/Insider `Wsl/Service/E_UNEXPECTED` instability)
 
 ### Removed
 - TODO.md (superseded by CLAUDE-WORK.md — 0 TODOs remain in codebase)
