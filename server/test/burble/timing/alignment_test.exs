@@ -20,8 +20,10 @@ defmodule Burble.Timing.AlignmentTest do
       opts
       |> Keyword.put_new(:local_node, :"local@testhost")
       |> Keyword.put_new(:window_ms, 30_000)
+      # start_link/1 forces name: __MODULE__ when :name is absent, colliding
+      # with the application-owned Alignment. Unique-name per test (#62).
+      |> Keyword.put(:name, :"alignment_test_#{System.unique_integer([:positive])}")
 
-    # Do NOT pass :name so tests get an anonymous pid and don't conflict.
     start_supervised!({Alignment, opts})
   end
 

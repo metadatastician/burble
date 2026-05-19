@@ -37,11 +37,11 @@ defmodule Burble.Text.NNTPSBackendTest do
   setup do
     # PubSub must be running because post_message broadcasts to "text:<room_id>".
     Application.ensure_all_started(:phoenix_pubsub)
-    start_supervised!({Phoenix.PubSub, name: Burble.PubSub})
+    ensure_started({Phoenix.PubSub, name: Burble.PubSub})
 
     # Start a fresh NNTPSBackend instance.  start_supervised! gives ExUnit
     # ownership so it is torn down (and the name released) after each test.
-    start_supervised!(NNTPSBackend)
+    ensure_started(NNTPSBackend)
 
     :ok
   end
