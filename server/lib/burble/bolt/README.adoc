@@ -1,0 +1,24 @@
+// SPDX-License-Identifier: PMPL-1.0-or-later
+= server/lib/burble/bolt — Bolt magic-packet subsystem
+:toc: preamble
+
+== Purpose
+
+Bolt is a network-layer "poke": a magic UDP/QUIC datagram to an address
+triggers an incoming-call notification if Burble is running there
+(Wake-on-LAN-inspired). See ADR-0003 (PAKE/SAS auth), ADR-0004 (QUIC
+dual-bind), ADR-0005 (WSL inbound), ADR-0006 (framing scope).
+
+== Key files
+
+`listener.ex`:: GenServer binding raw UDP on 7373 (+ udp/9 WoL-compat),
+and optionally QUIC on the same port when `quicer` + a cert are present.
+`Burble.Bolt.Listener` is the supervised entry point.
+`sender.ex`:: Outbound bolts. `:transport` (`:auto`/`:udp`/`:quic`) +
+`:try_quic`; UDP default keeps cold pokes cheap (ADR-0004).
+`quic.ex`:: All optional `quicer` interaction, guarded so absence yields
+`{:error, :quicer_not_available}` rather than raising (ADR-0004).
+`packet.ex`:: Wire format encode/decode. Fixed-offset record decoded by
+total BEAM binary matching (ADR-0006 — why proven-frame is N/A here).
+`notify.ex`:: Dispatches a decoded bolt to the incoming-call UX path.
+`naptr.ex`:: NAPTR/SRV discovery of a host's Bolt endpoint.

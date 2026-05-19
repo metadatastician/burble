@@ -1,0 +1,24 @@
+// SPDX-License-Identifier: PMPL-1.0-or-later
+= client — end-user surfaces
+:toc: preamble
+
+== Purpose
+
+Everything a participant runs. The browser client is first-class
+("browser join, no downloads"); the rest wrap or embed it.
+
+== Contents
+
+`web/`:: First-class browser client (AffineScript + WebRTC APIs).
+Mid-migration ReScript→AffineScript; client test coverage is tracked in
+issue #48 (Earn-the-Core).
+`desktop/`:: Tauri 2 native wrapper around the web client for power users.
+`lib/`:: Embeddable `@burble/client` library (BurbleClient/Voice/Spatial/
+Signaling) — used by IDApTIK (in-game voice) and PanLL (workspace voice).
+`extension/`:: Browser extension for the Claude-to-Claude AI bridge.
+
+== Status
+
+The web client is half the core value proposition and currently the
+least-tested surface — see issue #48. Treat behaviour here as
+not-yet-CI-verified until that closes.

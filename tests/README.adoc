@@ -1,0 +1,25 @@
+// SPDX-License-Identifier: PMPL-1.0-or-later
+= tests — repo-level test trees
+:toc: preamble
+
+== Purpose
+
+Cross-cutting tests that are not part of the Elixir server's own ExUnit
+suite. Most unit/property/e2e/contract tests live in `server/test/`;
+Deno client tests live in `client/web/tests/`.
+
+== Contents
+
+`aspect/`:: Aspect tests — security hardening, accessibility, and
+diagnostics cross-concerns.
+`fuzz/`:: Fuzzing harnesses.
+`test_room_namer.exs`:: Standalone room-namer check.
+
+== Coverage map
+
+- Server logic, property, e2e, contract, concurrency → `server/test/`
+- Zig coprocessor → `just test-ffi` (`ffi/zig`, `zig build test`)
+- P2P AI bridge (Deno) → `client/web/tests/`
+- Web client suite → tracked in issue #48 (currently absent)
+
+CRG grade and CI test-pass evidence are tracked in issue #50.

@@ -1,0 +1,21 @@
+// SPDX-License-Identifier: PMPL-1.0-or-later
+= signaling — WebRTC signaling relay
+:toc: preamble
+
+== Purpose
+
+The lightweight signaling path that brokers WebRTC SDP/ICE between peers
+before media flows directly (SFU or P2P mesh). Kept deliberately small —
+the heavy lifting is in the OTP control plane and the media plane.
+
+== Contents
+
+`relay.js`:: Canonical signaling relay. (The former `Relay.res` was
+removed when signaling was consolidated — see `STATE.a2ml [migration]`.)
+`worker.js`:: Cloudflare Worker deployment variant of the relay for
+edge-hosted signaling.
+
+== Related
+
+Server-side signaling tests: `server/test/.../signaling_test.exs`
+(19 + 6 safety-contract regression tests).
