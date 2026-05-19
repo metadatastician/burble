@@ -226,6 +226,7 @@ defmodule Burble.Store do
     url = Keyword.get(config, :url, "http://localhost:8080")
     auth = Keyword.get(config, :auth, :none)
     timeout = Keyword.get(config, :timeout, 30_000)
+    offline_ok = Keyword.get(config, :offline_ok, false)
 
     case VeriSimClient.new(url, auth: auth, timeout: timeout) do
       {:ok, client} ->
@@ -235,7 +236,10 @@ defmodule Burble.Store do
         # The server may start before VeriSimDB's DNS entry propagates in the
         # container bridge network — retry with exponential backoff to absorb
         # the startup race.
-        case await_verisimdb(client, @health_check_max_attempts, 1_000) do
+        {attempts, base_delay} =
+          if offline_ok, do: {1, 200}, else: {@health_check_max_attempts, 1_000}
+
+        case await_verisimdb(client, attempts, base_delay) do
           :ok ->
             # Run pending VeriSimDB migrations (idempotent setup scripts).
             # Migration failure is fatal: the store must not start with an
@@ -249,6 +253,15 @@ defmodule Burble.Store do
                 Logger.error("[Burble.Store] Migration failed: #{inspect(reason)}")
                 {:stop, {:migration_failed, reason}}
             end
+
+          {:error, :unreachable} when offline_ok ->
+            Logger.warning(
+              "[Burble.Store] VeriSimDB at #{url} unreachable — starting in " <>
+                "degraded offline mode (offline_ok: true); DB-backed calls " <>
+                "return errors until it is available"
+            )
+
+            {:ok, %{client: client, offline: true}}
 
           {:error, :unreachable} ->
             Logger.error(

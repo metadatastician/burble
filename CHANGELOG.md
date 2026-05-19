@@ -29,6 +29,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `docs/developer/wsl-mirrored-networking.adoc` rewritten — NAT + host forwarder is the recommended WSL2 Bolt path; mirrored networking demoted to last-resort (Win11 24H2/Insider `Wsl/Service/E_UNEXPECTED` instability)
 
 ### Fixed
+- #39: Elixir test gate was dead because `Burble.Store` refused to start without VeriSimDB (first supervised child) — the whole supervision tree collapsed and every app-dependent test failed at boot. Added prod-safe, config-gated `offline_ok` (test env starts the Store in degraded offline mode); fixed 3 test-file compile errors (`snif_backend_test.exs` invalid index + nested `describe`, `room_property_test.exs` `check all` newline). Suite now compiles and boots (707 tests run); full green + gate re-arm still pending an authoritative CI run.
 - SNIF: `Burble.Coprocessor.SNIFBackend` no longer emits a compile warning for the optional `Wasmex` runtime and no longer mis-fails when it is absent — `Wasmex` is referenced via `apply/3` and `available?/0` now gates on it loadable, so kernels degrade cleanly to `ZigBackend` (mirrors the `:quicer` pattern, ADR-0004)
 
 ### Removed

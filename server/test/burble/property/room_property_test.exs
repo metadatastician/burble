@@ -41,9 +41,8 @@ defmodule Burble.Property.RoomPropertyTest do
   # below zero regardless of the order of operations.
 
   property "participant count never goes negative after any join/leave sequence" do
-    check all
-            joins <- StreamData.integer(0..500),
-            leaves <- StreamData.integer(0..500) do
+    check all joins <- StreamData.integer(0..500),
+              leaves <- StreamData.integer(0..500) do
       # Model: start with `joins` participants, remove at most min(joins, leaves).
       effective_leaves = min(joins, leaves)
       final_count = joins - effective_leaves
@@ -124,8 +123,7 @@ defmodule Burble.Property.RoomPropertyTest do
   # return :allow and :deny for the same call count.
 
   property "rate limiter decision is consistent for any non-negative call count" do
-    check all
-            call_count <- StreamData.integer(0..10_000),
+    check all call_count <- StreamData.integer(0..10_000),
             limit <- StreamData.integer(1..1_000) do
       # Model the rate limiter: allow if call_count < limit, deny otherwise.
       decision = if call_count < limit, do: :allow, else: :deny
