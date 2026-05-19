@@ -27,6 +27,20 @@ defmodule Burble.Bridges.DiscordCryptoTest do
 
   @moduletag :discord_crypto
 
+  # :xchacha20_poly1305 AEAD is not exposed by every OTP/OpenSSL
+  # build (e.g. some OTP 25 builds). Skip rather than hard-fail when
+  # absent; CI (OTP 27) has it and runs the full suite.
+  if :xchacha20_poly1305 not in :crypto.supports(:ciphers) do
+    @moduletag skip: "xchacha20_poly1305 AEAD unavailable in this OTP/OpenSSL build"
+  end
+
+  # :xchacha20_poly1305 AEAD is not exposed by every OTP/OpenSSL
+  # build (e.g. some OTP 25 builds). Skip rather than hard-fail when
+  # absent; CI (OTP 27) has it and runs the full suite.
+  if :xchacha20_poly1305 not in :crypto.supports(:ciphers) do
+    @moduletag skip: "xchacha20_poly1305 AEAD unavailable in this OTP/OpenSSL build"
+  end
+
   # ---------------------------------------------------------------------------
   # Helpers
   # ---------------------------------------------------------------------------

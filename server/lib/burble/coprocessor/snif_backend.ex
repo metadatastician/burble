@@ -247,7 +247,7 @@ defmodule Burble.Coprocessor.SNIFBackend do
         # Convert WASM result format to Elixir format
         parse_fft_result(result, size)
       {:error, reason} -> 
-        Logger.warning("SNIF FFT failed: #{reason}, falling back to Zig NIF")
+        Logger.warning("SNIF FFT failed: #{inspect(reason)}, falling back to Zig NIF")
         ZigBackend.dsp_fft(signal, size)
     end
   end
@@ -310,7 +310,7 @@ defmodule Burble.Coprocessor.SNIFBackend do
         # Convert WASM result format to Elixir format  
         parse_ifft_result(result)
       {:error, reason} -> 
-        Logger.warning("SNIF IFFT failed: #{reason}, falling back to Zig NIF")
+        Logger.warning("SNIF IFFT failed: #{inspect(reason)}, falling back to Zig NIF")
         ZigBackend.dsp_ifft(spectrum, size)
     end
   end
@@ -387,7 +387,7 @@ defmodule Burble.Coprocessor.SNIFBackend do
       {:ok, result} ->
         result
       {:error, reason} ->
-        Logger.warning("SNIF noise_gate failed: #{reason}, falling back to Zig NIF")
+        Logger.warning("SNIF noise_gate failed: #{inspect(reason)}, falling back to Zig NIF")
         ZigBackend.audio_noise_gate(pcm, threshold_db)
     end
   end
@@ -434,7 +434,7 @@ defmodule Burble.Coprocessor.SNIFBackend do
       {:ok, result} ->
         result
       {:error, reason} ->
-        Logger.warning("SNIF echo_cancel failed: #{reason}, falling back to Zig NIF")
+        Logger.warning("SNIF echo_cancel failed: #{inspect(reason)}, falling back to Zig NIF")
         ZigBackend.audio_echo_cancel(capture, reference, filter_length)
     end
   end
