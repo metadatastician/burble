@@ -15,6 +15,28 @@ modern browser-based joining — no downloads, no accounts, no friction.
 
 **One command to deploy. Sub-second to join. Your server, your rules.**
 
+== Status
+
+Burble is **pre-production** (targeting CRG grade C). The core — self-hosted
+WebRTC voice, browser join, OTP fault isolation — is operational and tested.
+Per link:docs/decisions/0007-claims-to-evidence-discipline.adoc[ADR-0007],
+every claim below maps to code + a test, or is flagged here:
+
+* *Experimental (optional, off by default):* QUIC transport and SNIF WASM
+  crash-isolation require optional NIFs (`quicer`/msquic, `wasmex`) that are
+  **disabled in the default build**; the runtime degrades gracefully without
+  them.
+* *Hardware-gated:* sub-microsecond PTP needs a PTP-capable NIC; without one
+  the system uses NTP (~1ms). PTP hardware is **unvalidated** (I210 pending).
+* *Roadmap:* the Idris2 ABI proofs compile and type-check; *runtime*
+  enforcement is not yet wired
+  (link:docs/decisions/0008-formal-proof-enforcement-vs-scope.adoc[ADR-0008],
+  Option C; PoC tracked in issue #55).
+* *Not yet benchmarked:* end-to-end mic-to-speaker latency and 500+
+  concurrent scale (issue #52).
+
+Foundational hardening is tracked in the "Earn the Core" epic (issue #53).
+
 == Why Burble?
 
 [cols="1,1,1,1,1"]
@@ -34,7 +56,7 @@ modern browser-based joining — no downloads, no accounts, no friction.
 | Yes
 
 | **Latency**
-| <10ms (Zig SIMD NIFs)
+| <10ms* (kernel-path target)
 | ~15ms
 | ~50-100ms
 | ~30ms
@@ -46,7 +68,7 @@ modern browser-based joining — no downloads, no accounts, no friction.
 | E2EE optional
 
 | **Precision timing**
-| IEEE 1588 PTP (<1us)
+| IEEE 1588 PTP (<1µs)*
 | No
 | No
 | No
@@ -57,6 +79,15 @@ modern browser-based joining — no downloads, no accounts, no friction.
 | No
 | Partial
 |===
+
+[NOTE]
+====
+*Honest status (link:docs/decisions/0007-claims-to-evidence-discipline.adoc[ADR-0007]):*
+`<10ms` is a Zig kernel-path target — end-to-end mic-to-speaker latency and
+500+ concurrent scale are **not yet benchmarked** (issue #52). `IEEE 1588
+PTP <1µs` requires a PTP-capable NIC; without one the system falls back
+to NTP (~1ms) and the PTP hardware path remains **unvalidated**.
+====
 
 == Key Features
 

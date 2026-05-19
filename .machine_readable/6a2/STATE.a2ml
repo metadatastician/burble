@@ -41,8 +41,8 @@ signaling-relay = { status = "consolidated", canonical = "signaling/relay.js", r
 [blockers-and-issues]
 doc-reality-drift = [
   "RESOLVED 2026-04-21: LLM service fully wired — AnthropicProvider, circuit breaker, per-user rate limit, NimblePool concurrency gating, SSE streaming, REST /llm/query + /llm/stream + /llm/status",
-  "ROADMAP.adoc claims Formal Proofs DONE — Avow attestation is data-type-only, no dependent-type enforcement",
-  "README.adoc PTP claim sub-microsecond assumes hardware — code falls back to system clock without NIF"
+  "RESOLVED 2026-05-19: Formal-proof claim scoped to compile/type-check only; runtime enforcement is roadmap per ADR-0008 (Option C, PoC #55) + ADR-0007 claim discipline",
+  "RESOLVED 2026-05-19: README comparison table + Status note state PTP <1us needs a PTP NIC (NTP ~1ms fallback), hardware unvalidated, per ADR-0007"
 ]
 resolved-2026-04-16 = [
   "Opus naming/contract drift: Backend.audio_encode/4 + audio_decode/3 docstrings rewritten to state explicitly that they are PCM frame pack/unpack, NOT Opus. Added explicit Backend.opus_transcode/4 callback returning {:error, :not_implemented} on every backend (ElixirBackend, ZigBackend, SmartBackend, SNIFBackend). Added opus_available?/0 callback (always false). Pinned by opus_contract_test.exs."

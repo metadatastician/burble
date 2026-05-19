@@ -9,7 +9,7 @@ However, beneath this simple surface lies a **"Majestic"** architecture. For pow
 
 == Current Status
 
-Burble has cleared its foundational milestones. Test suite: 222+ Elixir tests + Zig coprocessor tests + 6 channel safety-contract tests + 6 Opus-contract tests + 5 AI bridge Deno tests (round-trip, ordering, reconnect, heartbeat). We are currently in a **phased hardening** cycle: audio reliability (Phase 1), P2P AI bridge dependability (Phase 2), then signaling/channels (Phase 3) and PTP hardware integration (Phase 4). See `.machine_readable/6a2/STATE.a2ml` for the authoritative status.
+Burble has cleared its foundational milestones. Test suite: 222+ Elixir tests + Zig coprocessor tests + 6 channel safety-contract tests + 6 Opus-contract tests + 5 AI bridge Deno tests (round-trip, ordering, reconnect, heartbeat). We are currently in a **phased hardening** cycle: audio reliability (Phase 1), P2P AI bridge dependability (Phase 2), then signaling/channels (Phase 3) and PTP hardware integration (Phase 4). See `.machine_readable/6a2/STATE.a2ml` for the authoritative status. Claim honesty is governed by ADR-0007; foundational hardening is tracked in the "Earn the Core" epic (#53).
 
 == Milestones
 
@@ -18,15 +18,15 @@ Burble has cleared its foundational milestones. Test suite: 222+ Elixir tests + 
 * [x] WebRTC voice engine (SFU, Opus, ExWebRTC)
 * [x] E2EE via Insertable Streams (X25519 + AES-256-GCM)
 * [x] VeriSimDB integration & LMDB zero-copy playout buffering
-* [x] QUIC transport (0-RTT, multiplexed streams)
+* [x] QUIC transport (0-RTT, multiplexed streams) — _experimental: needs the optional `quicer`/msquic NIF, disabled in the default build (ADR-0007)_
 * [x] Zig SIMD coprocessor (audio, DSP, neural, compression)
 * [x] Groove discovery endpoint (/.well-known/groove)
 
 === v1.0.0 — Stable Release (DONE)
 
-* [x] QUIC hardening (rate limiting, datagram size enforcement)
+* [x] QUIC hardening (rate limiting, datagram size enforcement) — _experimental; see QUIC transport note (ADR-0007)_
 * [x] Bebop codegen & wire protocol schemas
-* [x] Idris2 ABI formal proofs (Avow consent, Vext integrity, Permissions)
+* [x] Idris2 ABI formal proofs (Avow consent, Vext integrity, Permissions) — _proofs compile/type-check; runtime enforcement is roadmap (ADR-0008 Option C; PoC #55)_
 * [x] Chainguard base Containerfile pinned by digest
 * [x] **Rate Limiting:** ETS Token Bucket algorithm for authentication paths.
 
