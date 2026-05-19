@@ -12,7 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - ADR-0007 (Accepted): claims-to-evidence discipline & optional-dependency policy — every headline claim maps to code+test or is labelled experimental; optional NIF deps are experimental-until-wired. Closes the recurring `doc-reality-drift` blocker. Earn-the-Core epic #53
-- ADR-0008 (Proposed): formal-proof enforcement vs. scoping the "formally verified" claim — frames the maintainer decision (wire enforcement / scope the claim / hybrid), does not pre-decide it
+- ADR-0008 (Accepted, Option C): scope the "formally verified" claim now (per ADR-0007) and fund a single-module runtime-enforcement PoC (issue #55)
 - Earn-the-Core foundational-hardening program filed as tracked issues (#53 epic; #48–#52 children)
 - ADR-0006: scoped and formally declined `proven-frame` hardening of `Burble.Bolt.Packet` (category mismatch — stream-framing core vs. a single-datagram record already total/safe via BEAM binary matching); closes the ADR-0005 backlog item
 - Typed `NifEvent` ADT for Zig NIF audio events (VadStateChange, AgcLevelChange, DenoiserConfidence)
