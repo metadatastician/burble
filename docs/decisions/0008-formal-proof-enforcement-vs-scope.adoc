@@ -8,11 +8,11 @@ Date: 2026-05-19
 
 ## Status
 
-Proposed
+Accepted — **Option C (hybrid)**, decided 2026-05-19 by the maintainer.
 
-This ADR frames a genuine open strategic decision for the maintainer; it
-deliberately does **not** pre-decide it. Part of the "Earn the Core"
-program.
+Part of the "Earn the Core" program. Follow-through tracked by issue
+#55 (single-module enforcement PoC) and issue #51 (claim wording,
+per ADR-0007).
 
 ## Context
 
@@ -33,7 +33,11 @@ closed or scoped honestly; which one is a strategic choice with real cost.
 
 ## Decision
 
-**To be decided by the maintainer.** Options:
+**Decided: Option C (hybrid).** Scope the claim immediately (Option B
+wording, governed by ADR-0007 / issue #51) **and** fund a single-module
+runtime-enforcement proof-of-concept before committing to the full
+Idris2->runtime bridge (tracked by issue #55). The options
+considered:
 
 * **Option A — Wire enforcement.** Build the Idris2→runtime enforcement
   bridge (proof-derived validators at the Elixir/Zig ABI boundary) as a
@@ -64,6 +68,7 @@ as a funded, scoped experiment rather than perpetual aspiration.
 
 ### Neutral
 
-- Until accepted, ADR-0007 governs: the "formally verified" claim must
-  read as type-check-level only, with runtime enforcement labelled
-  Experimental/Aspirational.
+- ADR-0007 governs the interim: the "formally verified" claim reads as
+  type-check-level only, runtime enforcement labelled
+  Experimental/Aspirational, until the PoC (issue #55) reports back
+  with a full-bridge go/no-go recommendation.

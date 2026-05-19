@@ -42,5 +42,5 @@ New ADRs copy `0000-template.adoc` and take the next number.
 
 | link:0008-formal-proof-enforcement-vs-scope.adoc[0008]
 | Formal-proof enforcement vs. scoping the "formally verified" claim
-| Proposed
+| Accepted (Option C)
 |===
