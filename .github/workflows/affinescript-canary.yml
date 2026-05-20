@@ -69,7 +69,7 @@ jobs:
 
       - name: Setup OCaml (cache miss only)
         if: steps.detect.outputs.count > 0 && steps.cache-affinescript.outputs.cache-hit != 'true'
-        uses: ocaml/setup-ocaml@v3
+        uses: ocaml/setup-ocaml@e32b06a3e831ff2fbc6f08cf35be2085e3918014 # v3.6.1
         with:
           ocaml-compiler: ${{ env.OCAML_COMPILER }}
 
