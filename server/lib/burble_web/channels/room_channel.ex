@@ -89,6 +89,11 @@ defmodule BurbleWeb.RoomChannel do
     end
   end
 
+  @impl true
+  def join(topic, _params, _socket) do
+    {:error, %{reason: "invalid_topic", topic: topic}}
+  end
+
   # Messages from the Peer GenServer — relay to client.
   @impl true
   def handle_info({:peer_sdp_offer, sdp}, socket) do
