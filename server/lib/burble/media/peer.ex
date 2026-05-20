@@ -28,7 +28,7 @@ defmodule Burble.Media.Peer do
   RTP packets from each peer are forwarded to all other peers' sendonly tracks.
   """
 
-  use GenServer
+  use GenServer, restart: :temporary
   require Logger
 
   alias ExWebRTC.{PeerConnection, MediaStreamTrack, RTPCodecParameters, SessionDescription, ICECandidate}
@@ -149,9 +149,12 @@ defmodule Burble.Media.Peer do
 
   @impl true
   def handle_info({:ex_webrtc, pc, {:ice_candidate, candidate}}, %{pc: pc} = state) do
-    # Forward ICE candidate to client via channel.
+    # Forward ICE candidate to client via channel. channel_pid may be nil in
+    # tests; skip in that case (see send_offer/1 comment).
     json = candidate |> ICECandidate.to_json() |> Jason.encode!()
-    send(state.channel_pid, {:peer_ice_candidate, json})
+    if is_pid(state.channel_pid) do
+      send(state.channel_pid, {:peer_ice_candidate, json})
+    end
     {:noreply, state}
   end
 
@@ -409,8 +412,12 @@ defmodule Burble.Media.Peer do
     {:ok, offer} = PeerConnection.create_offer(pc)
     :ok = PeerConnection.set_local_description(pc, offer)
 
-    # Send offer to client via channel.
-    send(state.channel_pid, {:peer_sdp_offer, offer.sdp})
+    # Send offer to client via channel. channel_pid may be nil in tests that
+    # exercise Media.Engine without a real Phoenix channel; skip silently in
+    # that case rather than raising :badarg from :erlang.send(nil, _).
+    if is_pid(state.channel_pid) do
+      send(state.channel_pid, {:peer_sdp_offer, offer.sdp})
+    end
 
     %{state | negotiating: true}
   end
