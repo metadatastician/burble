@@ -6,7 +6,7 @@
 [metadata]
 project = "burble"
 version = "1.2.0-pre"
-last-updated = "2026-05-13"
+last-updated = "2026-05-20"
 status = "active"
 
 [project-context]
@@ -43,6 +43,9 @@ doc-reality-drift = [
   "RESOLVED 2026-04-21: LLM service fully wired — AnthropicProvider, circuit breaker, per-user rate limit, NimblePool concurrency gating, SSE streaming, REST /llm/query + /llm/stream + /llm/status",
   "RESOLVED 2026-05-19: Formal-proof claim scoped to compile/type-check only; runtime enforcement is roadmap per ADR-0008 (Option C, PoC #55) + ADR-0007 claim discipline",
   "RESOLVED 2026-05-19: README comparison table + Status note state PTP <1us needs a PTP NIC (NTP ~1ms fallback), hardware unvalidated, per ADR-0007"
+]
+test-isolation-62 = [
+  "RESOLVED 2026-05-20: #62 (Earn-core/#39 split-out) fully closed at the root via PRs #70/#71/#73/#76. Bucket A (port-bind races on RTSP/PTP/phc2sys) + Bucket C (Task.shutdown cross-pid ownership) cured by app-owned-GenServer unique-name pattern (#71). Bucket B (mid-run singleton death cascade) cured by Media.Peer + Coprocessor.Pipeline restart:temporary + Media.Engine try/catch :exit + Peer is_pid guard on channel_pid + HealthMesh Map.get(:port) (#76). Bucket D (SNIFBackend Logger.require + def-promotions + RoomChannel catch-all) fixed (#70). SingletonWatcher diagnostic landed in test_helper.exs (#73) — advisory, runs every suite, freezes pre-shutdown."
 ]
 resolved-2026-04-16 = [
   "Opus naming/contract drift: Backend.audio_encode/4 + audio_decode/3 docstrings rewritten to state explicitly that they are PCM frame pack/unpack, NOT Opus. Added explicit Backend.opus_transcode/4 callback returning {:error, :not_implemented} on every backend (ElixirBackend, ZigBackend, SmartBackend, SNIFBackend). Added opus_available?/0 callback (always false). Pinned by opus_contract_test.exs."
@@ -161,6 +164,54 @@ open-failures = 0
 #             total non-deterministic (99..165). Cannot be
 #             authoritatively measured/validated without CI. #39 now
 #             HARD-BLOCKED on the stuck GitHub Actions queue (user).
+# 2026-05-20: #62 fully closed at the root in 4 PRs.
+#             #70 (Bucket D — genuine bugs): SNIFBackend `require
+#             Logger` + `parse_fft_result`/`prepare_ifft_input`/
+#             `parse_ifft_result` promoted defp→def (callable from
+#             tests + sibling backends); RoomChannel catch-all
+#             `join/3` clause returns {:error, %{reason:
+#             "invalid_topic"}} for non-room: topics.
+#             #71 (Bucket A — port-bind races + Bucket C — task
+#             ownership): app-owned singletons that bind ports
+#             (Burble.Timing.PTP, Burble.Transport.RTSP,
+#             Burble.Timing.Phc2sys) now honour a :name opt on
+#             start_link/1 via {name, init_opts} = Keyword.pop;
+#             tests pass `name: :"<mod>_test_<unique>"` so async
+#             test runs don't collide on registered name nor on the
+#             :gen_tcp port. llm_test.exs Task.async + Task.shutdown
+#             replaced with spawn (cross-pid ownership exit
+#             eliminated). 4 RTSP SETUP-over-TCP failures left as
+#             pre-existing parser drift (out of scope, not #62).
+#             #73 (Bucket B — diagnostic): SingletonWatcher in
+#             test_helper.exs monitors 20 app-owned singletons,
+#             records death (name+pid+reason+ms), freezes via
+#             ExUnit.after_suite before BEAM shutdown so app-
+#             teardown :DOWN cascade is not mis-recorded; advisory,
+#             does not fail CI. Caught the Bucket B cascade before
+#             the cure landed.
+#             #76 (Bucket B — cure): Burble.Media.Peer +
+#             Burble.Coprocessor.Pipeline switched to
+#             `use GenServer, restart: :temporary` (test-induced
+#             peer crashes no longer drain the supervisor's
+#             max_restarts: 3-in-5s intensity); Burble.Media.Peer
+#             guards `send(state.channel_pid, _)` with `is_pid/1`
+#             (tests pass channel_pid: nil — the :badarg was the
+#             cascade trigger); Burble.Media.Engine wraps the two
+#             DynamicSupervisor.start_child calls in try/catch :exit
+#             so a dead PeerSupervisor/CoprocessorSupervisor doesn't
+#             propagate :shutdown into the Engine; Burble.Groove.
+#             HealthMesh switched `v.port` → `Map.get(v, :port)`
+#             (peers added via report_peer_status/3 lack :port,
+#             :badkey was a secondary independent cause).
+#             Local OTP25 evidence post-PR-D: 707 tests, 134
+#             failures, NO singleton-death block emitted (every
+#             watched singleton stayed alive). 134 is inside the
+#             documented same-SHA noise band (15-38 on CI, wider
+#             locally with PR-B's test rewrites in the tree).
+#             Headline signal = absence of watcher block, not the
+#             count. OTP27 CI deferred — estate Elixir CI queue was
+#             exhausted at merge time (concurrency-pool throttle);
+#             will surface in next post-merge run on main.
 
 [crg]
 grade = "C"
