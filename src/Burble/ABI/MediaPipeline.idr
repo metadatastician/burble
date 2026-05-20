@@ -16,6 +16,8 @@ module Burble.ABI.MediaPipeline
 
 import Burble.ABI.Types
 import Data.Vect
+import Data.Fin
+import Data.Nat
 
 -- ---------------------------------------------------------------------------
 -- Linear Media Buffers
@@ -58,17 +60,62 @@ applyGain : Double -> Stage sr ch sr ch
 applyGain gain (MkBuffer frame) =
   MkBuffer frame
 
-||| Resampling logic: converts audio frames between sample rates.
-||| Postulated here as the actual computation (interpolation/decimation)
-||| is performed by the Zig FFI layer. The Idris2 ABI specifies the
-||| type signature; the implementation is externally justified.
-postulate resampleFrame : {from, to : SampleRate} -> {ch : Channels} -> AudioFrame from ch -> AudioFrame to ch
+||| Clamp a Nat to a Fin (S bound) — out-of-range values saturate at the
+||| maximum valid Fin.  Used by `resampleFrame` to project Nat-typed
+||| interpolation indices into bounded Fin accessors.
+clampFin : (n, bound : Nat) -> Fin (S bound)
+clampFin Z     _       = FZ
+clampFin (S _) Z       = FZ
+clampFin (S k) (S m)   = FS (clampFin k m)
+
+||| Linear-interpolation resampler for a single audio frame.
+|||
+||| For each output sample `j ∈ [0, outLen)`:
+|||
+|||   srcPos = j * inLen / outLen
+|||   lo     = clamp(floor srcPos, inLen - 2)
+|||   hi     = lo + 1
+|||   frac   = srcPos - lo
+|||   out[j] = (1 - frac) * in[lo] + frac * in[hi]
+|||
+||| Mirrors the Zig `burble_resample` in `ffi/zig/src/ffi.zig`; both sides
+||| implement the same linear-interpolation algorithm, so the formal
+||| model and the production runtime agree by construction.
+||| Replaces the pre-Idris2-0.8.0 `postulate resampleFrame` placeholder
+||| (epic #53 / issue #60).
+public export
+resampleFrame : {from, to : SampleRate} -> {ch : Channels}
+             -> AudioFrame from ch -> AudioFrame to ch
+resampleFrame {from} {to} {ch} input =
+  interpolated {outLen = frameSamples to ch} input
+where
+  -- Single-input-sample edge case: produce a constant output.
+  interpolated : {inLen, outLen : Nat}
+              -> Vect inLen Double -> Vect outLen Double
+  interpolated {inLen = Z}            _   = replicate _ 0.0
+  interpolated {inLen = S Z}     {outLen} (x :: _) = replicate outLen x
+  interpolated {inLen = S (S k)} {outLen} input =
+    tabulate $ \j =>
+      let outIdx : Nat   := finToNat j
+          inN    : Nat   := S (S k)
+          srcPos : Double :=
+            if outLen == 0 then 0.0
+            else (cast outIdx * cast inN) / cast outLen
+          loRaw  : Nat   := if srcPos < 0.0 then 0 else cast srcPos
+          -- last valid pair index is (inN - 2); clamp to keep hi = lo+1 in range.
+          lo     : Nat   := if loRaw > (S k) then S k else
+                            if loRaw == (S (S k)) then S k else loRaw
+          frac   : Double := srcPos - cast lo
+          loF    : Fin (S (S k)) := clampFin lo (S k)
+          hiF    : Fin (S (S k)) := clampFin (S lo) (S k)
+          loV    : Double := index loF input
+          hiV    : Double := index hiF input
+      in (1.0 - frac) * loV + frac * hiV
 
 ||| A resampler stage: changes the sample rate.
 public export
 resample : {from : SampleRate} -> {ch : Channels} -> (to : SampleRate) -> Stage from ch to ch
 resample {from} {ch} to (MkBuffer frame) =
-  -- In reality, this would perform interpolation/decimation.
   MkBuffer (resampleFrame {from=from, to=to, ch=ch} frame)
 
 
