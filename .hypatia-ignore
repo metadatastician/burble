@@ -1,0 +1,44 @@
+# Banned-language exemption ledger — hypatia / governance-reusable.yml
+# Each line: <rule>:<path>
+#
+# Estate language policy bans ReScript at the file-name level.
+# Burble's admin panel + client library use ReScript intentionally
+# (admin is React-based, client is a typed runtime API). Migration
+# to AffineScript is owed but out of scope for the baseline-rot
+# sweep — these exemptions get cleared when the migration lands.
+#
+cicd_rules/banned_language_file:admin/src/App.res
+cicd_rules/banned_language_file:admin/src/BurbleCmd.res
+cicd_rules/banned_language_file:admin/src/Capabilities.res
+cicd_rules/banned_language_file:admin/src/Model.res
+cicd_rules/banned_language_file:admin/src/Msg.res
+cicd_rules/banned_language_file:admin/src/RuntimeBridge.res
+cicd_rules/banned_language_file:client/lib/src/BurbleClient.res
+cicd_rules/banned_language_file:client/lib/src/BurbleLOL.res
+cicd_rules/banned_language_file:client/lib/src/BurbleProfile.res
+cicd_rules/banned_language_file:client/lib/src/BurbleSignaling.res
+cicd_rules/banned_language_file:client/lib/src/BurbleSpatial.res
+cicd_rules/banned_language_file:client/lib/src/BurbleVoice.res
+cicd_rules/banned_language_file:client/lib/src/extensions/IDApTIKVoice.res
+cicd_rules/banned_language_file:client/lib/src/extensions/PanLLVoice.res
+cicd_rules/banned_language_file:client/web/src/Audio.res
+cicd_rules/banned_language_file:client/web/src/Bindings.res
+cicd_rules/banned_language_file:client/web/src/Main.res
+cicd_rules/banned_language_file:client/web/src/Room.res
+cicd_rules/banned_language_file:client/web/src/Signaling.res
+cicd_rules/banned_language_file:client/web/src/WebRTC.res
+cicd_rules/banned_language_file:client/web/src/app/App.res
+cicd_rules/banned_language_file:client/web/src/app/Routes.res
+cicd_rules/banned_language_file:client/web/src/app/auth/AuthState.res
+cicd_rules/banned_language_file:client/web/src/app/diagnostics/SelfTestPanel.res
+cicd_rules/banned_language_file:client/web/src/app/rooms/RoomList.res
+cicd_rules/banned_language_file:client/web/src/app/rooms/RoomState.res
+cicd_rules/banned_language_file:client/web/src/app/setup/SetupWizard.res
+cicd_rules/banned_language_file:client/web/src/app/text/TextChat.res
+cicd_rules/banned_language_file:client/web/src/app/voice/AudioPipeline.res
+cicd_rules/banned_language_file:client/web/src/app/voice/E2EE.res
+cicd_rules/banned_language_file:client/web/src/app/voice/ScreenShare.res
+cicd_rules/banned_language_file:client/web/src/app/voice/VoiceControls.res
+cicd_rules/banned_language_file:client/web/src/app/voice/VoiceEngine.res
+cicd_rules/banned_language_file:client/web/src/bindings/PhoenixSocket.res
+cicd_rules/banned_language_file:examples/SafeDOMExample.res

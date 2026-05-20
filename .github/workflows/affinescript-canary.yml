@@ -62,14 +62,14 @@ jobs:
       - name: Cache affinescript build
         if: steps.detect.outputs.count > 0
         id: cache-affinescript
-        uses: actions/cache@13aacd865c20de90d75de3b17ebe84f7a17d57d2 # v4.0.0
+        uses: actions/cache@d4323d4df104b026a6aa633fdb11d772146be0bf # v4.2.2
         with:
           path: /usr/local/bin/affinescript
           key: affinescript-${{ env.AFFINESCRIPT_REF }}-${{ runner.os }}
 
       - name: Setup OCaml (cache miss only)
         if: steps.detect.outputs.count > 0 && steps.cache-affinescript.outputs.cache-hit != 'true'
-        uses: ocaml/setup-ocaml@v3
+        uses: ocaml/setup-ocaml@e32b06a3e831ff2fbc6f08cf35be2085e3918014 # v3.6.1
         with:
           ocaml-compiler: ${{ env.OCAML_COMPILER }}
 
