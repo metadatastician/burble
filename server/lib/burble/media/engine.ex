@@ -212,10 +212,23 @@ defmodule Burble.Media.Engine do
           ice_servers: ice_servers_for_mode(session.privacy_mode)
         ]
 
-        case DynamicSupervisor.start_child(
-               Burble.PeerSupervisor,
-               {Burble.Media.Peer, peer_opts}
-             ) do
+        # Defensive: a DynamicSupervisor that has hit max_restarts intensity
+        # exits :shutdown, which would propagate out of GenServer.call and
+        # bring Burble.Media.Engine down. Catch :exit here so a sibling
+        # supervisor's death cannot topple the engine. The session state is
+        # still updated below so callers see consistent {:ok, offer} return
+        # values whether or not the Peer process started.
+        peer_start_result =
+          try do
+            DynamicSupervisor.start_child(
+              Burble.PeerSupervisor,
+              {Burble.Media.Peer, peer_opts}
+            )
+          catch
+            :exit, reason -> {:error, {:peer_supervisor_unavailable, reason}}
+          end
+
+        case peer_start_result do
           {:ok, _pid} ->
             Logger.info("[Media] Peer process started for #{peer_id}")
 
@@ -243,10 +256,17 @@ defmodule Burble.Media.Engine do
           }
         ]
 
-        case DynamicSupervisor.start_child(
-               Burble.CoprocessorSupervisor,
-               {Burble.Coprocessor.Pipeline, pipeline_opts}
-             ) do
+        pipeline_start_result =
+          try do
+            DynamicSupervisor.start_child(
+              Burble.CoprocessorSupervisor,
+              {Burble.Coprocessor.Pipeline, pipeline_opts}
+            )
+          catch
+            :exit, reason -> {:error, {:coprocessor_supervisor_unavailable, reason}}
+          end
+
+        case pipeline_start_result do
           {:ok, _pid} ->
             Logger.info("[Media] Pipeline started for peer #{peer_id}")
 
