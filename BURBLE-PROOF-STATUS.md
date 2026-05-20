@@ -1,7 +1,7 @@
 <!-- SPDX-License-Identifier: PMPL-1.0-or-later -->
 # Burble Proof Status
 
-**Short version (verified 2026-05-19, Idris2 0.8.0).** 6 of 7 ABI modules compile and type-check: `Types`, `Foreign`, `WebRTCSignaling`, `Permissions`, `Avow`, `Vext`. **`MediaPipeline.idr` does NOT compile** — it uses the Idris1 `postulate` keyword, removed in Idris2 (parse error at the `resampleFrame` declaration). The aggregate `just build-proofs` now works (ipkg `sourcedir` + `IDRIS2_PREFIX` were both broken — fixed) but the build still aborts at `MediaPipeline`. Tracked: see the proofs issue under epic #53. Per ADR-0007 the "formally verified" claim is type-check-level for 6/7 modules, NOT all-six.
+**Short version (verified 2026-05-20, Idris2 0.8.0).** **All 7 of 7 ABI modules now compile and type-check** — `Types`, `Foreign`, `WebRTCSignaling`, `Permissions`, `Avow`, `Vext`, `MediaPipeline`. The `MediaPipeline.idr` `postulate resampleFrame` (Idris1 syntax, parse error on Idris2) was replaced with a pure-Idris2 linear-interpolation implementation; the companion Zig `burble_resample` in `ffi/zig/src/ffi.zig` implements the same algorithm for the production runtime path (issue #60 resolved). `just build-proofs` now succeeds end-to-end across all 7 modules. Per ADR-0007 the "formally verified" claim is type-check-level for all seven.
 
 ## Current ABI proofs (all compile)
 
@@ -16,8 +16,7 @@
 
 ## Dangerous-pattern debt
 
-- 1 `postulate` in `MediaPipeline.idr` (`resampleFrame` — documented Zig FFI migration target to `burble_resample`)
-- 0 `believe_me`, 0 `assert_total`
+- 0 `postulate`, 0 `believe_me`, 0 `assert_total`
 
 ## Proof gaps (enforcement, not typecheck)
 
