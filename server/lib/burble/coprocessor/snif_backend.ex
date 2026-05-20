@@ -87,7 +87,9 @@ defmodule Burble.Coprocessor.SNIFBackend do
   """
 
   @behaviour Burble.Coprocessor.Backend
-  
+
+  require Logger
+
   alias Burble.Coprocessor.{ElixirBackend, ZigBackend}
   
   # Configuration - paths to WASM modules.
@@ -575,7 +577,7 @@ defmodule Burble.Coprocessor.SNIFBackend do
   - Minimal memory allocation
   - Typically <1µs for typical FFT sizes
   """
-  defp parse_fft_result(flat_result, size) do
+  def parse_fft_result(flat_result, size) do
     # WASM returns [re0, im0, re1, im1, ...]
     # We need [{re0, im0}, {re1, im1}, ...]
     flat_result
@@ -621,7 +623,7 @@ defmodule Burble.Coprocessor.SNIFBackend do
   - Minimal memory allocation
   - Typically <1µs for typical FFT sizes
   """
-  defp prepare_ifft_input(spectrum) do
+  def prepare_ifft_input(spectrum) do
     spectrum
     |> Enum.flat_map(fn {re, im} -> [re, im] end)
   end
@@ -674,7 +676,7 @@ defmodule Burble.Coprocessor.SNIFBackend do
   - Input spectrum that doesn't satisfy conjugate symmetry
   - Bug in the WASM IFFT implementation
   """
-  defp parse_ifft_result(complex_result) do
+  def parse_ifft_result(complex_result) do
     # IFFT returns [re0, im0, re1, im1, ...]
     # We want [re0, re1, re2, ...] (imaginary parts should be ~0)
     complex_result
