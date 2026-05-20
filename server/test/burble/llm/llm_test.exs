@@ -226,7 +226,10 @@ defmodule Burble.LLMTest do
       {:ok, port} = :inet.port(listen)
 
       parent = self()
-      acceptor = Task.async(fn ->
+      # spawn (not Task.async) — Task.shutdown can only be called from the
+      # owner pid, but on_exit/1 runs in the ExUnit.OnExitHandler process,
+      # which is a different pid (#62).
+      acceptor = spawn(fn ->
         {:ok, server} = :gen_tcp.accept(listen, 1000)
         send(parent, {:server_socket, server})
         receive do
@@ -244,8 +247,7 @@ defmodule Burble.LLMTest do
         end
 
       on_exit(fn ->
-        send(acceptor.pid, :close)
-        Task.shutdown(acceptor, :brutal_kill)
+        if Process.alive?(acceptor), do: send(acceptor, :close)
         :gen_tcp.close(client)
         :gen_tcp.close(listen)
       end)

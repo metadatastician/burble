@@ -99,7 +99,8 @@ defmodule Burble.Timing.Phc2sys do
     if effective_auto_start and not phc2sys_in_path?() do
       {:error, :phc2sys_not_installed}
     else
-      GenServer.start_link(__MODULE__, opts, name: __MODULE__)
+      {name, init_opts} = Keyword.pop(opts, :name, __MODULE__)
+      GenServer.start_link(__MODULE__, init_opts, name: name)
     end
   end
 
