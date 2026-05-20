@@ -40,7 +40,7 @@ defmodule Burble.Coprocessor.Pipeline do
       {:ok, pcm_samples} = Pipeline.process_inbound(pid, opus_frame)
   """
 
-  use GenServer
+  use GenServer, restart: :temporary
   require Logger
 
   alias Burble.Coprocessor.SmartBackend, as: Backend

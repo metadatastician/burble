@@ -168,8 +168,11 @@ defmodule Burble.Groove.HealthMesh do
 
         {:ok, {port, {:error, _reason}}}, acc ->
           # Check if we had this peer before — mark as degraded, then down.
+          # Peers added via report_peer_status/3 don't carry a :port key
+          # (they're identified by service_id only); use Map.get/2 so the
+          # find returns nothing for those rather than raising :badkey.
           existing =
-            Enum.find(state.peers, fn {_k, v} -> v.port == port end)
+            Enum.find(state.peers, fn {_k, v} -> Map.get(v, :port) == port end)
 
           case existing do
             {key, prev} when prev.status == :up ->
