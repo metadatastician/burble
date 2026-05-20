@@ -104,7 +104,8 @@ defmodule Burble.Timing.PTP do
     - `:enabled` — set to false to disable periodic measurements
   """
   def start_link(opts \\ []) do
-    GenServer.start_link(__MODULE__, opts, name: __MODULE__)
+    {name, init_opts} = Keyword.pop(opts, :name, __MODULE__)
+    GenServer.start_link(__MODULE__, init_opts, name: name)
   end
 
   @doc """

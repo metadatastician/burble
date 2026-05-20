@@ -56,10 +56,13 @@ defmodule Burble.Transport.RTSPTest do
   # ---------------------------------------------------------------------------
 
   setup do
-    # Start one RTSP GenServer per test. Port 19554 binds a real TCP listener;
-    # if the port is already taken the test will fail with :eaddrinuse rather
-    # than silently sharing state.
-    server = start_supervised!({RTSP, port: @test_port})
+    # Start one RTSP GenServer per test under a unique name so it does not
+    # collide with the application-owned RTSP (which uses name: __MODULE__).
+    # Port 19554 ≠ the application's 8554 so the listener binds cleanly.
+    # The `with_named/2` helper still temporarily steals the module name when
+    # a test exercises the public API (which hard-codes __MODULE__).
+    name = :"rtsp_test_#{System.unique_integer([:positive])}"
+    server = start_supervised!({RTSP, [port: @test_port, name: name]})
     {:ok, server: server}
   end
 
@@ -350,18 +353,40 @@ defmodule Burble.Transport.RTSPTest do
   # ---------------------------------------------------------------------------
 
   # Temporarily registers the supervised RTSP server under its module name so
-  # the module's public API (which uses GenServer.call(__MODULE__, ...)) routes
-  # to the test process rather than a production instance.
+  # the module's public API (which uses GenServer.call(__MODULE__, ...)) and
+  # the SETUP handler (which also calls __MODULE__ internally) route to the
+  # test process rather than the application-owned RTSP singleton.
+  #
+  # Because the test pid already holds a unique :name from setup (#62), we
+  # temporarily unregister that name, swap in __MODULE__, then restore on the
+  # way out. The application-owned RTSP is also displaced for the duration
+  # and restored on exit.
   defp with_named(server_pid, fun) do
-    # Unregister the module name if already taken (e.g. by a previous test that
-    # didn't clean up), then register this test's process.
-    Process.unregister(RTSP) rescue ArgumentError -> :ok
+    {:registered_name, unique_name} = Process.info(server_pid, :registered_name)
+
+    app_pid = Process.whereis(RTSP)
+
+    if app_pid && app_pid != server_pid, do: Process.unregister(RTSP)
+    if is_atom(unique_name) and unique_name != [], do: Process.unregister(unique_name)
+
     Process.register(server_pid, RTSP)
 
     try do
       fun.()
     after
-      Process.unregister(RTSP) rescue ArgumentError -> :ok
+      try do
+        Process.unregister(RTSP)
+      rescue
+        ArgumentError -> :ok
+      end
+
+      if is_atom(unique_name) and unique_name != [] and Process.alive?(server_pid) do
+        Process.register(server_pid, unique_name)
+      end
+
+      if app_pid && Process.alive?(app_pid) and Process.whereis(RTSP) == nil do
+        Process.register(app_pid, RTSP)
+      end
     end
   end
 
