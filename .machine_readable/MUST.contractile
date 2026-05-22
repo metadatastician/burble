@@ -1,4 +1,4 @@
-; SPDX-License-Identifier: PMPL-1.0-or-later
+; SPDX-License-Identifier: MPL-2.0
 ; MUST.contractile — Baseline invariants for burble
 ; These constraints MUST NOT be violated. K9 validators enforce them.
 ;
@@ -84,7 +84,7 @@
 
   (project-invariants
     ; Language migration (in progress — see STATE.a2ml [migration])
-    (must "no new .v (V-lang) files — migrate to Zig")
+    (must "no new .v (zig) files — migrate to Zig")
     (must "no new .res / .resi (ReScript) files — migrate to AffineScript")
     (must "no api/ directory — FFI lives at ffi/zig/ and is the sole C-ABI surface")
 

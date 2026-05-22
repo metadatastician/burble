@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# SPDX-License-Identifier: PMPL-1.0-or-later
+# SPDX-License-Identifier: MPL-2.0
 #
 # mikrotik-bolt-nat.sh — provision Burble Bolt port-forward rules on a
 # MikroTik RouterOS device over SSH. Idempotent.

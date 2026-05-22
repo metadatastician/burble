@@ -1,6 +1,6 @@
 # Burble Design Decisions
 
-<!-- SPDX-License-Identifier: PMPL-1.0-or-later -->
+<!-- SPDX-License-Identifier: MPL-2.0 -->
 
 This document captures key design decisions for Burble's advanced features including permissions, connection monitoring, self-healing systems, traffic smoothing, and feedback mechanisms.
 

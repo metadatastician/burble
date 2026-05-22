@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# SPDX-License-Identifier: PMPL-1.0-or-later
+# SPDX-License-Identifier: MPL-2.0
 #
 # Ensures quicer's embedded msquic checkout is at the required tag.
 # This avoids late-stage build failures like:

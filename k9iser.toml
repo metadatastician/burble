@@ -1,5 +1,5 @@
 # k9iser manifest — wrap configs into self-validating K9 contracts
-# SPDX-License-Identifier: PMPL-1.0-or-later
+# SPDX-License-Identifier: MPL-2.0
 #
 # burble: P2P voice chat with AI data channel (Elixir/Phoenix + WebRTC).
 # Safety-tier "yard" — communication service, moderate scrutiny.
@@ -15,7 +15,7 @@ name = "container-build"
 source = "stapeln.toml"
 format = "toml"
 must = [
-  "metadata.license == 'PMPL-1.0-or-later'",
+  "metadata.license == 'MPL-2.0'",
   "metadata.registry == 'ghcr.io/hyperpolymath'",
   "build.runtime == 'podman'",
   "layers.base.from starts-with 'cgr.dev/chainguard/'",
@@ -86,7 +86,7 @@ format = "json"
 must = [
   "app.security.sandbox.enabled == true",
   "app.ipc.timeout > 0",
-  "bundle.license == 'PMPL-1.0-or-later'",
+  "bundle.license == 'MPL-2.0'",
 ]
 trust = ["signed-by: ci-pipeline"]
 dust = []

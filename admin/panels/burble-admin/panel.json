@@ -5,7 +5,7 @@
   "version": "0.1.0",
   "description": "Admin panel for managing Burble voice servers, rooms, users, and WebRTC metrics.",
   "author": "Jonathan D.A. Jewell",
-  "license": "PMPL-1.0-or-later",
+  "license": "MPL-2.0",
   "clade": "infrastructure/voice",
   "entry": "../../src/App.res",
   "compiled_entry": "../../public/index.html",

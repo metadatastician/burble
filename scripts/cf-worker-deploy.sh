@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# SPDX-License-Identifier: PMPL-1.0-or-later
+# SPDX-License-Identifier: MPL-2.0
 #
 # cf-worker-deploy.sh — deploy the Burble signaling relay (Cloudflare Worker)
 # via the Cloudflare API. No wrangler dependency.

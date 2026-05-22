@@ -2,7 +2,7 @@
 # Safety tier: yard
 
 [must]
-metadata.license : string { == 'PMPL-1.0-or-later' }
+metadata.license : string { == 'MPL-2.0' }
 metadata.registry : string { == 'ghcr.io/hyperpolymath' }
 build.runtime : string { == 'podman' }
 layers.base.verify : bool { == true }

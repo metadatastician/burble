@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PMPL-1.0-or-later
+# SPDX-License-Identifier: MPL-2.0
 # Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
 #
 # Mix.Tasks.Bebop.Generate — Bebop codegen from .bop schemas to Elixir modules.
@@ -313,7 +313,7 @@ defmodule Mix.Tasks.Bebop.Generate do
     type_map = build_type_map(ast)
 
     header = """
-    # SPDX-License-Identifier: PMPL-1.0-or-later
+    # SPDX-License-Identifier: MPL-2.0
     # Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
     #
     # Generated from: #{schema_path}

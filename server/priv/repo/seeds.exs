@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PMPL-1.0-or-later
+# SPDX-License-Identifier: MPL-2.0
 # Seeds for development — creates a test user via VeriSimDB.
 #
 # Set DEV_USER_PASSWORD in your environment to override the default.

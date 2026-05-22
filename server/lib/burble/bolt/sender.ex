@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PMPL-1.0-or-later
+# SPDX-License-Identifier: MPL-2.0
 #
 # Burble.Bolt.Sender — fire a Burble Bolt at an IPv4, IPv6, or domain target.
 #

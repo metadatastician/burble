@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: PMPL-1.0-or-later
+// SPDX-License-Identifier: MPL-2.0
 // Client-side tests for BurbleVoice ReScript module.
 //
 // Tests the voice state machine, audio configuration, and

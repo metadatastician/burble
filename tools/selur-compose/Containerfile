@@ -1,5 +1,5 @@
 # selur-compose — Containerfile
-# SPDX-License-Identifier: PMPL-1.0-or-later
+# SPDX-License-Identifier: MPL-2.0
 #
 # Two-stage Chainguard build:
 #   Stage 1 (builder): cgr.dev/chainguard/wolfi-base — installs Rust, builds

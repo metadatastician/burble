@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: PMPL-1.0-or-later
+// SPDX-License-Identifier: MPL-2.0
 = Burble Roadmap
 :toc: preamble
 
@@ -43,7 +43,7 @@ Burble has cleared its foundational milestones. Test suite: 222+ Elixir tests + 
 * [x] **Automated Backups:** `Burble.Store.BackupScheduler` runs `Burble.Store.Backup.run/1` on a configurable interval (default 24h, opt-in via `BURBLE_BACKUPS_ENABLED=true` in prod). Exports every `user:` / `room_config:` / `server_config:` / `invite:` / `magic:` octad to a gzipped JSONL file, prunes to a retention count (default 14).
 * [x] **Idris2 Compilation:** Fully compile remaining proofs to C headers for Zig ABI validation.
 * [x] **File Send Executable Isolation:** Implement `chmod` lockdown for file transfers.
-* [x] **Internationalisation:** Link Zig FFI API to world corpus language support (`standards/lol`). _(V-lang API layer removed 2026-04-16; Zig FFI is now the sole surface.)_
+* [x] **Internationalisation:** Link Zig FFI API to world corpus language support (`standards/lol`). _(zig API layer removed 2026-04-16; Zig FFI is now the sole surface.)_
 
 == The "Majestic" Backlog (To-Do)
 

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PMPL-1.0-or-later
+# SPDX-License-Identifier: MPL-2.0
 # Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
 #
 # STATE.a2ml — Project state checkpoint
@@ -23,7 +23,7 @@ rationale = "Foundations + SFU solid. LLM service fully wired. PTP clock correla
 milestones = [
   { name = "v0.1.0 to v0.4.0 — Foundation & Transport", completion = 100 },
   { name = "v1.0.0 — Stable Release", completion = 100 },
-  { name = "Phase 0 — Scrub baseline (V-lang removed, docs honest)", completion = 100, date = "2026-04-16" },
+  { name = "Phase 0 — Scrub baseline (zig removed, docs honest)", completion = 100, date = "2026-04-16" },
   { name = "Phase 1 — Audio dependable (Opus honest, comfort noise, REMB, Avow chain, echo-cancel ref, neural spectral-gate verified)", completion = 100 },
   { name = "Phase 2 — P2P AI channel dependable (burble-ai-bridge fixes, round-trip tests, docs) — CRITICAL PATH for family/pair-programming use case", completion = 100 },
   { name = "Phase 2b — server-side Burble.LLM (provider, circuit breaker, fixed parse_frame, NimblePool wired) — SECONDARY, not required for family use case", completion = 100 },
@@ -34,7 +34,7 @@ milestones = [
 ]
 
 [migration]
-v-lang = { status = "complete", date = "2026-04-16", removed = ["api/v/burble.v", "api/v/server.v", "api/zig/ (broken duplicate)", "alloyiser.toml"], canonical-ffi = "ffi/zig/" }
+zig = { status = "complete", date = "2026-04-16", removed = ["api/v/burble.v", "api/v/server.v", "api/zig/ (broken duplicate)", "alloyiser.toml"], canonical-ffi = "ffi/zig/" }
 rescript = { status = "complete", target-language = "AffineScript", affine-files = 35, date = "2026-04-21", compiler-submodule = "tools/affinescript", notes = "All .res files ported to .affine; compiler bundled in Containerfile as affinec" }
 signaling-relay = { status = "consolidated", canonical = "signaling/relay.js", removed = ["signaling/Relay.res"] }
 
@@ -89,9 +89,9 @@ open-failures = 0
 #             anonymous `believe_me frame` placeholder to named `postulate resampleFrame`
 #             with documented Zig FFI migration path to `%foreign "C:burble_resample,libburblemedia"`.
 #             Commit bf0eef3 pushed to GitHub.
-# 2026-04-16: Phase 0 scrub-baseline — deleted api/v/ (V-lang client), api/zig/ (broken
+# 2026-04-16: Phase 0 scrub-baseline — deleted api/v/ (zig client), api/zig/ (broken
 #             merge-conflicted duplicate), signaling/Relay.res (duplicate of relay.js),
-#             alloyiser.toml (orphaned V-lang spec). Updated MUST.contractile with V/ReScript
+#             alloyiser.toml (orphaned zig spec). Updated MUST.contractile with V/ReScript
 #             bans. Flipped @known_gap tests in signaling_test.exs (the gaps are fixed).
 #             Collapsed BURBLE-PROOF-STATUS.md. Demoted completion % to honest 72.
 # 2026-04-20: Re-audit + completion push. Fixed 11 server-side "In reality" stubs

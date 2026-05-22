@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: PMPL-1.0-or-later -->
+<!-- SPDX-License-Identifier: MPL-2.0 -->
 <!-- Copyright (c) {{CURRENT_YEAR}} {{AUTHOR}} (hyperpolymath) <{{AUTHOR_EMAIL}}> -->
 <!-- Authoritative source: docs/AI-CONVENTIONS.md -->
 
@@ -11,7 +11,7 @@
 
 ## License
 
-- SPDX: `PMPL-1.0-or-later` on all new files.
+- SPDX: `MPL-2.0` on all new files.
 - Never use AGPL-3.0.
 - Copyright: `{{AUTHOR}} (hyperpolymath) <{{AUTHOR_EMAIL}}>`
 

@@ -1,5 +1,5 @@
 {
-  "_comment": "SPDX-License-Identifier: PMPL-1.0-or-later",
+  "_comment": "SPDX-License-Identifier: MPL-2.0",
   "scan_name": "security-and-branch-hygiene",
   "version": "1.0.0",
   "description": "Comprehensive security, branch, and CI/CD hygiene scan",

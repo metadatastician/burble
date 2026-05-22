@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: PMPL-1.0-or-later
+// SPDX-License-Identifier: MPL-2.0
 // Tests for the Burble AI Bridge (burble-ai-bridge.js).
 //
 // These tests verify the HTTP API contract without requiring a live

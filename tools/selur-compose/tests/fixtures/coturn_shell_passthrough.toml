@@ -1,5 +1,5 @@
 # coturn_shell_passthrough.toml
-# SPDX-License-Identifier: PMPL-1.0-or-later
+# SPDX-License-Identifier: MPL-2.0
 #
 # Fixture for P-14 / task 2.5: demonstrates that bare $args shell variables
 # inside a TOML string are preserved verbatim by the interpolator.

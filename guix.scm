@@ -1,4 +1,4 @@
-;; SPDX-License-Identifier: PMPL-1.0-or-later
+;; SPDX-License-Identifier: MPL-2.0
 ;; Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
 ;;
 ;; Guix package definition for Burble — voice-first communications platform.
@@ -125,7 +125,7 @@ with NAPTR/SRV discovery, and PAKE+SAS tiered caller authentication
 (per ADR-0003). Browser join with no install; native client with QUIC
 datagrams for low-latency peer-to-peer.")
     (license (list
-              ;; PMPL-1.0-or-later — extends MPL-2.0
+              ;; MPL-2.0 — extends MPL-2.0
               mpl2.0))))
 
 ;; Return the package as the default value so `guix build -f guix.scm`

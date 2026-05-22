@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: PMPL-1.0-or-later -->
+<!-- SPDX-License-Identifier: MPL-2.0 -->
 # Contributing to selur-compose
 
 Thank you for considering a contribution. selur-compose is a Rust project that

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PMPL-1.0-or-later
+# SPDX-License-Identifier: MPL-2.0
 # Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
 #
 # burble.launcher.a2ml — per-app launcher config for Burble voice/media.
@@ -9,7 +9,7 @@ display      = "Burble"
 description  = "Self-hostable Elixir control plane + WebRTC media server"
 categories   = ["Network", "AudioVideo", "Development"]
 version      = "0.1.0"
-license      = "PMPL-1.0-or-later"
+license      = "MPL-2.0"
 
 [repo]
 path = "/var/mnt/eclipse/repos/developer-ecosystem/burble"

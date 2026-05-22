@@ -27,7 +27,7 @@ NEVER create STATE.a2ml, META.a2ml, or ECOSYSTEM.a2ml in the repository root.
 4. **Deno for JS runtime** — NOT Node.js, NOT npm, NOT Bun
 5. **Chainguard base images** — for containers
 6. **"Containerfile" not "Dockerfile"**
-7. **PMPL-1.0-or-later** license (MPL-2.0 fallback where required)
+7. **MPL-2.0** license (MPL-2.0 fallback where required)
 8. **Voice first. Friction last. Complexity optional.** — design mantra
 
 ## REPOSITORY STRUCTURE

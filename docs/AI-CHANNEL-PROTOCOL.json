@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: PMPL-1.0-or-later
+// SPDX-License-Identifier: MPL-2.0
 // Claude-to-Claude Protocol Patterns — Burble AI Data Channel
 //
 // Conventions for structured JSON messages exchanged between two Claude Code

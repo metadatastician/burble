@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PMPL-1.0-or-later
+# SPDX-License-Identifier: MPL-2.0
 ExUnit.start()
 
 {:ok, _apps} = Application.ensure_all_started(:burble)

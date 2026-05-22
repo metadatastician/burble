@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PMPL-1.0-or-later
+# SPDX-License-Identifier: MPL-2.0
 # Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
 #
 # affinescript-canary.yml — AffineScript Compilation Canary
@@ -81,8 +81,22 @@ jobs:
           cd /tmp/affinescript-src
           git fetch --depth 1 origin "${AFFINESCRIPT_REF}"
           git checkout "${AFFINESCRIPT_REF}"
+          OPAM_SWITCH="$(opam switch show 2>/dev/null || true)"
+          if [ -z "$OPAM_SWITCH" ]; then
+            OPAM_SWITCH="$(opam switch list --short | awk -v compiler="$OCAML_COMPILER" 'index($0, compiler) { print; exit }')"
+          fi
+          if [ -z "$OPAM_SWITCH" ]; then
+            OPAM_SWITCH="$(opam switch list --short | awk 'NF { print; exit }')"
+          fi
+          if [ -z "$OPAM_SWITCH" ]; then
+            echo "::error::ocaml/setup-ocaml did not leave an opam switch to activate"
+            opam switch list || true
+            exit 50
+          fi
+          opam switch set "$OPAM_SWITCH"
+          eval "$(opam env --switch="$OPAM_SWITCH" --set-switch)"
           opam install --yes . --deps-only
-          opam exec -- dune build bin/main.exe
+          opam exec --switch="$OPAM_SWITCH" -- dune build bin/main.exe
           sudo cp _build/default/bin/main.exe /usr/local/bin/affinescript
           affinescript --help | head -5 || echo "(--help unavailable, binary installed)"
 
@@ -104,21 +118,27 @@ jobs:
             fi
           done < <(find . -name '*.affine' -not -path './node_modules/*' -not -path './_build/*' -not -path './.git/*')
           rm -f "$tmp"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "## AffineScript Canary Result" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Metric | Value |" >> "$GITHUB_STEP_SUMMARY"
-          echo "|---|---|" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Total .affine files | $total |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Failed compilation | $failed |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| AffineScript ref | \`${AFFINESCRIPT_REF}\` |" >> "$GITHUB_STEP_SUMMARY"
+          {
+            echo ""
+            echo "## AffineScript Canary Result"
+            echo ""
+            echo "| Metric | Value |"
+            echo "|---|---|"
+            echo "| Total .affine files | $total |"
+            echo "| Failed compilation | $failed |"
+            echo "| AffineScript ref | \`${AFFINESCRIPT_REF}\` |"
+          } >> "$GITHUB_STEP_SUMMARY"
           if [ "$failed" -gt 0 ]; then
-            echo "" >> "$GITHUB_STEP_SUMMARY"
-            echo "Canary advisory: $failed file(s) failed compilation. This does not block the merge — see annotations for details." >> "$GITHUB_STEP_SUMMARY"
+            {
+              echo ""
+              echo "Canary advisory: $failed file(s) failed compilation. This does not block the merge — see annotations for details."
+            } >> "$GITHUB_STEP_SUMMARY"
             exit 1
           fi
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "All .affine files compiled cleanly." >> "$GITHUB_STEP_SUMMARY"
+          {
+            echo ""
+            echo "All .affine files compiled cleanly."
+          } >> "$GITHUB_STEP_SUMMARY"
 
   # ---------------------------------------------------------------------------
   # Job 2: Pairing audit (.affine ↔ .res fallback)
@@ -144,13 +164,15 @@ jobs:
               unpaired=$((unpaired+1))
             fi
           done < <(find . -name '*.affine' -not -path './node_modules/*' -not -path './_build/*' -not -path './.git/*')
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "## .affine ↔ .res Pairing Audit" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          if [ "$unpaired" -eq 0 ]; then
-            echo "All .affine files have .res fallbacks." >> "$GITHUB_STEP_SUMMARY"
-          else
-            echo "$unpaired .affine file(s) have no .res sibling. See annotations." >> "$GITHUB_STEP_SUMMARY"
-          fi
+          {
+            echo ""
+            echo "## .affine ↔ .res Pairing Audit"
+            echo ""
+            if [ "$unpaired" -eq 0 ]; then
+              echo "All .affine files have .res fallbacks."
+            else
+              echo "$unpaired .affine file(s) have no .res sibling. See annotations."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
           # Advisory only at canary stage — exit clean
           exit 0

@@ -1,4 +1,4 @@
-; SPDX-License-Identifier: PMPL-1.0-or-later
+; SPDX-License-Identifier: MPL-2.0
 ; INTENT.contractile — Purpose and scope for burble
 ; Helps LLM/SLM agents understand what this repo IS and IS NOT.
 ;
@@ -51,7 +51,7 @@
     ("WebRTC for media transport — browser-compatible, E2EE via Insertable Streams")
     ("P2P mode as first-class — must work with zero server infrastructure")
     ("AffineScript for the web client (migration from ReScript in progress) — resource-aware type safety")
-    ("No V-lang anywhere — removed 2026-04-16, replaced by Zig FFI")
+    ("No zig anywhere — removed 2026-04-16, replaced by Zig FFI")
     ("No TypeScript, no Python, no Go, no npm — Deno for JS runtime")
   )
 

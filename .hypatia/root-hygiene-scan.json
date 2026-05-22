@@ -1,5 +1,5 @@
 {
-  "_comment": "SPDX-License-Identifier: PMPL-1.0-or-later",
+  "_comment": "SPDX-License-Identifier: MPL-2.0",
   "scan_name": "root-hygiene",
   "version": "1.0.0",
   "description": "Scan repo root for non-standard files and RSR template drift",

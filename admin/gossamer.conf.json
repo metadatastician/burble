@@ -78,7 +78,7 @@
     ],
     "resources": [],
     "copyright": "Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath)",
-    "license": "PMPL-1.0-or-later",
+    "license": "MPL-2.0",
     "shortDescription": "Admin panel for the Burble voice platform",
     "longDescription": "Gossamer-native admin panel for managing Burble voice servers, rooms, users, and WebRTC metrics. First app built natively for the Gossamer webview shell.",
     "linux": {

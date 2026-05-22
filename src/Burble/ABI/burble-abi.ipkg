@@ -1,4 +1,4 @@
--- SPDX-License-Identifier: PMPL-1.0-or-later
+-- SPDX-License-Identifier: MPL-2.0
 -- Idris2 package file for Burble ABI proofs (src/Burble/ABI/).
 --
 -- Builds the canonical ABI proof modules under src/Burble/ABI/.

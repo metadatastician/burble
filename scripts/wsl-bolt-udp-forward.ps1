@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PMPL-1.0-or-later
+# SPDX-License-Identifier: MPL-2.0
 #
 # wsl-bolt-udp-forward.ps1 - forward inbound Bolt UDP from the Windows host
 # into a WSL2 distro running the Burble server, WITHOUT WSL2 mirrored

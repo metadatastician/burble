@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PMPL-1.0-or-later
+# SPDX-License-Identifier: MPL-2.0
 # Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
 #
 # META.a2ml — Project meta-level information
@@ -12,7 +12,7 @@ last-updated = "2026-04-11"
 type = "service"
 languages = ["elixir", "zig", "idris2", "javascript", "rescript", "ephapax"]
 languages-target = ["elixir", "zig", "idris2", "javascript", "affinescript", "ephapax"]
-license = "PMPL-1.0-or-later"
+license = "MPL-2.0"
 author = "Jonathan D.A. Jewell (hyperpolymath)"
 
 [architecture-decisions]
@@ -22,7 +22,7 @@ decisions = [
   { id = "ADR-003", title = "Idris2 for ABI proofs — dependent types prove correctness", status = "accepted", date = "2026-01-10" },
   { id = "ADR-004", title = "WebRTC for media — browser-native, E2EE Insertable Streams", status = "accepted", date = "2026-01-20" },
   { id = "ADR-005", title = "P2P mode first-class — zero-server voice + AI data channel", status = "accepted", date = "2026-02-01" },
-  { id = "ADR-006", title = "V-lang banned estate-wide — replaced by Zig FFI", status = "accepted", date = "2026-04-10" },
+  { id = "ADR-006", title = "zig banned estate-wide — replaced by Zig FFI", status = "accepted", date = "2026-04-10" },
   { id = "ADR-007", title = "ReScript → AffineScript client migration", status = "accepted", date = "2026-04-16" },
   { id = "ADR-008", title = "Server-side Opus not implemented — SFU-opaque E2EE model", status = "accepted", date = "2026-04-16" },
   { id = "ADR-009", title = "P2P AI bridge is primary Claude-to-Claude channel (not server-side Burble.LLM)", status = "accepted", date = "2026-04-16" },

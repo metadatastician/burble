@@ -18,7 +18,7 @@ Submodule mount in burble: `tools/selur-compose/`
 3. **Chainguard base images.** `cgr.dev/chainguard/wolfi-base` for builds,
    `cgr.dev/chainguard/static` for runtime images.
 4. **TOML compose dialect.** Not YAML. The format is `selur-compose.toml`.
-5. **PMPL-1.0-or-later** license (MPL-2.0 fallback where required).
+5. **MPL-2.0** license (MPL-2.0 fallback where required).
 6. **Podman CLI driver only** in v0.1. No libpod REST socket dependency.
 7. **musl static linking.** The binary must run without a glibc runtime.
 8. **Five-crate workspace.** schema → interp → plan → driver → binary.
@@ -34,7 +34,7 @@ selur-compose/
 ├── Justfile                    # build / test / lint / release-dry
 ├── Containerfile               # Chainguard two-stage image
 ├── dist-workspace.toml         # cargo-dist release config
-├── LICENSE                     # PMPL-1.0-or-later
+├── LICENSE                     # MPL-2.0
 ├── README.adoc
 ├── CHANGELOG.md                # Keep-a-Changelog
 ├── CONTRIBUTING.md

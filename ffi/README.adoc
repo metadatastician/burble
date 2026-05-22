@@ -1,11 +1,11 @@
-// SPDX-License-Identifier: PMPL-1.0-or-later
+// SPDX-License-Identifier: MPL-2.0
 = ffi — foreign-function surface
 :toc: preamble
 
 == Purpose
 
 Native code bridged into the BEAM. The Zig SIMD coprocessor is the only
-FFI surface (the former V-lang layer was removed 2026-04-16; Zig is
+FFI surface (the former zig layer was removed 2026-04-16; Zig is
 canonical).
 
 == Contents

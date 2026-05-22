@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: PMPL-1.0-or-later
+// SPDX-License-Identifier: MPL-2.0
 = selur-compose — Release Engineering Guide
 :toc: left
 :icons: font
@@ -215,7 +215,7 @@ the binary COPY:
 LABEL org.opencontainers.image.title="selur-compose"
 LABEL org.opencontainers.image.version="0.1.0"
 LABEL org.opencontainers.image.source="https://github.com/hyperpolymath/selur-compose"
-LABEL org.opencontainers.image.licenses="PMPL-1.0-or-later"
+LABEL org.opencontainers.image.licenses="MPL-2.0"
 LABEL org.opencontainers.image.description="TOML-native Podman compose CLI"
 ----
 

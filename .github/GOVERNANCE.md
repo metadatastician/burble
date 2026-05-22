@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: PMPL-1.0-or-later -->
+<!-- SPDX-License-Identifier: MPL-2.0 -->
 
 # Project Governance
 
@@ -155,4 +155,4 @@ with the community before adoption, even though the BDFL retains final authority
 
 ---
 
-<sub>Copyright (c) {{CURRENT_YEAR}} hyperpolymath. Licensed under PMPL-1.0-or-later.</sub>
+<sub>Copyright (c) {{CURRENT_YEAR}} hyperpolymath. Licensed under MPL-2.0.</sub>

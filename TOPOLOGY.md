@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: PMPL-1.0-or-later -->
+<!-- SPDX-License-Identifier: MPL-2.0 -->
 <!-- Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk> -->
 # TOPOLOGY.md — Burble
 
@@ -34,7 +34,7 @@ burble/
 │       └── burble_web/
 │           ├── router.ex          # Phoenix router
 │           ├── channels/          # WebSocket channels (RoomChannel + UserSocket)
-│           ├── controllers/       # HTTP controllers (api/* — Phoenix REST, not V-lang)
+│           ├── controllers/       # HTTP controllers (api/* — Phoenix REST, not zig)
 │           └── plugs/             # Request plugs
 ├── signaling/                     # WebRTC signaling relay
 │   ├── relay.js                   # Sole relay — Deno, ephemeral SDP, 60s TTL
@@ -56,10 +56,10 @@ burble/
 
 ### Removed 2026-04-16 (Phase 0)
 
-- `api/v/` — V-lang REST client (banned; Zig FFI at `ffi/zig/` replaces it)
+- `api/v/` — zig REST client (banned; Zig FFI at `ffi/zig/` replaces it)
 - `api/zig/` — broken merge-conflicted half-migration duplicate of `ffi/zig/`
 - `signaling/Relay.res` — ReScript duplicate of the authoritative `relay.js`
-- `alloyiser.toml` — orphaned Alloy spec pointing at deleted V-lang source
+- `alloyiser.toml` — orphaned Alloy spec pointing at deleted zig source
 
 ## Data Flow
 

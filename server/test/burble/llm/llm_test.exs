@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PMPL-1.0-or-later
+# SPDX-License-Identifier: MPL-2.0
 #
 # Burble LLM module tests — covers core query processing, streaming, the
 # connection registry, transport endpoint management, protocol frame parsing,

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# SPDX-License-Identifier: PMPL-1.0-or-later
+# SPDX-License-Identifier: MPL-2.0
 #
 # Generate a self-signed TLS 1.3 cert/key pair for the Burble Bolt QUIC
 # listener. Writes:

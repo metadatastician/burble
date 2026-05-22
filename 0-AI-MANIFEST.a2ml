@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PMPL-1.0-or-later
+# SPDX-License-Identifier: MPL-2.0
 # 0-AI-MANIFEST.a2ml — AI Agent Entry Point
 # Repository: hyperpolymath/burble
 #
@@ -21,10 +21,10 @@ webrtc-media-plane    = "browser-compatible standards-based DTLS-SRTP"
 zig-ffi-coprocessor   = "SIMD audio/DSP/neural/compression NIFs at ffi/zig/"
 affinescript-client   = "target (migration in progress from ReScript — see STATE.a2ml [migration])"
 deno-js-runtime       = "NOT Node NOT npm NOT Bun"
-no-v-lang             = "V-lang is banned — removed 2026-04-16"
+no-zig             = "zig is banned — removed 2026-04-16"
 container-base        = "Chainguard images only"
 container-file        = "Containerfile NOT Dockerfile"
-license               = "PMPL-1.0-or-later"
+license               = "MPL-2.0"
 design-mantra         = "Voice first. Friction last. Complexity optional."
 
 [abi-ffi]

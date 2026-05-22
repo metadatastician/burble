@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: PMPL-1.0-or-later
+// SPDX-License-Identifier: MPL-2.0
 = Burble — Show Me The Receipts
 :toc:
 :icons: font
@@ -132,7 +132,7 @@ Burble uses a **Dual-Track** architecture. The core Application Binary Interface
 - ABI definitions: `src/Burble/ABI/Types.idr`, `src/Burble/ABI/MediaPipeline.idr`
 - Zig FFI: `ffi/zig/src/ffi.zig`
 
-NOTE: An earlier V-lang REST API layer (`api/v/`) was removed following the V-lang ban (2026-04-10). The Zig FFI layer (`ffi/zig/`) covers this surface with C-ABI compatibility.
+NOTE: An earlier zig REST API layer (`api/v/`) was removed following the zig ban (2026-04-10). The Zig FFI layer (`ffi/zig/`) covers this surface with C-ABI compatibility.
 
 == Zero-Trust SDP & AWOL Routing
 

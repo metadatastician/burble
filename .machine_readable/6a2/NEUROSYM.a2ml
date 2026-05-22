@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PMPL-1.0-or-later
+# SPDX-License-Identifier: MPL-2.0
 # Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
 #
 # NEUROSYM.a2ml — Neurosymbolic integration metadata
@@ -17,7 +17,7 @@ report-format = "logtalk"
 rules = [
   { name = "no-believe-me", pattern = "believe_me", severity = "critical", scope = "*.idr" },
   { name = "no-assert-total", pattern = "assert_total", severity = "critical", scope = "*.idr" },
-  { name = "no-v-lang-files", pattern = "\\.v$", severity = "critical", scope = "**", note = "V-lang banned 2026-04-16" },
+  { name = "no-zig-files", pattern = "\\.v$", severity = "critical", scope = "**", note = "zig banned 2026-04-16" },
   { name = "no-new-rescript", pattern = "\\.res$|\\.resi$", severity = "warning", scope = "**", note = "ReScript migration to AffineScript in progress; new .res files banned" },
   { name = "no-opus-pretence", pattern = "opus_encode|opus_decode", severity = "warning", scope = "*.ex", note = "Backend.audio_encode is PCM framing, not Opus. Use opus_transcode/4 explicitly." },
   { name = "stub-nif-returns-error", pattern = "simulated response", severity = "critical", scope = "*.ex", note = "Burble.LLM.process_query must not return simulated strings in production" },

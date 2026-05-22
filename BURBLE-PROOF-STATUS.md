@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: PMPL-1.0-or-later -->
+<!-- SPDX-License-Identifier: MPL-2.0 -->
 # Burble Proof Status
 
 **Short version (verified 2026-05-20, Idris2 0.8.0).** **All 7 of 7 ABI modules now compile and type-check** — `Types`, `Foreign`, `WebRTCSignaling`, `Permissions`, `Avow`, `Vext`, `MediaPipeline`. The `MediaPipeline.idr` `postulate resampleFrame` (Idris1 syntax, parse error on Idris2) was replaced with a pure-Idris2 linear-interpolation implementation; the companion Zig `burble_resample` in `ffi/zig/src/ffi.zig` implements the same algorithm for the production runtime path (issue #60 resolved). `just build-proofs` now succeeds end-to-end across all 7 modules. Per ADR-0007 the "formally verified" claim is type-check-level for all seven.

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# SPDX-License-Identifier: PMPL-1.0-or-later
+# SPDX-License-Identifier: MPL-2.0
 #
 # cf-bolt-dns.sh — provision NAPTR + SRV records at Cloudflare for Burble Bolt
 # discovery on a given zone.

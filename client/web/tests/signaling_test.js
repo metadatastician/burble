@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: PMPL-1.0-or-later
+// SPDX-License-Identifier: MPL-2.0
 // Client-side tests for BurbleSignaling ReScript module.
 //
 // These tests exercise the compiled JS output from BurbleSignaling.res

@@ -1,8 +1,8 @@
-// SPDX-License-Identifier: PMPL-1.0-or-later
+// SPDX-License-Identifier: MPL-2.0
 //
 // Burble Coprocessor FFI — Pure Zig implementation.
 //
-// This file exports the C-compatible functions used by the V-lang API.
+// This file exports the C-compatible functions used by the zig API.
 // It enforces the formal proofs defined in the Idris2 ABI.
 
 const std = @import("std");

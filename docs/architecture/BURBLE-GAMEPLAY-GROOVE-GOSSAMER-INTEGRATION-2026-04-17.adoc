@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: PMPL-1.0-or-later
+// SPDX-License-Identifier: MPL-2.0
 = Burble Gameplay Integration Notes (Groove/Gossamer/Nexus-Plexus)
 :toc: preamble
 :icons: font

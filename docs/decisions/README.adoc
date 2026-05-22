@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: PMPL-1.0-or-later
+// SPDX-License-Identifier: MPL-2.0
 = Architecture Decision Records
 
 This is Burble's decision log. Each ADR captures one significant

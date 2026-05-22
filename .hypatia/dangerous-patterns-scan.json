@@ -1,5 +1,5 @@
 {
-  "_comment": "SPDX-License-Identifier: PMPL-1.0-or-later",
+  "_comment": "SPDX-License-Identifier: MPL-2.0",
   "scan_name": "dangerous-patterns",
   "version": "1.0.0",
   "description": "Scan for formally dangerous escape hatches that bypass type safety, proof obligations, or termination guarantees. These are PRIORITY fixes — every instance represents a hole in formal verification.",

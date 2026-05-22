@@ -59,7 +59,7 @@ Standalone repo `selur-compose`, single Cargo workspace. Workspace because the f
 selur-compose/
 ├── Cargo.toml                       # workspace root
 ├── README.adoc
-├── LICENSE                          # PMPL-1.0-or-later
+├── LICENSE                          # MPL-2.0
 ├── 0-AI-MANIFEST.a2ml
 ├── flake.nix
 ├── Justfile
