@@ -11,6 +11,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Cross-platform background-service install path so launching Burble no
+  longer pops a terminal window. New `scripts/install-service.sh install`
+  detects the OS and installs:
+  - Linux/WSL: systemd `--user` units (`assets/services/burble.service`,
+    `burble-ai-bridge.service`) — Bolt's `udp/9` privileged bind handled
+    via `AmbientCapabilities=CAP_NET_BIND_SERVICE` instead of root.
+  - macOS: launchd LaunchAgents
+    (`assets/services/com.hyperpolymath.burble.plist`,
+    `…ai-bridge.plist`) in `~/Library/LaunchAgents/`.
+  - Windows host (WSL2 NAT): see the rewritten
+    `scripts/wsl-bolt-udp-forward.ps1 -Install` — now registers the
+    scheduled task to launch the relay **windowless** via a VBS shim
+    (`wsl-bolt-udp-forward.vbs`), so no PowerShell console flashes at
+    logon. `-WithTray` opts into a `NotifyIcon` system-tray UI (Status /
+    Open log / Restart / Exit).
+  Justfile recipes: `service-install`, `service-uninstall`,
+  `service-start`, `service-stop`, `service-restart`, `service-status`,
+  `service-logs`. Relay logs land in `%LOCALAPPDATA%\BurbleBoltFwd\relay.log`
+  on Windows / `journalctl --user -u burble` on Linux /
+  `/tmp/burble.{out,err}.log` on macOS.
 - `Burble.TestSupport.SingletonWatcher` in `test/test_helper.exs` — `Process.monitor`s each of 20 app-owned singletons (PubSub, Presence, RoomRegistry/Supervisor, PeerRegistry/Supervisor, CoprocessorRegistry/Supervisor, MessageStore, NNTPSBackend, Media.Engine, Timing.{PTP,ClockCorrelator,Alignment}, Groove + HealthMesh + Feedback, Transport.RTSP, Bolt.Listener, Endpoint), reports any mid-run death (name + pid + reason + ms-since-start) to stderr at suite end, freezes via `ExUnit.after_suite/1` before BEAM shutdown so the normal app-teardown `:DOWN` cascade is not mistaken for instability. Diagnostic for #62 Bucket B; advisory (does not fail CI).
 
 ### Changed

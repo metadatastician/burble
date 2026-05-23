@@ -1,0 +1,39 @@
+# SPDX-License-Identifier: MPL-2.0
+#
+# Burble Elixir/Phoenix control-plane service (Bolt udp/7373 + udp/9, voice
+# signalling on tcp/4020). Installed as a systemd *user* unit by
+# scripts/install-service.sh — the @REPO_DIR@ token is rewritten at install
+# time. To install by hand:
+#
+#   sed "s|@REPO_DIR@|$PWD|g" assets/services/burble.service \
+#     > ~/.config/systemd/user/burble.service
+#   systemctl --user daemon-reload
+#   systemctl --user enable --now burble.service
+#
+# Logs: journalctl --user -u burble -f
+
+[Unit]
+Description=Burble voice/media control plane (Elixir, Bolt udp/7373+9, http :4020)
+Documentation=https://github.com/hyperpolymath/burble
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=@REPO_DIR@/server
+Environment=MIX_ENV=dev
+Environment=LANG=C.UTF-8
+ExecStart=/usr/bin/env mix phx.server
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=15
+KillMode=mixed
+# Bolt binds udp/9 (WoL-compat poke port) which is privileged. Grant just
+# the capability instead of running as root.
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=burble
+
+[Install]
+WantedBy=default.target

@@ -37,15 +37,33 @@ changes and none of the mirrored-mode instability.
 
 [source,powershell]
 ----
-# One-time: register a logon scheduled task (optionally add firewall rules
-# from an elevated shell):
+# One-time: register a logon scheduled task that launches the relay
+# WINDOWLESS via a generated VBS shim (no PowerShell console flashes at
+# logon). Optionally add firewall rules from an elevated shell:
 .\scripts\wsl-bolt-udp-forward.ps1 -Install
 .\scripts\wsl-bolt-udp-forward.ps1 -Install -Firewall   # elevated
+.\scripts\wsl-bolt-udp-forward.ps1 -Install -WithTray   # add a system-tray icon
+                                                        # (Status / Open log / Restart / Exit)
 
 # Inspect / run in foreground / remove:
 .\scripts\wsl-bolt-udp-forward.ps1 -Status
-.\scripts\wsl-bolt-udp-forward.ps1 -Run
+.\scripts\wsl-bolt-udp-forward.ps1 -Run    # console, debugging
+.\scripts\wsl-bolt-udp-forward.ps1 -Tray   # tray-icon, ad-hoc (no scheduled task)
 .\scripts\wsl-bolt-udp-forward.ps1 -Uninstall
+----
+
+The headless install path appends to `%LOCALAPPDATA%\BurbleBoltFwd\relay.log`
+so the relay still leaves a trace even with no console attached.
+
+Inside WSL itself, install Burble's Elixir control plane as a systemd
+`--user` service so launching the project never pops a terminal either:
+
+[source,bash]
+----
+scripts/install-service.sh install      # systemd --user (Linux/WSL) or
+                                        # launchd LaunchAgent (macOS)
+scripts/install-service.sh status
+journalctl --user -u burble -f
 ----
 
 The relay is bidirectional (per-client ephemeral upstream socket, 30 s

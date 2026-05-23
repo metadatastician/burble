@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  SPDX-License-Identifier: MPL-2.0
+
+  Burble Elixir/Phoenix control-plane LaunchAgent. Installed by
+  scripts/install-service.sh into ~/Library/LaunchAgents/. The
+  @REPO_DIR@ token is rewritten at install time.
+
+  Manage:
+    launchctl load   ~/Library/LaunchAgents/com.hyperpolymath.burble.plist
+    launchctl unload ~/Library/LaunchAgents/com.hyperpolymath.burble.plist
+    tail -F /tmp/burble.out.log /tmp/burble.err.log
+-->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.hyperpolymath.burble</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/bin/env</string>
+    <string>mix</string>
+    <string>phx.server</string>
+  </array>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>MIX_ENV</key>
+    <string>dev</string>
+    <key>LANG</key>
+    <string>C.UTF-8</string>
+  </dict>
+
+  <key>WorkingDirectory</key>
+  <string>@REPO_DIR@/server</string>
+
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <dict>
+    <key>SuccessfulExit</key>
+    <false/>
+  </dict>
+
+  <key>StandardOutPath</key>
+  <string>/tmp/burble.out.log</string>
+  <key>StandardErrorPath</key>
+  <string>/tmp/burble.err.log</string>
+
+  <key>ProcessType</key>
+  <string>Background</string>
+</dict>
+</plist>

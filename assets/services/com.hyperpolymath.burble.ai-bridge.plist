@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  SPDX-License-Identifier: MPL-2.0
+
+  Burble AI bridge LaunchAgent. Installed by scripts/install-service.sh.
+-->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.hyperpolymath.burble.ai-bridge</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/bin/env</string>
+    <string>deno</string>
+    <string>run</string>
+    <string>--allow-net</string>
+    <string>--allow-env</string>
+    <string>client/web/burble-ai-bridge.js</string>
+  </array>
+
+  <key>WorkingDirectory</key>
+  <string>@REPO_DIR@</string>
+
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <dict>
+    <key>SuccessfulExit</key>
+    <false/>
+  </dict>
+
+  <key>StandardOutPath</key>
+  <string>/tmp/burble-ai-bridge.out.log</string>
+  <key>StandardErrorPath</key>
+  <string>/tmp/burble-ai-bridge.err.log</string>
+
+  <key>ProcessType</key>
+  <string>Background</string>
+</dict>
+</plist>
