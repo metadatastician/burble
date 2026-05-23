@@ -20,15 +20,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - macOS: launchd LaunchAgents
     (`assets/services/com.hyperpolymath.burble.plist`,
     `…ai-bridge.plist`) in `~/Library/LaunchAgents/`.
-  - Windows host (WSL2 NAT): see the rewritten
-    `scripts/wsl-bolt-udp-forward.ps1 -Install` — now registers the
-    scheduled task to launch the relay **windowless** via a VBS shim
-    (`wsl-bolt-udp-forward.vbs`), so no PowerShell console flashes at
-    logon. `-WithTray` opts into a `NotifyIcon` system-tray UI (Status /
-    Open log / Restart / Exit).
+  - Windows host (WSL2 NAT): `scripts/wsl-bolt-udp-forward.ps1 -Install`
+    now installs a **true Windows Service** registered with `sc.exe`
+    (replaces the previous scheduled-task-at-logon path). A minimal C#
+    service host is compiled in-place from an embedded source using the
+    in-box .NET Framework `csc.exe` — no NSSM, srvany, or external
+    tooling required. The service runs under the installing user's
+    account (prompted once via `Get-Credential`, password stored by the
+    SCM via LSA Secrets) because WSL distros are per-user — a
+    LocalSystem service can launch `wsl.exe` but won't see the user's
+    distro. Configured for auto-restart on crash (5s/5s/30s). Install
+    + uninstall must be run from an elevated PowerShell.
   Justfile recipes: `service-install`, `service-uninstall`,
   `service-start`, `service-stop`, `service-restart`, `service-status`,
-  `service-logs`. Relay logs land in `%LOCALAPPDATA%\BurbleBoltFwd\relay.log`
+  `service-logs`. Relay logs land in `C:\ProgramData\BurbleBoltFwd\relay.log`
   on Windows / `journalctl --user -u burble` on Linux /
   `/tmp/burble.{out,err}.log` on macOS.
 - `Burble.TestSupport.SingletonWatcher` in `test/test_helper.exs` — `Process.monitor`s each of 20 app-owned singletons (PubSub, Presence, RoomRegistry/Supervisor, PeerRegistry/Supervisor, CoprocessorRegistry/Supervisor, MessageStore, NNTPSBackend, Media.Engine, Timing.{PTP,ClockCorrelator,Alignment}, Groove + HealthMesh + Feedback, Transport.RTSP, Bolt.Listener, Endpoint), reports any mid-run death (name + pid + reason + ms-since-start) to stderr at suite end, freezes via `ExUnit.after_suite/1` before BEAM shutdown so the normal app-teardown `:DOWN` cascade is not mistaken for instability. Diagnostic for #62 Bucket B; advisory (does not fail CI).
