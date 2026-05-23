@@ -37,15 +37,40 @@ changes and none of the mirrored-mode instability.
 
 [source,powershell]
 ----
-# One-time: register a logon scheduled task (optionally add firewall rules
-# from an elevated shell):
+# One-time: install as a true Windows Service (elevated shell required).
+# A minimal C# service host is compiled in-place using the in-box
+# .NET Framework csc.exe — no NSSM, no external tooling. New-Service
+# prompts via Get-Credential for your password so the service runs
+# under YOUR account (WSL distros are per-user; LocalSystem can't see
+# them). The password is stored by the SCM via LSA Secrets.
 .\scripts\wsl-bolt-udp-forward.ps1 -Install
-.\scripts\wsl-bolt-udp-forward.ps1 -Install -Firewall   # elevated
+.\scripts\wsl-bolt-udp-forward.ps1 -Install -Firewall    # also adds inbound rules
 
 # Inspect / run in foreground / remove:
 .\scripts\wsl-bolt-udp-forward.ps1 -Status
-.\scripts\wsl-bolt-udp-forward.ps1 -Run
-.\scripts\wsl-bolt-udp-forward.ps1 -Uninstall
+.\scripts\wsl-bolt-udp-forward.ps1 -Run                  # console, debugging only
+.\scripts\wsl-bolt-udp-forward.ps1 -Uninstall            # elevated
+
+# Standard service-management surface:
+sc.exe query   BurbleBoltUdpForward
+sc.exe stop    BurbleBoltUdpForward
+sc.exe start   BurbleBoltUdpForward
+Get-Service    BurbleBoltUdpForward | Format-List *
+----
+
+The relay appends to `C:\ProgramData\BurbleBoltFwd\relay.log` so logs
+survive across logoffs and reboots. The service is configured for
+auto-restart on crash (5s, 5s, 30s).
+
+Inside WSL itself, install Burble's Elixir control plane as a systemd
+`--user` service so launching the project never pops a terminal either:
+
+[source,bash]
+----
+scripts/install-service.sh install      # systemd --user (Linux/WSL) or
+                                        # launchd LaunchAgent (macOS)
+scripts/install-service.sh status
+journalctl --user -u burble -f
 ----
 
 The relay is bidirectional (per-client ephemeral upstream socket, 30 s
