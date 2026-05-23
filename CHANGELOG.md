@@ -11,6 +11,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- One-shot OS-aware setup front doors so a fresh clone gets to a fully
+  installed background service in a single command per side:
+  - `./setup.sh` (extended) — detects Linux / macOS / WSL, runs preflight
+    (`mix`, `deno`, `systemctl`/`launchctl` presence), interactively
+    offers to install the systemd / launchd service, and on WSL prints
+    the *exact* elevated-PowerShell one-liner (with `\\wsl.localhost\<distro>\…`
+    UNC path pre-filled) for the Windows-host step. Honours
+    `BURBLE_INSTALL_SERVICE=yes|no` for non-interactive flows.
+  - `setup.ps1` (new) — Windows-host counterpart. Asserts elevation,
+    preflights `wsl.exe` + .NET Framework `csc.exe`, autodetects the
+    default WSL distro, installs the Bolt forwarder as a true Windows
+    Service via `scripts/wsl-bolt-udp-forward.ps1 -Install`, adds
+    Defender rules, then prints the `wsl -d <distro> -- ./setup.sh`
+    one-liner to complete the Linux side.
+  - Justfile: new `just setup` recipe (delegates to `./setup.sh`).
 - Cross-platform background-service install path so launching Burble no
   longer pops a terminal window. New `scripts/install-service.sh install`
   detects the OS and installs:

@@ -147,6 +147,10 @@ server:
 # users should also run scripts\wsl-bolt-udp-forward.ps1 -Install from a
 # Windows PowerShell to forward Bolt udp/7373+9 into WSL — windowless.
 
+# OS-aware first-run setup: preflight + service install + WSL handoff
+setup:
+    ./setup.sh
+
 # Install Burble as a background service (no terminal window pops up)
 service-install:
     scripts/install-service.sh install
@@ -155,11 +159,20 @@ service-install:
 service-uninstall:
     scripts/install-service.sh uninstall
 
-service-start:    ; scripts/install-service.sh start
-service-stop:     ; scripts/install-service.sh stop
-service-restart:  ; scripts/install-service.sh restart
-service-status:   ; scripts/install-service.sh status
-service-logs:     ; scripts/install-service.sh logs
+service-start:
+    scripts/install-service.sh start
+
+service-stop:
+    scripts/install-service.sh stop
+
+service-restart:
+    scripts/install-service.sh restart
+
+service-status:
+    scripts/install-service.sh status
+
+service-logs:
+    scripts/install-service.sh logs
 
 # Start the web client dev server
 client:
