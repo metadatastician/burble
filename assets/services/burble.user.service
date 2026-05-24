@@ -1,0 +1,33 @@
+# SPDX-License-Identifier: MPL-2.0
+#
+# Burble Elixir/Phoenix control-plane — *user* unit variant.
+#
+# Installed by `scripts/install-service.sh install --user`. No sudo
+# needed but UDP/9 will NOT bind (privileged port, systemd --user can't
+# grant capabilities). For that, either install the system unit (the
+# default) or pair this with `--setcap` which setcaps the BEAM binary.
+#
+# Logs: journalctl --user -u burble -f
+
+[Unit]
+Description=Burble voice/media control plane (Elixir, user unit)
+Documentation=https://github.com/hyperpolymath/burble
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=@REPO_DIR@/server
+Environment=MIX_ENV=dev
+Environment=LANG=C.UTF-8
+ExecStart=/usr/bin/env mix phx.server
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=15
+KillMode=mixed
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=burble
+
+[Install]
+WantedBy=default.target

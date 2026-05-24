@@ -10,6 +10,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- Linux service unit now binds `udp/9` correctly. Earlier draft used
+  `AmbientCapabilities=CAP_NET_BIND_SERVICE` in a systemd `--user` unit,
+  which is silently ignored — user instances cannot grant capabilities.
+  `assets/services/burble.service` is now a **system** unit (User=@USER@,
+  installed to `/etc/systemd/system/`) where AmbientCapabilities actually
+  applies. `scripts/install-service.sh install` defaults to the system
+  mode (uses `sudo`); pass `--user` for the prior user-unit behaviour
+  (no sudo, but udp/9 won't bind without `--setcap`, which runs
+  `sudo setcap cap_net_bind_service=+eip` on the active `beam.smp`).
+  A new `assets/services/burble.user.service` documents the user-mode
+  variant; the installer also renders the user variant on the fly by
+  stripping `User=/Group=/AmbientCapabilities=` and rewriting
+  `WantedBy`. `setup.sh` prompts for system-vs-user mode interactively
+  (or honours `BURBLE_INSTALL_MODE=system|user`).
+
 ### Added
 - One-shot OS-aware setup front doors so a fresh clone gets to a fully
   installed background service in a single command per side:

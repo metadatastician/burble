@@ -116,13 +116,26 @@ echo "════════════════════════�
 preflight_warn
 
 INSTALL_SERVICE="${BURBLE_INSTALL_SERVICE:-}"
+INSTALL_MODE="${BURBLE_INSTALL_MODE:-}"   # system | user
 if [ -z "$INSTALL_SERVICE" ] && [ -t 0 ]; then
     read -rp "Install Burble as a background service now? (no terminal will pop up at launch) [Y/n] " ans
     case "${ans:-Y}" in Y|y|"") INSTALL_SERVICE=yes ;; *) INSTALL_SERVICE=no ;; esac
 fi
 
+if [ "$INSTALL_SERVICE" = "yes" ] && [ "$TARGET" != "macos" ] && [ -z "$INSTALL_MODE" ] && [ -t 0 ]; then
+    echo ""
+    echo "  Install mode:"
+    echo "    [S] system unit (needs sudo, binds udp/9 cleanly) — recommended"
+    echo "    [u] --user unit (no sudo, but udp/9 won't bind without --setcap)"
+    read -rp "  Choice [S/u] " mode
+    case "${mode:-S}" in u|U) INSTALL_MODE=user ;; *) INSTALL_MODE=system ;; esac
+fi
+
 if [ "$INSTALL_SERVICE" = "yes" ]; then
-    "$REPO_DIR/scripts/install-service.sh" install || {
+    install_args=("install")
+    [ "$INSTALL_MODE" = user ] && install_args+=("--user")
+    [ "$INSTALL_MODE" = user ] && command -v setcap >/dev/null 2>&1 && install_args+=("--setcap")
+    "$REPO_DIR/scripts/install-service.sh" "${install_args[@]}" || {
         echo ""
         echo "  Service install failed. You can retry with: just service-install"
     }

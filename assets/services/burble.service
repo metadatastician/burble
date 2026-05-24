@@ -1,16 +1,18 @@
 # SPDX-License-Identifier: MPL-2.0
 #
-# Burble Elixir/Phoenix control-plane service (Bolt udp/7373 + udp/9, voice
-# signalling on tcp/4020). Installed as a systemd *user* unit by
-# scripts/install-service.sh — the @REPO_DIR@ token is rewritten at install
-# time. To install by hand:
+# Burble Elixir/Phoenix control-plane service — *system* unit.
 #
-#   sed "s|@REPO_DIR@|$PWD|g" assets/services/burble.service \
-#     > ~/.config/systemd/user/burble.service
-#   systemctl --user daemon-reload
-#   systemctl --user enable --now burble.service
+# Why a system unit (not --user) by default: Burble.Bolt.Listener binds
+# udp/9 (WoL-compat poke port), which is a privileged port. systemd
+# --user units silently ignore AmbientCapabilities= because user
+# instances cannot grant capabilities the user doesn't already have;
+# only PID 1's systemd can. A system unit with
+# AmbientCapabilities=CAP_NET_BIND_SERVICE actually binds udp/9.
 #
-# Logs: journalctl --user -u burble -f
+# Installed by scripts/install-service.sh (sudo) — @REPO_DIR@ and
+# @USER@ are rewritten at install time.
+#
+# Logs: journalctl -u burble -f
 
 [Unit]
 Description=Burble voice/media control plane (Elixir, Bolt udp/7373+9, http :4020)
@@ -20,6 +22,8 @@ Wants=network-online.target
 
 [Service]
 Type=simple
+User=@USER@
+Group=@USER@
 WorkingDirectory=@REPO_DIR@/server
 Environment=MIX_ENV=dev
 Environment=LANG=C.UTF-8
@@ -28,12 +32,14 @@ Restart=on-failure
 RestartSec=5
 TimeoutStopSec=15
 KillMode=mixed
-# Bolt binds udp/9 (WoL-compat poke port) which is privileged. Grant just
-# the capability instead of running as root.
+# This is the whole point of running as a system unit — grants the
+# privileged-port bind to a non-root user.
 AmbientCapabilities=CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+NoNewPrivileges=true
 StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=burble
 
 [Install]
-WantedBy=default.target
+WantedBy=multi-user.target

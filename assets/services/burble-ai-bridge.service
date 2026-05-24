@@ -1,10 +1,12 @@
 # SPDX-License-Identifier: MPL-2.0
 #
 # Burble AI bridge — Deno HTTP/WS shim on tcp/6474 + tcp/6475 that lets
-# Claude Code talk to the in-browser P2P data channel. Installed as a
-# systemd *user* unit by scripts/install-service.sh.
+# Claude Code talk to the in-browser P2P data channel. Installed by
+# scripts/install-service.sh — the installer strips the User=/Group= and
+# rewrites WantedBy when targeting --user mode. No privileged ports, so
+# either mode works equally well.
 #
-# Logs: journalctl --user -u burble-ai-bridge -f
+# Logs: journalctl -u burble-ai-bridge -f   (or `--user`)
 
 [Unit]
 Description=Burble Claude<->browser bridge (Deno, http :6474 / ws :6475)
@@ -14,15 +16,18 @@ Wants=network-online.target
 
 [Service]
 Type=simple
+User=@USER@
+Group=@USER@
 WorkingDirectory=@REPO_DIR@
 Environment=LANG=C.UTF-8
 ExecStart=/usr/bin/env deno run --allow-net --allow-env client/web/burble-ai-bridge.js
 Restart=on-failure
 RestartSec=3
 TimeoutStopSec=10
+NoNewPrivileges=true
 StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=burble-ai-bridge
 
 [Install]
-WantedBy=default.target
+WantedBy=multi-user.target
