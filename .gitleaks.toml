@@ -1,0 +1,3 @@
+[allowlist]
+description = "Allow false positive AmbientCapabilities in README"
+fingerprints = ["a33392723a5f060381e5878bcc2cb88a33db3494:tests/install/README.md:generic-api-key:54"]
