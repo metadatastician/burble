@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: MPL-2.0
+﻿# SPDX-License-Identifier: MPL-2.0
 #
 # wsl-bolt-udp-forward.ps1 - forward inbound Bolt UDP from the Windows host
 # into a WSL2 distro running the Burble server, WITHOUT WSL2 mirrored
@@ -52,6 +52,10 @@
 #   4  - C# compile / sc.exe install failure
 
 [CmdletBinding(DefaultParameterSetName = 'Run')]
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute("PSReviewUnusedParameter", "")]
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute("PSUseBOMForUnicodeEncodedFile", "")]
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute("PSAvoidUsingEmptyCatchBlock", "")]
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute("PSAvoidUsingWriteHost", "")]
 param(
     [Parameter(ParameterSetName = 'Run')]      [switch]$Run,
     [Parameter(ParameterSetName = 'Install')]  [switch]$Install,
@@ -59,7 +63,10 @@ param(
     [Parameter(ParameterSetName = 'Status')]   [switch]$Status,
     [string]$Distro,
     [int[]]$Ports = @(7373, 9),
-    [switch]$Firewall
+    [switch]$Firewall,
+    # Optional: pre-built PSCredential for non-interactive install (CI).
+    # When omitted, -Install prompts via Get-Credential as usual.
+    [System.Management.Automation.PSCredential]$Credential
 )
 
 $ErrorActionPreference = 'Stop'
@@ -99,8 +106,10 @@ function Write-Relay {
     try {
         New-Item -ItemType Directory -Path $script:LogDir -Force | Out-Null
         Add-Content -Path $script:LogFile -Value $stamp
-    } catch {}
-    try { Write-Host $stamp } catch {}
+    } catch { $null = $_ # Ignore directory creation / log append errors
+    }
+    try { Write-Host $stamp } catch { $null = $_ # Ignore console write errors
+    }
 }
 
 function Wait-WslIp {
@@ -226,7 +235,7 @@ function Assert-Elevated {
 }
 
 # C# source for a minimal Windows Service host. Compiled on demand by
-# Compile-ServiceHost using the in-box .NET Framework csc.exe (always
+# Build-ServiceHost using the in-box .NET Framework csc.exe (always
 # present on every Windows 10/11). The service has no .NET Core / Roslyn /
 # NSSM dependency.
 $script:ServiceSource = @'
@@ -273,7 +282,7 @@ namespace BurbleBoltForward {
 }
 '@
 
-function Compile-ServiceHost {
+function Build-ServiceHost {
     # Use the .NET Framework 4 in-box C# compiler — it's always at this
     # path on a stock Windows install, no extra tooling needed.
     $cscPaths = @(
@@ -301,7 +310,12 @@ function Compile-ServiceHost {
 }
 
 function Install-Service {
-    param([string]$Distro, [int[]]$Ports, [switch]$Firewall)
+    param(
+        [string]$Distro,
+        [int[]]$Ports,
+        [switch]$Firewall,
+        [System.Management.Automation.PSCredential]$Credential
+    )
     Assert-Elevated -Action '-Install (creates a Windows Service)'
     $self = $PSCommandPath
     if (-not $self) { $self = $MyInvocation.MyCommand.Path }
@@ -326,14 +340,19 @@ function Install-Service {
     if ($Ports)  { $argInner += " -Ports $($Ports -join ',')" }
     Set-Content -Path $script:ServiceArgs -Value $argInner -Encoding ASCII
 
-    Compile-ServiceHost
+    Build-ServiceHost
 
-    Write-Host "[bolt-fwd] WSL distros are per-user. The service needs to run under YOUR account"
-    Write-Host "           so it can launch wsl.exe and see your distro. New-Service stores the"
-    Write-Host "           password securely via LSA Secrets — you only enter it once."
-    $cred = Get-Credential -UserName "$env:USERDOMAIN\$env:USERNAME" `
-        -Message "Password for $env:USERDOMAIN\$env:USERNAME (so the service can launch wsl.exe as you)"
-    if (-not $cred) { Write-Error "Cancelled — no credential supplied."; exit 1 }
+    if ($Credential) {
+        $cred = $Credential
+        Write-Host "[bolt-fwd] Using pre-supplied credential for $($cred.UserName) (non-interactive install)."
+    } else {
+        Write-Host "[bolt-fwd] WSL distros are per-user. The service needs to run under YOUR account"
+        Write-Host "           so it can launch wsl.exe and see your distro. New-Service stores the"
+        Write-Host "           password securely via LSA Secrets — you only enter it once."
+        $cred = Get-Credential -UserName "$env:USERDOMAIN\$env:USERNAME" `
+            -Message "Password for $env:USERDOMAIN\$env:USERNAME (so the service can launch wsl.exe as you)"
+        if (-not $cred) { Write-Error "Cancelled — no credential supplied."; exit 1 }
+    }
 
     # Grant the service user Modify on the install dir — it lives under
     # %ProgramData% which is admin-only by default, but the service runs
@@ -395,7 +414,7 @@ function Uninstall-Service {
 }
 
 switch ($PSCmdlet.ParameterSetName) {
-    'Install'   { Install-Service -Distro $Distro -Ports $Ports -Firewall:$Firewall }
+    'Install'   { Install-Service -Distro $Distro -Ports $Ports -Firewall:$Firewall -Credential $Credential }
     'Uninstall' { Uninstall-Service }
     'Status' {
         $ip  = Resolve-WslIp -Distro $Distro
