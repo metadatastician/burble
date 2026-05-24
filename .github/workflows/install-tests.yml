@@ -83,19 +83,22 @@ jobs:
           if [ "$rc" != "0" ]; then
               echo
               echo "::error title=run.sh failed::exit=$rc — FAIL lines surfaced as annotations below:"
-              # GH caps annotations at ~10 per check-run. Surface ONLY the
-              # FAIL lines (with the indented sub-line that immediately
-              # follows, which often holds the actual error message from
-              # the tool — shellcheck, plutil, etc.) so the cap doesn't
-              # get spent on PASS/SKIP noise.
-              awk '/FAIL /{p=1; print; next} p && /^      /{print; next} {p=0}' /tmp/run-out.log \
-                | sed 's/\x1b\[[0-9;]*m//g' \
+              # Strip ANSI colour codes FIRST so awk sees plain text.
+              # (fail() emits `  \033[0;31mFAIL\033[0m msg` — without
+              # stripping, "FAIL " pattern won't match because of the
+              # \033[0m sitting between FAIL and the space.)
+              sed 's/\x1b\[[0-9;]*m//g' /tmp/run-out.log > /tmp/run-out.plain
+              # GH caps annotations at ~10 per check-run. Surface ONLY
+              # FAIL lines (with the 6-space-indented sub-line that
+              # follows, which is where shellcheck/plutil/etc. dump
+              # their actual error message).
+              awk '/FAIL /{p=1; print; next} p && /^      /{print; next} {p=0}' /tmp/run-out.plain \
                 | head -20 \
                 | while IFS= read -r line; do
                     echo "::error::$line"
                 done
               echo "::group::Full run.sh output"
-              cat /tmp/run-out.log | sed 's/\x1b\[[0-9;]*m//g'
+              cat /tmp/run-out.plain
               echo "::endgroup::"
           fi
           exit $rc
@@ -124,19 +127,22 @@ jobs:
           if [ "$rc" != "0" ]; then
               echo
               echo "::error title=run.sh failed::exit=$rc — FAIL lines surfaced as annotations below:"
-              # GH caps annotations at ~10 per check-run. Surface ONLY the
-              # FAIL lines (with the indented sub-line that immediately
-              # follows, which often holds the actual error message from
-              # the tool — shellcheck, plutil, etc.) so the cap doesn't
-              # get spent on PASS/SKIP noise.
-              awk '/FAIL /{p=1; print; next} p && /^      /{print; next} {p=0}' /tmp/run-out.log \
-                | sed 's/\x1b\[[0-9;]*m//g' \
+              # Strip ANSI colour codes FIRST so awk sees plain text.
+              # (fail() emits `  \033[0;31mFAIL\033[0m msg` — without
+              # stripping, "FAIL " pattern won't match because of the
+              # \033[0m sitting between FAIL and the space.)
+              sed 's/\x1b\[[0-9;]*m//g' /tmp/run-out.log > /tmp/run-out.plain
+              # GH caps annotations at ~10 per check-run. Surface ONLY
+              # FAIL lines (with the 6-space-indented sub-line that
+              # follows, which is where shellcheck/plutil/etc. dump
+              # their actual error message).
+              awk '/FAIL /{p=1; print; next} p && /^      /{print; next} {p=0}' /tmp/run-out.plain \
                 | head -20 \
                 | while IFS= read -r line; do
                     echo "::error::$line"
                 done
               echo "::group::Full run.sh output"
-              cat /tmp/run-out.log | sed 's/\x1b\[[0-9;]*m//g'
+              cat /tmp/run-out.plain
               echo "::endgroup::"
           fi
           exit $rc
