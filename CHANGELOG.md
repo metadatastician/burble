@@ -10,7 +10,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- `tests/install/run.sh` — cross-platform validation for the install
+  machinery, safe to run anywhere. Renders systemd units in both
+  system and user modes and checks invariants (no unsubstituted
+  `@TOKEN@`s, required sections present, `AmbientCapabilities=` only
+  in system mode, `User=/Group=` stripped from user-mode renders,
+  `WantedBy=` rewritten correctly), `systemd-analyze verify`s them
+  when available, plist-lints via `plutil`/`xmllint`, AST-parses the
+  PowerShell scripts, runs `shellcheck` + `PSScriptAnalyzer` if
+  installed. Each check reports `PASS`/`FAIL`/`SKIP` and the suite
+  exits non-zero on any FAIL. `just test-install` shortcut.
+- `.github/workflows/install-tests.yml` — three-OS CI matrix:
+  `lint-linux` (systemd-analyze + shellcheck + xmllint), `lint-macos`
+  (real `plutil -lint`), `lint-windows` (PSScriptAnalyzer + AST parse
+  + actually compiles the embedded C# service host with in-box
+  `csc.exe`, proving the runtime install path will succeed).
+  Triggered on changes to install machinery only.
+
 ### Fixed
+- `render_unit` in `scripts/install-service.sh` left `@USER@` in user-mode
+  output when the token appeared in comments — caught by
+  `tests/install/run.sh`. Now substituted in both modes (the `User=`
+  *directive* is still stripped from user-mode renders since it's
+  invalid there).
 - Linux service unit now binds `udp/9` correctly. Earlier draft used
   `AmbientCapabilities=CAP_NET_BIND_SERVICE` in a systemd `--user` unit,
   which is silently ignored — user instances cannot grant capabilities.

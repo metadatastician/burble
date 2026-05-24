@@ -97,7 +97,11 @@ setcap_beam() {
 render_unit() {
     local src="$1" dst="$2"
     if [ "$LINUX_MODE" = user ]; then
-        sed -e "s|@REPO_DIR@|$REPO_DIR|g" \
+        # @USER@ still substituted (it may appear in comments); we just
+        # drop the User=/Group= *directives* which are invalid in user
+        # mode. AmbientCapabilities/CapabilityBoundingSet are silently
+        # ignored by --user instances so strip them to avoid confusion.
+        sed -e "s|@REPO_DIR@|$REPO_DIR|g" -e "s|@USER@|$USER|g" \
             -e "/^User=/d" -e "/^Group=/d" \
             -e "s|^WantedBy=multi-user.target|WantedBy=default.target|" \
             -e "/^AmbientCapabilities=/d" -e "/^CapabilityBoundingSet=/d" \
