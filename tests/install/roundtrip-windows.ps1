@@ -139,7 +139,7 @@ try {
         Remove-LocalUser -Name $TestUser -ErrorAction SilentlyContinue
         Pass "removed throwaway user $TestUser"
     } catch {
-        Write-Host "  WARN failed to remove $TestUser: $($_.Exception.Message)" -ForegroundColor Yellow
+        Write-Host "  WARN failed to remove ${TestUser}: $($_.Exception.Message)" -ForegroundColor Yellow
     }
 }
 
