@@ -82,16 +82,21 @@ jobs:
           rc=${PIPESTATUS[0]}
           if [ "$rc" != "0" ]; then
               echo
-              echo "::error title=run.sh failed::exit=$rc — surfacing tail as annotations:"
-              # Strip ANSI colour codes (\033[…m) so annotations render cleanly.
-              # GH caps annotations at ~10 per check-run, so be selective:
-              # emit only PASS/FAIL/SKIP lines + the last 15 lines of trace.
-              grep -E "PASS |FAIL |SKIP |[+] " /tmp/run-out.log \
+              echo "::error title=run.sh failed::exit=$rc — FAIL lines surfaced as annotations below:"
+              # GH caps annotations at ~10 per check-run. Surface ONLY the
+              # FAIL lines (with the indented sub-line that immediately
+              # follows, which often holds the actual error message from
+              # the tool — shellcheck, plutil, etc.) so the cap doesn't
+              # get spent on PASS/SKIP noise.
+              awk '/FAIL /{p=1; print; next} p && /^      /{print; next} {p=0}' /tmp/run-out.log \
                 | sed 's/\x1b\[[0-9;]*m//g' \
-                | tail -25 \
+                | head -20 \
                 | while IFS= read -r line; do
                     echo "::error::$line"
                 done
+              echo "::group::Full run.sh output"
+              cat /tmp/run-out.log | sed 's/\x1b\[[0-9;]*m//g'
+              echo "::endgroup::"
           fi
           exit $rc
 
@@ -118,16 +123,21 @@ jobs:
           rc=${PIPESTATUS[0]}
           if [ "$rc" != "0" ]; then
               echo
-              echo "::error title=run.sh failed::exit=$rc — surfacing tail as annotations:"
-              # Strip ANSI colour codes (\033[…m) so annotations render cleanly.
-              # GH caps annotations at ~10 per check-run, so be selective:
-              # emit only PASS/FAIL/SKIP lines + the last 15 lines of trace.
-              grep -E "PASS |FAIL |SKIP |[+] " /tmp/run-out.log \
+              echo "::error title=run.sh failed::exit=$rc — FAIL lines surfaced as annotations below:"
+              # GH caps annotations at ~10 per check-run. Surface ONLY the
+              # FAIL lines (with the indented sub-line that immediately
+              # follows, which often holds the actual error message from
+              # the tool — shellcheck, plutil, etc.) so the cap doesn't
+              # get spent on PASS/SKIP noise.
+              awk '/FAIL /{p=1; print; next} p && /^      /{print; next} {p=0}' /tmp/run-out.log \
                 | sed 's/\x1b\[[0-9;]*m//g' \
-                | tail -25 \
+                | head -20 \
                 | while IFS= read -r line; do
                     echo "::error::$line"
                 done
+              echo "::group::Full run.sh output"
+              cat /tmp/run-out.log | sed 's/\x1b\[[0-9;]*m//g'
+              echo "::endgroup::"
           fi
           exit $rc
 
