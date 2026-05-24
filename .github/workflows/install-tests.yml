@@ -63,7 +63,19 @@ jobs:
           # can fail or restart services. Just install the linters we need.
           sudo apt-get install -y --no-install-recommends \
             shellcheck libxml2-utils
+      - name: Show env diagnostics
+        run: |
+          echo "uname:     $(uname -a)"
+          echo "bash:      $BASH_VERSION"
+          echo "pwsh:      $(command -v pwsh || echo none)"
+          echo "powershell:$(command -v powershell || echo none)"
+          command -v pwsh >/dev/null && pwsh -NoProfile -Command 'Get-Module -ListAvailable PSScriptAnalyzer | Select-Object Name,Version' || true
+          echo "systemd-analyze: $(command -v systemd-analyze || echo none)"
+          echo "xmllint:   $(command -v xmllint || echo none)"
+          echo "shellcheck: $(command -v shellcheck || echo none) $(shellcheck --version | head -2)"
       - name: Run install test suite
+        env:
+          BURBLE_INSTALL_TESTS_DEBUG: "1"
         run: tests/install/run.sh
 
   lint-macos:
@@ -71,7 +83,18 @@ jobs:
     runs-on: macos-14
     steps:
       - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11  # v4.1.1
+      - name: Show env diagnostics
+        run: |
+          echo "uname:     $(uname -a)"
+          echo "bash:      $BASH_VERSION"
+          echo "pwsh:      $(command -v pwsh || echo none)"
+          command -v pwsh >/dev/null && pwsh -NoProfile -Command 'Get-Module -ListAvailable PSScriptAnalyzer | Select-Object Name,Version' || true
+          echo "plutil:    $(command -v plutil || echo none)"
+          echo "xmllint:   $(command -v xmllint || echo none)"
+          echo "shellcheck: $(command -v shellcheck || echo none)"
       - name: Run install test suite
+        env:
+          BURBLE_INSTALL_TESTS_DEBUG: "1"
         run: tests/install/run.sh
 
   lint-windows:

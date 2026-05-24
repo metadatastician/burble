@@ -11,8 +11,13 @@
 
 set -uo pipefail
 
+# Verbose CI debugging: setting BURBLE_INSTALL_TESTS_DEBUG=1 prints every
+# command before execution so a CI-only failure shows up in the logs.
+# Off by default to keep local interactive runs clean.
+[ "${BURBLE_INSTALL_TESTS_DEBUG:-}" = "1" ] && set -x
+
 REPO_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
-TMP="$(mktemp -d -t burble-install-tests.XXXXXX)"
+TMP="$(mktemp -d "${TMPDIR:-/tmp}/burble-install-tests.XXXXXX")"
 trap 'rm -rf "$TMP"' EXIT
 
 PASS=0; FAIL=0; SKIP=0
