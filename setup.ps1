@@ -1,4 +1,4 @@
-﻿# SPDX-License-Identifier: MPL-2.0
+# SPDX-License-Identifier: MPL-2.0
 #
 # setup.ps1 — Burble setup for the Windows host side of a WSL2 deploy.
 #
@@ -18,7 +18,6 @@
 #   .\setup.ps1 -SkipFirewall    # don't add Defender rules
 
 [CmdletBinding()]
-[Diagnostics.CodeAnalysis.SuppressMessageAttribute("PSUseBOMForUnicodeEncodedFile", "")]
 param(
     [string]$Distro,
     [int[]]$Ports = @(7373, 9),

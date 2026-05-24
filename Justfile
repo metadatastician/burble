@@ -159,16 +159,24 @@ service-install:
 service-uninstall:
     scripts/install-service.sh uninstall
 
-service-start:    ; scripts/install-service.sh start
-service-stop:     ; scripts/install-service.sh stop
-service-restart:  ; scripts/install-service.sh restart
-service-status:   ; scripts/install-service.sh status
-service-logs:     ; scripts/install-service.sh logs
+service-start:
+    scripts/install-service.sh start
+
+service-stop:
+    scripts/install-service.sh stop
+
+service-restart:
+    scripts/install-service.sh restart
+
+service-status:
+    scripts/install-service.sh status
+
+service-logs:
+    scripts/install-service.sh logs
 
 # Lint the cross-platform install machinery (setup.sh, .ps1, units, plists)
 test-install:
     tests/install/run.sh
-
 
 # Start the web client dev server
 client:

@@ -22,6 +22,14 @@ CURRENT_SHELL="$(basename "$SHELL" 2>/dev/null || echo "unknown")"
 echo "Shell: $CURRENT_SHELL"
 echo ""
 
+# Preflight (just install, submodules, doctor) can be skipped via
+# BURBLE_SKIP_PREFLIGHT=1 — used by tests/install/run.sh so the OS
+# dispatch path is exercisable on CI runners that don't have just /
+# cargo / brew yet. Real users should never set this.
+if [ "${BURBLE_SKIP_PREFLIGHT:-0}" = "1" ]; then
+    echo "(BURBLE_SKIP_PREFLIGHT=1 — skipping just install, submodule init, doctor)"
+else
+
 # Check for just
 if ! command -v just >/dev/null 2>&1; then
     echo "just (command runner) is required but not installed."
@@ -70,6 +78,8 @@ echo "Running diagnostics..."
 # `just doctor` exits non-zero on any missing tool; treat as advisory so
 # the service-install handoff below still runs.
 just doctor || echo "  (doctor reported warnings — continuing)"
+
+fi  # /BURBLE_SKIP_PREFLIGHT
 
 # ─── Background-service install (OS-aware) ────────────────────────────────
 # Replaces the "burble launches and pops a terminal" experience with proper

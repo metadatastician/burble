@@ -34,7 +34,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `tests/install/run.sh` — cross-platform validation for the install
   machinery, safe to run anywhere. Renders systemd units in both
   system and user modes and checks invariants (no unsubstituted
-  `@TOKEN@`s, required sections present, `AmbientCapabilities only
+  `@TOKEN@`s, required sections present, `AmbientCapabilities=` only
   in system mode, `User=/Group=` stripped from user-mode renders,
   `WantedBy=` rewritten correctly), `systemd-analyze verify`s them
   when available, plist-lints via `plutil`/`xmllint`, AST-parses the
@@ -47,6 +47,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   + actually compiles the embedded C# service host with in-box
   `csc.exe`, proving the runtime install path will succeed).
   Triggered on changes to install machinery only.
+
+### Fixed
+- `render_unit` in `scripts/install-service.sh` left `@USER@` in user-mode
+  output when the token appeared in comments — caught by
+  `tests/install/run.sh`. Now substituted in both modes (the `User=`
+  *directive* is still stripped from user-mode renders since it's
+  invalid there).
+- Linux service unit now binds `udp/9` correctly. Earlier draft used
+  `AmbientCapabilities=CAP_NET_BIND_SERVICE` in a systemd `--user` unit,
+  which is silently ignored — user instances cannot grant capabilities.
+  `assets/services/burble.service` is now a **system** unit (User=@USER@,
+  installed to `/etc/systemd/system/`) where AmbientCapabilities actually
+  applies. `scripts/install-service.sh install` defaults to the system
+  mode (uses `sudo`); pass `--user` for the prior user-unit behaviour
+  (no sudo, but udp/9 won't bind without `--setcap`, which runs
+  `sudo setcap cap_net_bind_service=+eip` on the active `beam.smp`).
+  A new `assets/services/burble.user.service` documents the user-mode
+  variant; the installer also renders the user variant on the fly by
+  stripping `User=/Group=/AmbientCapabilities=` and rewriting
+  `WantedBy`. `setup.sh` prompts for system-vs-user mode interactively
+  (or honours `BURBLE_INSTALL_MODE=system|user`).
+
+### Added
 - One-shot OS-aware setup front doors so a fresh clone gets to a fully
   installed background service in a single command per side:
   - `./setup.sh` (extended) — detects Linux / macOS / WSL, runs preflight
@@ -67,7 +90,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   detects the OS and installs:
   - Linux/WSL: systemd `--user` units (`assets/services/burble.service`,
     `burble-ai-bridge.service`) — Bolt's `udp/9` privileged bind handled
-    via `AmbientCapabilities CAP_NET_BIND_SERVICE` instead of root.
+    via `AmbientCapabilities=CAP_NET_BIND_SERVICE` instead of root.
   - macOS: launchd LaunchAgents
     (`assets/services/com.hyperpolymath.burble.plist`,
     `…ai-bridge.plist`) in `~/Library/LaunchAgents/`.
@@ -88,27 +111,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   on Windows / `journalctl --user -u burble` on Linux /
   `/tmp/burble.{out,err}.log` on macOS.
 - `Burble.TestSupport.SingletonWatcher` in `test/test_helper.exs` — `Process.monitor`s each of 20 app-owned singletons (PubSub, Presence, RoomRegistry/Supervisor, PeerRegistry/Supervisor, CoprocessorRegistry/Supervisor, MessageStore, NNTPSBackend, Media.Engine, Timing.{PTP,ClockCorrelator,Alignment}, Groove + HealthMesh + Feedback, Transport.RTSP, Bolt.Listener, Endpoint), reports any mid-run death (name + pid + reason + ms-since-start) to stderr at suite end, freezes via `ExUnit.after_suite/1` before BEAM shutdown so the normal app-teardown `:DOWN` cascade is not mistaken for instability. Diagnostic for #62 Bucket B; advisory (does not fail CI).
-
-### Fixed
-- `render_unit` in `scripts/install-service.sh` left `@USER@` in user-mode
-  output when the token appeared in comments — caught by
-  `tests/install/run.sh`. Now substituted in both modes (the `User=`
-  *directive* is still stripped from user-mode renders since it's
-  invalid there).
-- Linux service unit now binds `udp/9` correctly. Earlier draft used
-  `AmbientCapabilities CAP_NET_BIND_SERVICE` in a systemd `--user` unit,
-  which is silently ignored — user instances cannot grant capabilities.
-  `assets/services/burble.service` is now a **system** unit (User=@USER@,
-  installed to `/etc/systemd/system/`) where AmbientCapabilities actually
-  applies. `scripts/install-service.sh install` defaults to the system
-  mode (uses `sudo`); pass `--user` for the prior user-unit behaviour
-  (no sudo, but udp/9 won't bind without `--setcap`, which runs
-  `sudo setcap cap_net_bind_service=+eip` on the active `beam.smp`).
-  A new `assets/services/burble.user.service` documents the user-mode
-  variant; the installer also renders the user variant on the fly by
-  stripping `User=/Group=/AmbientCapabilities=` and rewriting
-  `WantedBy`. `setup.sh` prompts for system-vs-user mode interactively
-  (or honours `BURBLE_INSTALL_MODE=system|user`).
 
 ### Changed
 - README/ROADMAP claims scoped to the shipped build per ADR-0007: QUIC & SNIF marked experimental (optional NIFs disabled by default), PTP <1µs flagged hardware-gated, Idris2 proofs flagged type-check-only (runtime enforcement = ADR-0008 Option C), latency/scale flagged unbenchmarked; added a README Status section. Closes the STATE.a2ml doc-reality-drift entries (issue #51)

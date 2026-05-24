@@ -1,4 +1,4 @@
-﻿# SPDX-License-Identifier: MPL-2.0
+# SPDX-License-Identifier: MPL-2.0
 #
 # wsl-bolt-udp-forward.ps1 - forward inbound Bolt UDP from the Windows host
 # into a WSL2 distro running the Burble server, WITHOUT WSL2 mirrored
@@ -52,10 +52,6 @@
 #   4  - C# compile / sc.exe install failure
 
 [CmdletBinding(DefaultParameterSetName = 'Run')]
-[Diagnostics.CodeAnalysis.SuppressMessageAttribute("PSReviewUnusedParameter", "")]
-[Diagnostics.CodeAnalysis.SuppressMessageAttribute("PSUseBOMForUnicodeEncodedFile", "")]
-[Diagnostics.CodeAnalysis.SuppressMessageAttribute("PSAvoidUsingEmptyCatchBlock", "")]
-[Diagnostics.CodeAnalysis.SuppressMessageAttribute("PSAvoidUsingWriteHost", "")]
 param(
     [Parameter(ParameterSetName = 'Run')]      [switch]$Run,
     [Parameter(ParameterSetName = 'Install')]  [switch]$Install,
@@ -106,10 +102,8 @@ function Write-Relay {
     try {
         New-Item -ItemType Directory -Path $script:LogDir -Force | Out-Null
         Add-Content -Path $script:LogFile -Value $stamp
-    } catch { $null = $_ # Ignore directory creation / log append errors
-    }
-    try { Write-Host $stamp } catch { $null = $_ # Ignore console write errors
-    }
+    } catch {}
+    try { Write-Host $stamp } catch {}
 }
 
 function Wait-WslIp {
@@ -235,7 +229,7 @@ function Assert-Elevated {
 }
 
 # C# source for a minimal Windows Service host. Compiled on demand by
-# Build-ServiceHost using the in-box .NET Framework csc.exe (always
+# Compile-ServiceHost using the in-box .NET Framework csc.exe (always
 # present on every Windows 10/11). The service has no .NET Core / Roslyn /
 # NSSM dependency.
 $script:ServiceSource = @'
@@ -282,7 +276,7 @@ namespace BurbleBoltForward {
 }
 '@
 
-function Build-ServiceHost {
+function Compile-ServiceHost {
     # Use the .NET Framework 4 in-box C# compiler — it's always at this
     # path on a stock Windows install, no extra tooling needed.
     $cscPaths = @(
@@ -340,7 +334,7 @@ function Install-Service {
     if ($Ports)  { $argInner += " -Ports $($Ports -join ',')" }
     Set-Content -Path $script:ServiceArgs -Value $argInner -Encoding ASCII
 
-    Build-ServiceHost
+    Compile-ServiceHost
 
     if ($Credential) {
         $cred = $Credential
