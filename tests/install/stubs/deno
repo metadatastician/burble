@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# SPDX-License-Identifier: MPL-2.0
+#
+# Test stub for `deno` — see stubs/mix for rationale.
+echo "[stub deno] $* (sleeping forever to keep the unit Active)"
+exec sleep infinity

@@ -11,12 +11,63 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Real install→activate→stop→uninstall round-trip tests for all three
+  service managers (complements the lint-only tests):
+  - `tests/install/roundtrip-linux.sh` — `systemctl --user` round-trip.
+    Also kills the unit's main PID and asserts `Restart=on-failure`
+    respawns it within `RestartSec=5`.
+  - `tests/install/roundtrip-macos.sh` — `launchctl bootstrap gui/$UID`
+    / `bootout` round-trip with stub `PATH=` patched into the plist
+    (launchd ignores the user shell's env).
+  - `tests/install/roundtrip-windows.ps1` — creates a throwaway local
+    user (`burble-ci-test`) with a random password, installs the
+    Windows Service non-interactively via a new `-Credential`
+    parameter on `wsl-bolt-udp-forward.ps1` (skips the
+    `Get-Credential` prompt), asserts SCM state, uninstalls, removes
+    the user in a `finally` block.
+  - `tests/install/stubs/{mix,deno}` — sleep-forever stand-ins so the
+    spawned units satisfy systemd/launchd's "Active" check without
+    needing the full Elixir/Deno toolchain in CI.
+  - `.github/workflows/install-roundtrip.yml` — CI matrix:
+    `ubuntu-latest` (with `loginctl enable-linger` for user-systemd),
+    `macos-14`, `windows-latest`. Path-filtered to install machinery.
+- `tests/install/run.sh` — cross-platform validation for the install
+  machinery, safe to run anywhere. Renders systemd units in both
+  system and user modes and checks invariants (no unsubstituted
+  `@TOKEN@`s, required sections present, `AmbientCapabilities only
+  in system mode, `User=/Group=` stripped from user-mode renders,
+  `WantedBy=` rewritten correctly), `systemd-analyze verify`s them
+  when available, plist-lints via `plutil`/`xmllint`, AST-parses the
+  PowerShell scripts, runs `shellcheck` + `PSScriptAnalyzer` if
+  installed. Each check reports `PASS`/`FAIL`/`SKIP` and the suite
+  exits non-zero on any FAIL. `just test-install` shortcut.
+- `.github/workflows/install-tests.yml` — three-OS CI matrix:
+  `lint-linux` (systemd-analyze + shellcheck + xmllint), `lint-macos`
+  (real `plutil -lint`), `lint-windows` (PSScriptAnalyzer + AST parse
+  + actually compiles the embedded C# service host with in-box
+  `csc.exe`, proving the runtime install path will succeed).
+  Triggered on changes to install machinery only.
+- One-shot OS-aware setup front doors so a fresh clone gets to a fully
+  installed background service in a single command per side:
+  - `./setup.sh` (extended) — detects Linux / macOS / WSL, runs preflight
+    (`mix`, `deno`, `systemctl`/`launchctl` presence), interactively
+    offers to install the systemd / launchd service, and on WSL prints
+    the *exact* elevated-PowerShell one-liner (with `\\wsl.localhost\<distro>\…`
+    UNC path pre-filled) for the Windows-host step. Honours
+    `BURBLE_INSTALL_SERVICE=yes|no` for non-interactive flows.
+  - `setup.ps1` (new) — Windows-host counterpart. Asserts elevation,
+    preflights `wsl.exe` + .NET Framework `csc.exe`, autodetects the
+    default WSL distro, installs the Bolt forwarder as a true Windows
+    Service via `scripts/wsl-bolt-udp-forward.ps1 -Install`, adds
+    Defender rules, then prints the `wsl -d <distro> -- ./setup.sh`
+    one-liner to complete the Linux side.
+  - Justfile: new `just setup` recipe (delegates to `./setup.sh`).
 - Cross-platform background-service install path so launching Burble no
   longer pops a terminal window. New `scripts/install-service.sh install`
   detects the OS and installs:
   - Linux/WSL: systemd `--user` units (`assets/services/burble.service`,
     `burble-ai-bridge.service`) — Bolt's `udp/9` privileged bind handled
-    via `AmbientCapabilities=CAP_NET_BIND_SERVICE` instead of root.
+    via `AmbientCapabilities CAP_NET_BIND_SERVICE` instead of root.
   - macOS: launchd LaunchAgents
     (`assets/services/com.hyperpolymath.burble.plist`,
     `…ai-bridge.plist`) in `~/Library/LaunchAgents/`.
@@ -37,6 +88,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   on Windows / `journalctl --user -u burble` on Linux /
   `/tmp/burble.{out,err}.log` on macOS.
 - `Burble.TestSupport.SingletonWatcher` in `test/test_helper.exs` — `Process.monitor`s each of 20 app-owned singletons (PubSub, Presence, RoomRegistry/Supervisor, PeerRegistry/Supervisor, CoprocessorRegistry/Supervisor, MessageStore, NNTPSBackend, Media.Engine, Timing.{PTP,ClockCorrelator,Alignment}, Groove + HealthMesh + Feedback, Transport.RTSP, Bolt.Listener, Endpoint), reports any mid-run death (name + pid + reason + ms-since-start) to stderr at suite end, freezes via `ExUnit.after_suite/1` before BEAM shutdown so the normal app-teardown `:DOWN` cascade is not mistaken for instability. Diagnostic for #62 Bucket B; advisory (does not fail CI).
+
+### Fixed
+- `render_unit` in `scripts/install-service.sh` left `@USER@` in user-mode
+  output when the token appeared in comments — caught by
+  `tests/install/run.sh`. Now substituted in both modes (the `User=`
+  *directive* is still stripped from user-mode renders since it's
+  invalid there).
+- Linux service unit now binds `udp/9` correctly. Earlier draft used
+  `AmbientCapabilities CAP_NET_BIND_SERVICE` in a systemd `--user` unit,
+  which is silently ignored — user instances cannot grant capabilities.
+  `assets/services/burble.service` is now a **system** unit (User=@USER@,
+  installed to `/etc/systemd/system/`) where AmbientCapabilities actually
+  applies. `scripts/install-service.sh install` defaults to the system
+  mode (uses `sudo`); pass `--user` for the prior user-unit behaviour
+  (no sudo, but udp/9 won't bind without `--setcap`, which runs
+  `sudo setcap cap_net_bind_service=+eip` on the active `beam.smp`).
+  A new `assets/services/burble.user.service` documents the user-mode
+  variant; the installer also renders the user variant on the fly by
+  stripping `User=/Group=/AmbientCapabilities=` and rewriting
+  `WantedBy`. `setup.sh` prompts for system-vs-user mode interactively
+  (or honours `BURBLE_INSTALL_MODE=system|user`).
 
 ### Changed
 - README/ROADMAP claims scoped to the shipped build per ADR-0007: QUIC & SNIF marked experimental (optional NIFs disabled by default), PTP <1µs flagged hardware-gated, Idris2 proofs flagged type-check-only (runtime enforcement = ADR-0008 Option C), latency/scale flagged unbenchmarked; added a README Status section. Closes the STATE.a2ml doc-reality-drift entries (issue #51)

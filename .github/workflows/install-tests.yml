@@ -1,0 +1,167 @@
+# SPDX-License-Identifier: MPL-2.0
+#
+# install-tests.yml — cross-platform validation for the service-install
+# machinery (setup.sh, setup.ps1, scripts/install-service.sh,
+# scripts/wsl-bolt-udp-forward.ps1, assets/services/*).
+#
+# Three jobs cover three OSes; each is the lightest validation that
+# would have caught the bugs we've already hit (unsubstituted tokens,
+# AmbientCapabilities-in-user-unit, inline-`;` Justfile recipes, etc.):
+#
+#   lint-linux    Render systemd units in both modes, systemd-analyze
+#                 verify, shellcheck, plist XML validity, setup.sh
+#                 dispatch.
+#   lint-macos    plutil -lint on the real macOS host (catches plist
+#                 schema issues xmllint misses) + setup.sh OS dispatch.
+#   lint-windows  PowerShell AST parse + PSScriptAnalyzer + verify
+#                 csc.exe is reachable so the C# service-host compile
+#                 would succeed at install time.
+#
+# Round-trip (actual install/start/stop/uninstall) is intentionally
+# *not* in CI yet: --user systemd in GH Actions needs `linger` gymnastics,
+# and the Windows install needs a throwaway credentialed user with
+# `Log on as a service`. Those are tractable but worth a follow-up PR.
+
+name: Install tests
+
+on:
+  push:
+    branches: [main, master, 'claude/**']
+    paths:
+      - 'setup.sh'
+      - 'setup.ps1'
+      - 'scripts/install-service.sh'
+      - 'scripts/wsl-bolt-udp-forward.ps1'
+      - 'assets/services/**'
+      - 'tests/install/**'
+      - '.github/workflows/install-tests.yml'
+  pull_request:
+    branches: [main, master]
+    paths:
+      - 'setup.sh'
+      - 'setup.ps1'
+      - 'scripts/install-service.sh'
+      - 'scripts/wsl-bolt-udp-forward.ps1'
+      - 'assets/services/**'
+      - 'tests/install/**'
+      - '.github/workflows/install-tests.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  lint-linux:
+    name: Lint (Linux / systemd / shellcheck)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11  # v4.1.1
+      - name: Install validators
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            shellcheck libxml2-utils systemd
+          # systemd is preinstalled on ubuntu-latest but we want
+          # systemd-analyze present specifically.
+      - name: Run install test suite
+        run: tests/install/run.sh
+
+  lint-macos:
+    name: Lint (macOS / launchd plists)
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11  # v4.1.1
+      - name: Run install test suite
+        run: tests/install/run.sh
+
+  lint-windows:
+    name: Lint (Windows / PowerShell + csc.exe)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11  # v4.1.1
+
+      - name: Install PSScriptAnalyzer
+        shell: pwsh
+        run: |
+          Install-Module -Name PSScriptAnalyzer -Force -Scope CurrentUser -ErrorAction Stop
+
+      - name: PowerShell AST parse
+        shell: pwsh
+        run: |
+          $files = @('setup.ps1', 'scripts/wsl-bolt-udp-forward.ps1')
+          $any = $false
+          foreach ($f in $files) {
+              $errors = $null
+              [System.Management.Automation.Language.Parser]::ParseFile(
+                  (Resolve-Path $f), [ref]$null, [ref]$errors) | Out-Null
+              if ($errors -and $errors.Count -gt 0) {
+                  Write-Host "FAIL parse: $f"
+                  $errors | ForEach-Object { Write-Host "  $_" }
+                  $any = $true
+              } else {
+                  Write-Host "PASS parse: $f"
+              }
+          }
+          if ($any) { exit 1 }
+
+      - name: PSScriptAnalyzer
+        shell: pwsh
+        run: |
+          $files = @('setup.ps1', 'scripts/wsl-bolt-udp-forward.ps1')
+          $any = $false
+          foreach ($f in $files) {
+              # Excluded rules:
+              #   PSAvoidUsingWriteHost — Write-Host is fine for a CLI tool
+              #   PSAvoidUsingPlainTextForPassword — we use Get-Credential, the
+              #     -RunAsUser flow is intentional and documented
+              $r = Invoke-ScriptAnalyzer -Path $f -Severity Warning,Error `
+                   -ExcludeRule PSAvoidUsingWriteHost,
+                                PSAvoidUsingPlainTextForPassword,
+                                PSAvoidUsingConvertToSecureStringWithPlainText
+              if ($r) {
+                  Write-Host "FAIL analyzer: $f"
+                  $r | Format-Table -AutoSize | Out-String | Write-Host
+                  $any = $true
+              } else {
+                  Write-Host "PASS analyzer: $f"
+              }
+          }
+          if ($any) { exit 1 }
+
+      - name: C# service-host compile check (csc.exe + ServiceBase)
+        shell: pwsh
+        run: |
+          # Extract the embedded C# source from wsl-bolt-udp-forward.ps1 and
+          # try to compile it with the in-box .NET Framework csc.exe. This
+          # is exactly what `-Install` does at runtime — proving it compiles
+          # in CI means a real install on the user's machine won't blow up
+          # at `Compile-ServiceHost`.
+          $script = Get-Content scripts/wsl-bolt-udp-forward.ps1 -Raw
+          # The source lives between `$script:ServiceSource = @'` and the
+          # closing `'@` (single-quoted here-string).
+          if ($script -notmatch "(?ms)\`$script:ServiceSource\s*=\s*@'\s*\r?\n(.*?)\r?\n'@") {
+              Write-Host "Could not locate `$script:ServiceSource here-string"; exit 1
+          }
+          $src = $Matches[1]
+          $tmpCs = New-TemporaryFile
+          $tmpCs = [System.IO.Path]::ChangeExtension($tmpCs.FullName, '.cs')
+          Set-Content -Path $tmpCs -Value $src -Encoding ASCII
+
+          $csc = "$env:windir\Microsoft.NET\Framework64\v4.0.30319\csc.exe"
+          if (-not (Test-Path $csc)) {
+              $csc = "$env:windir\Microsoft.NET\Framework\v4.0.30319\csc.exe"
+          }
+          if (-not (Test-Path $csc)) {
+              Write-Host "FAIL: csc.exe not found — install path would fail here too"; exit 1
+          }
+          Write-Host "Compiling with: $csc"
+
+          $outExe = [System.IO.Path]::ChangeExtension($tmpCs, '.exe')
+          & $csc /nologo /target:exe /reference:System.ServiceProcess.dll `
+              "/out:$outExe" $tmpCs
+          if ($LASTEXITCODE -ne 0) {
+              Write-Host "FAIL: csc.exe compile failed"; exit $LASTEXITCODE
+          }
+          if (-not (Test-Path $outExe)) {
+              Write-Host "FAIL: no exe produced"; exit 1
+          }
+          Write-Host "PASS: C# service host compiles cleanly ($outExe)"
