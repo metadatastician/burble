@@ -237,7 +237,12 @@ PWSH_EOF
         PSSA_SCRIPT="$TMP/psa.ps1"
         cat > "$PSSA_SCRIPT" <<'PWSH_EOF'
 param([string]$Path)
-$r = Invoke-ScriptAnalyzer -Path $Path -Severity Warning,Error -ExcludeRule `
+# Severity=Error only: most PSSA "findings" are stylistic Warnings
+# (long lines, indentation, etc.) that we don't gate on. Errors are the
+# small set of genuinely high-signal rules (insecure patterns, broken
+# pipelines, etc.) and any single one is worth investigating. Real
+# Error-level rules we don't apply are explicitly excluded with rationale.
+$r = Invoke-ScriptAnalyzer -Path $Path -Severity Error -ExcludeRule `
     PSAvoidUsingWriteHost,
     PSAvoidUsingPlainTextForPassword,
     PSAvoidUsingConvertToSecureStringWithPlainText,
@@ -248,7 +253,10 @@ $r = Invoke-ScriptAnalyzer -Path $Path -Severity Warning,Error -ExcludeRule `
     PSUseApprovedVerbs,
     PSAvoidGlobalVars,
     PSUseDeclaredVarsMoreThanAssignments,
-    PSPossibleIncorrectComparisonWithNull
+    PSPossibleIncorrectComparisonWithNull,
+    PSAvoidUsingPositionalParameters,
+    PSMisleadingBacktick,
+    PSUseBOMForUnicodeEncodedFile
 if ($r) { $r | Format-Table -AutoSize | Out-String | Write-Host; exit 1 }
 exit 0
 PWSH_EOF

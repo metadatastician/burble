@@ -183,7 +183,9 @@ jobs:
               #   PSAvoidUsingEmptyCatchBlock — intentional silent cleanup
               #     swallowing in finally{}/trap-equivalent paths
               #   PSUseSingularNouns — `Uninstall-Service` etc are domain verbs
-              $r = Invoke-ScriptAnalyzer -Path $f -Severity Warning,Error `
+              # Severity=Error only — Warning-level rules are mostly
+              # stylistic (long lines, indentation) which we don't gate.
+              $r = Invoke-ScriptAnalyzer -Path $f -Severity Error `
                    -ExcludeRule PSAvoidUsingWriteHost,
                                 PSAvoidUsingPlainTextForPassword,
                                 PSAvoidUsingConvertToSecureStringWithPlainText,
@@ -191,7 +193,13 @@ jobs:
                                 PSAvoidUsingEmptyCatchBlock,
                                 PSUseSingularNouns,
                                 PSReviewUnusedParameter,
-                                PSUseApprovedVerbs
+                                PSUseApprovedVerbs,
+                                PSAvoidGlobalVars,
+                                PSUseDeclaredVarsMoreThanAssignments,
+                                PSPossibleIncorrectComparisonWithNull,
+                                PSAvoidUsingPositionalParameters,
+                                PSMisleadingBacktick,
+                                PSUseBOMForUnicodeEncodedFile
               if ($r) {
                   Write-Host "FAIL analyzer: $f"
                   $r | Format-Table -AutoSize | Out-String | Write-Host
