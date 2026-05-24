@@ -1,0 +1,81 @@
+# SPDX-License-Identifier: MPL-2.0
+#
+# install-roundtrip.yml — actual install→activate→stop→uninstall cycle
+# for the cross-platform service install machinery, on a real systemd /
+# launchd / Windows SCM. Complements install-tests.yml (lint-only).
+#
+# Each job:
+#   1. Stubs `mix` and `deno` so the spawned unit doesn't need the full
+#      Elixir/Deno toolchain (which would make every job slow + flaky).
+#   2. Runs the platform's roundtrip-*.sh / .ps1 driver.
+#   3. Drivers always clean up after themselves (trap EXIT / try/finally).
+
+name: Install round-trip
+
+on:
+  push:
+    branches: [main, master, 'claude/**']
+    paths:
+      - 'setup.sh'
+      - 'setup.ps1'
+      - 'scripts/install-service.sh'
+      - 'scripts/wsl-bolt-udp-forward.ps1'
+      - 'assets/services/**'
+      - 'tests/install/**'
+      - '.github/workflows/install-roundtrip.yml'
+  pull_request:
+    branches: [main, master]
+    paths:
+      - 'setup.sh'
+      - 'setup.ps1'
+      - 'scripts/install-service.sh'
+      - 'scripts/wsl-bolt-udp-forward.ps1'
+      - 'assets/services/**'
+      - 'tests/install/**'
+      - '.github/workflows/install-roundtrip.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  linux-user-roundtrip:
+    name: Linux --user systemd round-trip
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11  # v4.1.1
+
+      - name: Enable user-systemd lingering for runner
+        # GH Actions runs jobs without a real login session, so the
+        # per-user systemd instance isn't auto-started. `enable-linger`
+        # makes systemd-logind start it for the runner user even with
+        # no session.
+        run: |
+          sudo loginctl enable-linger "$USER"
+          # Wait for the user instance to come up.
+          for i in 1 2 3 4 5 6 7 8 9 10; do
+              if systemctl --user list-units >/dev/null 2>&1; then
+                  echo "user-systemd ready (attempt $i)"; exit 0
+              fi
+              sleep 1
+          done
+          echo "user-systemd never became reachable"; exit 1
+
+      - name: Run round-trip
+        run: tests/install/roundtrip-linux.sh
+
+  macos-roundtrip:
+    name: macOS launchd LaunchAgent round-trip
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11  # v4.1.1
+      - name: Run round-trip
+        run: tests/install/roundtrip-macos.sh
+
+  windows-roundtrip:
+    name: Windows Service round-trip
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11  # v4.1.1
+      - name: Run round-trip
+        shell: pwsh
+        run: tests/install/roundtrip-windows.ps1

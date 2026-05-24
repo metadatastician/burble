@@ -36,20 +36,34 @@ not a failure. Install whichever are missing to widen coverage:
 
 Triggered on any change to the install machinery.
 
-## What's NOT tested
+## Round-trip tests (actually mutate the host)
 
-Real install/start/stop round-trip on a clean host:
+In addition to the lint suite, there are three platform-specific
+drivers that do a real install → activate → stop → uninstall cycle
+against the platform's service manager. They use stub `mix` / `deno`
+binaries (`tests/install/stubs/`) so the spawned units survive long
+enough to be Active without needing the full Elixir/Deno toolchain.
 
-- **Linux systemd round-trip** — needs `loginctl enable-linger` + a real
-  user session bus in CI for `systemctl --user`, or root for system
-  units. Tractable but not wired up yet.
-- **Windows `New-Service`** — needs a throwaway local user with `Log on
-  as a service` for the `-Credential` argument. Tractable but not wired
-  up yet.
-- **macOS `launchctl bootstrap`** — would work in CI but requires the
-  Mix/Deno toolchains to be present for the spawned process to do
-  anything meaningful.
+| Driver | Platform | What it round-trips |
+|---|---|---|
+| `roundtrip-linux.sh` | Linux | `systemctl --user enable --now` round-trip (also kills the main PID and asserts `Restart=on-failure` respawns it) |
+| `roundtrip-macos.sh` | macOS | `launchctl bootstrap gui/$UID` / `bootout` |
+| `roundtrip-windows.ps1` | Windows | creates throwaway local user, installs Windows Service non-interactively via the new `-Credential` parameter on `wsl-bolt-udp-forward.ps1`, asserts SCM state, uninstalls, removes user |
 
-Until those land, the lint suite catches everything we've actually hit
-in practice (unsubstituted tokens, `AmbientCapabilities=` in user mode,
-malformed PowerShell, missing csc.exe path).
+All three are idempotent and clean up after themselves on failure
+(`trap EXIT` / `try { … } finally { … }`). They will mutate your host
+for the duration of the test — safe locally if you're OK with a brief
+service install.
+
+CI workflow `install-roundtrip.yml` runs them on:
+- `ubuntu-latest` (with `loginctl enable-linger` to bring up user-systemd)
+- `macos-14` (Apple Silicon)
+- `windows-latest`
+
+## What's still NOT tested
+
+- The actual UDP forwarding (the Windows round-trip exercises install
+  + SCM state, not whether packets actually relay — that requires a
+  real WSL distro target).
+- The Elixir/Deno app itself starting up correctly under systemd /
+  launchd — covered by `elixir-ci.yml`.

@@ -23,13 +23,16 @@ section() { printf '\n\033[1;36m── %s ──\033[0m\n' "$1"; }
 
 # ─── 1. Shell syntax + shellcheck ─────────────────────────────────────────
 section "Shell scripts"
-for f in setup.sh scripts/install-service.sh; do
+SHELL_FILES=(setup.sh scripts/install-service.sh
+             tests/install/run.sh tests/install/roundtrip-linux.sh
+             tests/install/roundtrip-macos.sh)
+for f in "${SHELL_FILES[@]}"; do
     if bash -n "$REPO_DIR/$f" 2>/dev/null; then pass "bash -n $f"
     else                                         fail "bash -n $f"; fi
 done
 
 if command -v shellcheck >/dev/null 2>&1; then
-    for f in setup.sh scripts/install-service.sh; do
+    for f in "${SHELL_FILES[@]}"; do
         # SC1091: don't try to follow optionally-sourced files
         # SC2086: word splitting is intentional in arg arrays
         if shellcheck -S warning -e SC1091 -e SC2086 "$REPO_DIR/$f" >"$TMP/sc.out" 2>&1; then
@@ -173,7 +176,8 @@ done
 
 # ─── 4. PowerShell scripts (syntax + analyzer) ────────────────────────────
 section "PowerShell scripts"
-PS_FILES=(setup.ps1 scripts/wsl-bolt-udp-forward.ps1)
+PS_FILES=(setup.ps1 scripts/wsl-bolt-udp-forward.ps1
+          tests/install/roundtrip-windows.ps1)
 PWSH=""
 command -v pwsh >/dev/null 2>&1 && PWSH=pwsh
 [ -z "$PWSH" ] && command -v powershell >/dev/null 2>&1 && PWSH=powershell

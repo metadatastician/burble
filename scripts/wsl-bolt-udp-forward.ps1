@@ -59,7 +59,10 @@ param(
     [Parameter(ParameterSetName = 'Status')]   [switch]$Status,
     [string]$Distro,
     [int[]]$Ports = @(7373, 9),
-    [switch]$Firewall
+    [switch]$Firewall,
+    # Optional: pre-built PSCredential for non-interactive install (CI).
+    # When omitted, -Install prompts via Get-Credential as usual.
+    [System.Management.Automation.PSCredential]$Credential
 )
 
 $ErrorActionPreference = 'Stop'
@@ -301,7 +304,12 @@ function Compile-ServiceHost {
 }
 
 function Install-Service {
-    param([string]$Distro, [int[]]$Ports, [switch]$Firewall)
+    param(
+        [string]$Distro,
+        [int[]]$Ports,
+        [switch]$Firewall,
+        [System.Management.Automation.PSCredential]$Credential
+    )
     Assert-Elevated -Action '-Install (creates a Windows Service)'
     $self = $PSCommandPath
     if (-not $self) { $self = $MyInvocation.MyCommand.Path }
@@ -328,12 +336,17 @@ function Install-Service {
 
     Compile-ServiceHost
 
-    Write-Host "[bolt-fwd] WSL distros are per-user. The service needs to run under YOUR account"
-    Write-Host "           so it can launch wsl.exe and see your distro. New-Service stores the"
-    Write-Host "           password securely via LSA Secrets — you only enter it once."
-    $cred = Get-Credential -UserName "$env:USERDOMAIN\$env:USERNAME" `
-        -Message "Password for $env:USERDOMAIN\$env:USERNAME (so the service can launch wsl.exe as you)"
-    if (-not $cred) { Write-Error "Cancelled — no credential supplied."; exit 1 }
+    if ($Credential) {
+        $cred = $Credential
+        Write-Host "[bolt-fwd] Using pre-supplied credential for $($cred.UserName) (non-interactive install)."
+    } else {
+        Write-Host "[bolt-fwd] WSL distros are per-user. The service needs to run under YOUR account"
+        Write-Host "           so it can launch wsl.exe and see your distro. New-Service stores the"
+        Write-Host "           password securely via LSA Secrets — you only enter it once."
+        $cred = Get-Credential -UserName "$env:USERDOMAIN\$env:USERNAME" `
+            -Message "Password for $env:USERDOMAIN\$env:USERNAME (so the service can launch wsl.exe as you)"
+        if (-not $cred) { Write-Error "Cancelled — no credential supplied."; exit 1 }
+    }
 
     # Grant the service user Modify on the install dir — it lives under
     # %ProgramData% which is admin-only by default, but the service runs
@@ -395,7 +408,7 @@ function Uninstall-Service {
 }
 
 switch ($PSCmdlet.ParameterSetName) {
-    'Install'   { Install-Service -Distro $Distro -Ports $Ports -Firewall:$Firewall }
+    'Install'   { Install-Service -Distro $Distro -Ports $Ports -Firewall:$Firewall -Credential $Credential }
     'Uninstall' { Uninstall-Service }
     'Status' {
         $ip  = Resolve-WslIp -Distro $Distro

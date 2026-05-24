@@ -11,6 +11,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Real install→activate→stop→uninstall round-trip tests for all three
+  service managers (complements the lint-only tests):
+  - `tests/install/roundtrip-linux.sh` — `systemctl --user` round-trip.
+    Also kills the unit's main PID and asserts `Restart=on-failure`
+    respawns it within `RestartSec=5`.
+  - `tests/install/roundtrip-macos.sh` — `launchctl bootstrap gui/$UID`
+    / `bootout` round-trip with stub `PATH=` patched into the plist
+    (launchd ignores the user shell's env).
+  - `tests/install/roundtrip-windows.ps1` — creates a throwaway local
+    user (`burble-ci-test`) with a random password, installs the
+    Windows Service non-interactively via a new `-Credential`
+    parameter on `wsl-bolt-udp-forward.ps1` (skips the
+    `Get-Credential` prompt), asserts SCM state, uninstalls, removes
+    the user in a `finally` block.
+  - `tests/install/stubs/{mix,deno}` — sleep-forever stand-ins so the
+    spawned units satisfy systemd/launchd's "Active" check without
+    needing the full Elixir/Deno toolchain in CI.
+  - `.github/workflows/install-roundtrip.yml` — CI matrix:
+    `ubuntu-latest` (with `loginctl enable-linger` for user-systemd),
+    `macos-14`, `windows-latest`. Path-filtered to install machinery.
 - `tests/install/run.sh` — cross-platform validation for the install
   machinery, safe to run anywhere. Renders systemd units in both
   system and user modes and checks invariants (no unsubstituted

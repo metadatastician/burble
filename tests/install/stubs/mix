@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# SPDX-License-Identifier: MPL-2.0
+#
+# Test stub for `mix` used by tests/install/roundtrip-*.sh. The install
+# round-trip tests don't care whether Phoenix actually starts — they
+# care whether the unit installs, activates, deactivates, and uninstalls
+# cleanly. Sleeping forever satisfies systemd's "service is running"
+# check without needing the full Elixir/Erlang toolchain.
+echo "[stub mix] $* (sleeping forever to keep the unit Active)"
+exec sleep infinity
