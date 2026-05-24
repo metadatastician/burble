@@ -183,37 +183,56 @@ command -v pwsh >/dev/null 2>&1 && PWSH=pwsh
 [ -z "$PWSH" ] && command -v powershell >/dev/null 2>&1 && PWSH=powershell
 
 if [ -n "$PWSH" ]; then
+    # Parse-only check via the AST parser — no execution. Use a temp .ps1
+    # for the same bash↔PowerShell quoting-robustness reason as PSSA below.
+    PARSE_SCRIPT="$TMP/parse.ps1"
+    cat > "$PARSE_SCRIPT" <<'PWSH_EOF'
+param([string]$Path)
+$errors = $null
+[System.Management.Automation.Language.Parser]::ParseFile(
+    $Path, [ref]$null, [ref]$errors) | Out-Null
+if ($errors -and $errors.Count -gt 0) {
+    $errors | ForEach-Object {
+        Write-Host ("  L{0}:C{1} {2}" -f `
+            $_.Extent.StartLineNumber, $_.Extent.StartColumnNumber, $_.Message)
+    }
+    exit 1
+}
+exit 0
+PWSH_EOF
     for f in "${PS_FILES[@]}"; do
-        # Parse-only check via the AST parser — no execution.
-        if "$PWSH" -NoProfile -Command "
-            \$errors = \$null
-            [System.Management.Automation.Language.Parser]::ParseFile(
-                '$REPO_DIR/$f', [ref]\$null, [ref]\$errors) | Out-Null
-            if (\$errors -and \$errors.Count -gt 0) {
-                \$errors | ForEach-Object { Write-Host \"  \$_\" }
-                exit 1
-            }" >"$TMP/ps.out" 2>&1; then
+        if "$PWSH" -NoProfile -File "$PARSE_SCRIPT" -Path "$REPO_DIR/$f" \
+            >"$TMP/ps.out" 2>&1; then
             pass "powershell parse $f"
         else
             fail "powershell parse $f"; sed 's/^/      /' "$TMP/ps.out"
         fi
     done
 
-    # PSScriptAnalyzer if installed
+    # PSScriptAnalyzer if installed. We invoke pwsh via a temp .ps1 file
+    # instead of -Command "..." to avoid bash/PowerShell quoting +
+    # line-continuation traps (bash's `\<newline>` is preserved inside a
+    # double-quoted string, but PowerShell's line-continuation is backtick;
+    # writing the script to a file sidesteps the whole mess).
     if "$PWSH" -NoProfile -Command "Get-Module -ListAvailable PSScriptAnalyzer" 2>/dev/null | grep -q PSScriptAnalyzer; then
+        PSSA_SCRIPT="$TMP/psa.ps1"
+        cat > "$PSSA_SCRIPT" <<'PWSH_EOF'
+param([string]$Path)
+$r = Invoke-ScriptAnalyzer -Path $Path -Severity Warning,Error -ExcludeRule `
+    PSAvoidUsingWriteHost,
+    PSAvoidUsingPlainTextForPassword,
+    PSAvoidUsingConvertToSecureStringWithPlainText,
+    PSUseShouldProcessForStateChangingFunctions,
+    PSAvoidUsingEmptyCatchBlock,
+    PSUseSingularNouns,
+    PSReviewUnusedParameter,
+    PSUseApprovedVerbs
+if ($r) { $r | Format-Table -AutoSize | Out-String | Write-Host; exit 1 }
+exit 0
+PWSH_EOF
         for f in "${PS_FILES[@]}"; do
-            if "$PWSH" -NoProfile -Command "
-                \$r = Invoke-ScriptAnalyzer -Path '$REPO_DIR/$f' -Severity Warning,Error \
-                    -ExcludeRule PSAvoidUsingWriteHost, \
-                                 PSAvoidUsingPlainTextForPassword, \
-                                 PSAvoidUsingConvertToSecureStringWithPlainText, \
-                                 PSUseShouldProcessForStateChangingFunctions, \
-                                 PSAvoidUsingEmptyCatchBlock, \
-                                 PSUseSingularNouns, \
-                                 PSReviewUnusedParameter, \
-                                 PSUseApprovedVerbs
-                if (\$r) { \$r | Format-Table -AutoSize | Out-String | Write-Host; exit 1 }
-                exit 0" >"$TMP/psa.out" 2>&1; then
+            if "$PWSH" -NoProfile -File "$PSSA_SCRIPT" -Path "$REPO_DIR/$f" \
+                >"$TMP/psa.out" 2>&1; then
                 pass "PSScriptAnalyzer $f"
             else
                 fail "PSScriptAnalyzer $f"; sed 's/^/      /' "$TMP/psa.out"

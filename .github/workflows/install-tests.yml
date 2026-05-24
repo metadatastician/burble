@@ -58,10 +58,11 @@ jobs:
       - name: Install validators
         run: |
           sudo apt-get update -qq
+          # systemd / systemd-analyze are preinstalled on ubuntu-latest;
+          # installing the metapackage on top of a running PID-1 systemd
+          # can fail or restart services. Just install the linters we need.
           sudo apt-get install -y --no-install-recommends \
-            shellcheck libxml2-utils systemd
-          # systemd is preinstalled on ubuntu-latest but we want
-          # systemd-analyze present specifically.
+            shellcheck libxml2-utils
       - name: Run install test suite
         run: tests/install/run.sh
 
