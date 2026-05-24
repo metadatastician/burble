@@ -76,7 +76,24 @@ jobs:
       - name: Run install test suite
         env:
           BURBLE_INSTALL_TESTS_DEBUG: "1"
-        run: tests/install/run.sh
+        run: |
+          set +e
+          tests/install/run.sh 2>&1 | tee /tmp/run-out.log
+          rc=${PIPESTATUS[0]}
+          if [ "$rc" != "0" ]; then
+              echo
+              echo "::error title=run.sh failed::exit=$rc — surfacing tail as annotations:"
+              # Strip ANSI colour codes (\033[…m) so annotations render cleanly.
+              # GH caps annotations at ~10 per check-run, so be selective:
+              # emit only PASS/FAIL/SKIP lines + the last 15 lines of trace.
+              grep -E "PASS |FAIL |SKIP |[+] " /tmp/run-out.log \
+                | sed 's/\x1b\[[0-9;]*m//g' \
+                | tail -25 \
+                | while IFS= read -r line; do
+                    echo "::error::$line"
+                done
+          fi
+          exit $rc
 
   lint-macos:
     name: Lint (macOS / launchd plists)
@@ -95,7 +112,24 @@ jobs:
       - name: Run install test suite
         env:
           BURBLE_INSTALL_TESTS_DEBUG: "1"
-        run: tests/install/run.sh
+        run: |
+          set +e
+          tests/install/run.sh 2>&1 | tee /tmp/run-out.log
+          rc=${PIPESTATUS[0]}
+          if [ "$rc" != "0" ]; then
+              echo
+              echo "::error title=run.sh failed::exit=$rc — surfacing tail as annotations:"
+              # Strip ANSI colour codes (\033[…m) so annotations render cleanly.
+              # GH caps annotations at ~10 per check-run, so be selective:
+              # emit only PASS/FAIL/SKIP lines + the last 15 lines of trace.
+              grep -E "PASS |FAIL |SKIP |[+] " /tmp/run-out.log \
+                | sed 's/\x1b\[[0-9;]*m//g' \
+                | tail -25 \
+                | while IFS= read -r line; do
+                    echo "::error::$line"
+                done
+          fi
+          exit $rc
 
   lint-windows:
     name: Lint (Windows / PowerShell + csc.exe)
