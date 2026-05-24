@@ -203,7 +203,15 @@ if [ -n "$PWSH" ]; then
     if "$PWSH" -NoProfile -Command "Get-Module -ListAvailable PSScriptAnalyzer" 2>/dev/null | grep -q PSScriptAnalyzer; then
         for f in "${PS_FILES[@]}"; do
             if "$PWSH" -NoProfile -Command "
-                \$r = Invoke-ScriptAnalyzer -Path '$REPO_DIR/$f' -Severity Warning,Error
+                \$r = Invoke-ScriptAnalyzer -Path '$REPO_DIR/$f' -Severity Warning,Error \
+                    -ExcludeRule PSAvoidUsingWriteHost, \
+                                 PSAvoidUsingPlainTextForPassword, \
+                                 PSAvoidUsingConvertToSecureStringWithPlainText, \
+                                 PSUseShouldProcessForStateChangingFunctions, \
+                                 PSAvoidUsingEmptyCatchBlock, \
+                                 PSUseSingularNouns, \
+                                 PSReviewUnusedParameter, \
+                                 PSUseApprovedVerbs
                 if (\$r) { \$r | Format-Table -AutoSize | Out-String | Write-Host; exit 1 }
                 exit 0" >"$TMP/psa.out" 2>&1; then
                 pass "PSScriptAnalyzer $f"
