@@ -25,10 +25,17 @@ param()
 
 $ErrorActionPreference = 'Stop'
 
+# Diagnostic dump of resolved paths so a 20s failure leaves enough log
+# to know which step blew up.
+Write-Host "PSScriptRoot       : $PSScriptRoot"
+Write-Host "PWD                : $PWD"
+Write-Host "PSCommandPath      : $PSCommandPath"
 $RepoDir   = (Resolve-Path "$PSScriptRoot\..\..").Path
 $Forwarder = Join-Path $RepoDir 'scripts\wsl-bolt-udp-forward.ps1'
 $SvcName   = 'BurbleBoltUdpForward'
 $TestUser  = 'burble-ci-test'
+Write-Host "RepoDir            : $RepoDir"
+Write-Host "Forwarder          : $Forwarder (exists=$(Test-Path $Forwarder))"
 
 $script:Pass = 0; $script:Fail = 0
 function Pass($m) { Write-Host ("  PASS {0}" -f $m) -ForegroundColor Green; $script:Pass++ }
@@ -56,10 +63,16 @@ $Plain = ($Plain -replace '[\\"`]', 'x')
 $SecurePw = ConvertTo-SecureString $Plain -AsPlainText -Force
 
 try {
+    Write-Host "  · Get-Command New-LocalUser : $((Get-Command New-LocalUser -ErrorAction SilentlyContinue).Name)"
     Remove-LocalUser -Name $TestUser -ErrorAction SilentlyContinue
-    New-LocalUser -Name $TestUser -Password $SecurePw `
-        -AccountNeverExpires -PasswordNeverExpires `
-        -Description 'Burble install round-trip test user — safe to delete' | Out-Null
+    try {
+        New-LocalUser -Name $TestUser -Password $SecurePw `
+            -AccountNeverExpires -PasswordNeverExpires `
+            -Description 'Burble install round-trip test user' -ErrorAction Stop | Out-Null
+    } catch {
+        Fail "New-LocalUser failed: $($_.Exception.GetType().FullName) :: $($_.Exception.Message)"
+        throw
+    }
     Add-LocalGroupMember -Group 'Users' -Member $TestUser -ErrorAction SilentlyContinue
     Pass "created local user $TestUser"
 

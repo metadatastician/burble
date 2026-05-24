@@ -229,7 +229,8 @@ EXPECT="$(case "$(uname -s)" in
 esac)"
 
 if [ -n "$EXPECT" ]; then
-    out=$(BURBLE_INSTALL_SERVICE=no bash "$REPO_DIR/setup.sh" 2>&1 || true)
+    out=$(BURBLE_SKIP_PREFLIGHT=1 BURBLE_INSTALL_SERVICE=no \
+          bash "$REPO_DIR/setup.sh" 2>&1 || true)
     if echo "$out" | grep -q "Background-service install ($EXPECT)"; then
         pass "setup.sh detected target=$EXPECT"
     else

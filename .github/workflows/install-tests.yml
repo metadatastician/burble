@@ -87,7 +87,7 @@ jobs:
       - name: PowerShell AST parse
         shell: pwsh
         run: |
-          $files = @('setup.ps1', 'scripts/wsl-bolt-udp-forward.ps1')
+          $files = @('setup.ps1', 'scripts/wsl-bolt-udp-forward.ps1', 'tests/install/roundtrip-windows.ps1')
           $any = $false
           foreach ($f in $files) {
               $errors = $null
@@ -106,17 +106,31 @@ jobs:
       - name: PSScriptAnalyzer
         shell: pwsh
         run: |
-          $files = @('setup.ps1', 'scripts/wsl-bolt-udp-forward.ps1')
+          $files = @('setup.ps1', 'scripts/wsl-bolt-udp-forward.ps1', 'tests/install/roundtrip-windows.ps1')
           $any = $false
           foreach ($f in $files) {
-              # Excluded rules:
+              # Excluded rules (with rationale):
               #   PSAvoidUsingWriteHost — Write-Host is fine for a CLI tool
-              #   PSAvoidUsingPlainTextForPassword — we use Get-Credential, the
+              #   PSAvoidUsingPlainTextForPassword — Get-Credential pattern;
               #     -RunAsUser flow is intentional and documented
+              #   PSAvoidUsingConvertToSecureStringWithPlainText — only used
+              #     in tests/install/roundtrip-windows.ps1 to build a
+              #     throwaway credential for CI
+              #   PSUseShouldProcessForStateChangingFunctions — these are
+              #     user-invoked installers, not pipeline cmdlets; ShouldProcess
+              #     is the wrong pattern (UX would prompt twice)
+              #   PSAvoidUsingEmptyCatchBlock — intentional silent cleanup
+              #     swallowing in finally{}/trap-equivalent paths
+              #   PSUseSingularNouns — `Uninstall-Service` etc are domain verbs
               $r = Invoke-ScriptAnalyzer -Path $f -Severity Warning,Error `
                    -ExcludeRule PSAvoidUsingWriteHost,
                                 PSAvoidUsingPlainTextForPassword,
-                                PSAvoidUsingConvertToSecureStringWithPlainText
+                                PSAvoidUsingConvertToSecureStringWithPlainText,
+                                PSUseShouldProcessForStateChangingFunctions,
+                                PSAvoidUsingEmptyCatchBlock,
+                                PSUseSingularNouns,
+                                PSReviewUnusedParameter,
+                                PSUseApprovedVerbs
               if ($r) {
                   Write-Host "FAIL analyzer: $f"
                   $r | Format-Table -AutoSize | Out-String | Write-Host
