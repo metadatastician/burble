@@ -219,6 +219,20 @@ PWSH_EOF
     # line-continuation traps (bash's `\<newline>` is preserved inside a
     # double-quoted string, but PowerShell's line-continuation is backtick;
     # writing the script to a file sidesteps the whole mess).
+    #
+    # The round-trip test script uses deliberately "scary" patterns
+    # (throwaway plain-text passwords, scope manipulation, etc.) that PSSA
+    # flags by design — running it through PSSA generates noise that hides
+    # real findings in setup.ps1 and the forwarder. Exclude it from PSSA
+    # but keep it in the parse step above so real syntax bugs still trip.
+    PSSA_FILES=()
+    for f in "${PS_FILES[@]}"; do
+        case "$f" in
+            tests/install/roundtrip-windows.ps1) ;;
+            *) PSSA_FILES+=("$f") ;;
+        esac
+    done
+
     if "$PWSH" -NoProfile -Command "Get-Module -ListAvailable PSScriptAnalyzer" 2>/dev/null | grep -q PSScriptAnalyzer; then
         PSSA_SCRIPT="$TMP/psa.ps1"
         cat > "$PSSA_SCRIPT" <<'PWSH_EOF'
@@ -231,11 +245,14 @@ $r = Invoke-ScriptAnalyzer -Path $Path -Severity Warning,Error -ExcludeRule `
     PSAvoidUsingEmptyCatchBlock,
     PSUseSingularNouns,
     PSReviewUnusedParameter,
-    PSUseApprovedVerbs
+    PSUseApprovedVerbs,
+    PSAvoidGlobalVars,
+    PSUseDeclaredVarsMoreThanAssignments,
+    PSPossibleIncorrectComparisonWithNull
 if ($r) { $r | Format-Table -AutoSize | Out-String | Write-Host; exit 1 }
 exit 0
 PWSH_EOF
-        for f in "${PS_FILES[@]}"; do
+        for f in "${PSSA_FILES[@]}"; do
             if "$PWSH" -NoProfile -File "$PSSA_SCRIPT" -Path "$REPO_DIR/$f" \
                 >"$TMP/psa.out" 2>&1; then
                 pass "PSScriptAnalyzer $f"
@@ -243,6 +260,7 @@ PWSH_EOF
                 fail "PSScriptAnalyzer $f"; sed 's/^/      /' "$TMP/psa.out"
             fi
         done
+        skip "PSScriptAnalyzer tests/install/roundtrip-windows.ps1" "test infra — intentional patterns"
     else
         skip "PSScriptAnalyzer" "module not installed"
     fi
