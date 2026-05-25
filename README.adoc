@@ -200,11 +200,14 @@ link:EXPLAINME.adoc[EXPLAINME.adoc] for the receipts.
 
 == Documentation
 
+* link:docs/INDEX.adoc[**Documentation Index**] — one-page map of every doc under `docs/` and at the repo root. Start here if you don't know where to look.
 * link:EXPLAINME.adoc[Show Me The Receipts] — feature highlights with code paths and honest caveats
 * link:docs/architecture/ARCHITECTURE.adoc[Architecture] — control plane, media plane, topology modes, supervision tree
 * link:docs/architecture/THREAT-MODEL.adoc[Threat Model] — security analysis and mitigations
 * link:docs/developer/ABI-FFI-README.adoc[ABI/FFI Design] — Idris2 proofs + Zig implementation
 * link:docs/accessibility/README.adoc[Accessibility] — accessibility features, compliance, and roadmap
+* link:docs/decisions/[Decision records (ADRs)] — numbered, append-only design decisions
+* https://github.com/hyperpolymath/burble/wiki[Wiki] — landing + signposts (source in `docs/wikis/`)
 
 == Questions?
 
