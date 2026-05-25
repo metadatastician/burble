@@ -72,15 +72,12 @@ jobs:
 
       - name: Build Zig FFI
         working-directory: ${{ github.workspace }}
-        # GATE DEACTIVATED 2026-05-15: the FFI build no longer fails CI.
-        # The build still RUNS and every error stays visible in this
-        # step's log and as a step annotation; only the pass/fail gate
-        # is severed (consistent with the non-gating "Run server tests"
-        # and "Run Dialyzer" steps). Deliberate, temporary signal
-        # suppression while the Zig 0.15 / setup-beam build is
-        # stabilised — not a fix. To re-arm the gate, delete the single
-        # continue-on-error line below.
-        continue-on-error: true
+        # Re-armed as part of #39 follow-up: the Zig 0.15 / setup-beam
+        # build path has been stable since #62 landed; the prior
+        # GATE DEACTIVATED 2026-05-15 marker is removed. Every failure
+        # still appears in this step's log and as a step annotation,
+        # but a real FFI break now turns CI red — which is what users
+        # of the coprocessor NIF depend on.
         run: |
           # erlef/setup-beam installs OTP under the tool cache, not at
           # build.zig's hardcoded /usr/lib/erlang default. Derive the real
@@ -96,13 +93,14 @@ jobs:
 
       - name: Run server tests
         working-directory: ${{ github.workspace }}
-        # GATE DEACTIVATED 2026-05-15 by maintainer request: the test
-        # result no longer fails CI. The suite still RUNS and every
-        # failure remains visible in this step's log and as a step
-        # annotation; only the pass/fail gate is severed. This is a
-        # deliberate, temporary suppression of signal, not a fix. To
-        # re-arm the gate, delete the single line below.
-        continue-on-error: true
+        # Re-armed as part of #39: the underlying boot-failure mode is
+        # addressed (config/test.exs sets `offline_ok: true` on
+        # `Burble.Store`, the `:quicer` NIF is optional and not loaded
+        # in test, Bolt/RTSP listeners degrade on bind failure, and
+        # SingletonWatcher in test_helper.exs records mid-run deaths
+        # without failing the suite). If a real regression turns the
+        # suite red, that's now a CI failure — which is what the
+        # gate is for.
         run: just test-server
 
   dialyzer:
@@ -161,14 +159,9 @@ jobs:
         run: mkdir -p priv/plts
 
       - name: Run Dialyzer
-        # GATE DEACTIVATED 2026-05-15: Dialyzer no longer fails CI.
-        # It still RUNS and every finding stays visible in this step's
-        # log and as a step annotation; only the pass/fail gate is
-        # severed (consistent with the non-gating "Run server tests"
-        # and "Build Zig FFI" steps in the test job above). These are
-        # pre-existing findings, surfaced for the first time now that
-        # the test job reaches completion — deliberate, temporary
-        # signal suppression, not a fix. To re-arm the gate, delete
-        # the single line below.
-        continue-on-error: true
+        # Re-armed as part of #39: now that the test job no longer
+        # silently passes on a broken suite, Dialyzer is once again
+        # part of the type-correctness gate. Any pre-existing finding
+        # surfaced here is a real bug to fix, not a reason to suppress
+        # the signal again.
         run: mix dialyzer --plt-file priv/plts/dialyzer.plt
