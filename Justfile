@@ -178,6 +178,31 @@ service-logs:
 test-install:
     tests/install/run.sh
 
+# Sync docs/wikis/*.md to the GitHub wiki mirror
+# Clones .wiki.git on first run; subsequent runs reuse the local clone.
+wiki-sync:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    WIKI_LOCAL="${BURBLE_WIKI_DIR:-$HOME/.cache/burble-wiki}"
+    WIKI_REMOTE="https://github.com/hyperpolymath/burble.wiki.git"
+    if [ ! -d "$WIKI_LOCAL/.git" ]; then
+        echo "Cloning wiki to $WIKI_LOCAL..."
+        git clone "$WIKI_REMOTE" "$WIKI_LOCAL"
+    else
+        git -C "$WIKI_LOCAL" pull --ff-only
+    fi
+    for src in docs/wikis/*.md; do
+        cp -v "$src" "$WIKI_LOCAL/$(basename "$src")"
+    done
+    cd "$WIKI_LOCAL"
+    if git diff --quiet && git diff --cached --quiet; then
+        echo "Wiki already in sync — no changes."
+    else
+        git add -A
+        git commit -m "sync: from main"
+        echo "Local wiki updated. Run 'git -C $WIKI_LOCAL push' to publish."
+    fi
+
 # Start the web client dev server
 client:
     cd client/web && deno task dev

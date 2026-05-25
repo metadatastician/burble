@@ -1,0 +1,61 @@
+// SPDX-License-Identifier: MPL-2.0
+= Burble Multi-Service Deployment Containers
+:toc: left
+:icons: font
+
+== Why this directory exists separately from `container/`
+
+The repo has *two* container-related top-level directories. They look
+similar by name but serve different purposes — keep them straight:
+
+[cols="1,2,2", options="header"]
+|===
+| Directory | Purpose | Example use
+
+| link:../container/[`container/`] (singular)
+| The canonical *single-binary* container build for Burble. One
+  `Containerfile`, one `compose.toml`, the stapeln-ecosystem
+  manifests (`manifest.toml`, `vordr.toml`, `deploy.k9.ncl`),
+  signing/build pipeline (`ct-build.sh`).
+| `just container-build`, `just container-up`, signed `.ctp` bundles
+  via cerro-torre.
+
+| `containers/` (plural — *this directory*)
+| Multi-service deployment for *front-end + edge* — separate
+  Containerfiles for the Burble server (`Containerfile.server`)
+  and a web/static-asset front (`Containerfile.web`), an nginx
+  reverse-proxy config, a coturn TURN server config, and a
+  `selur-compose.toml` that wires them all together.
+| `just full-stack-up` (deployment-style topology: front-end +
+  app-server + coturn behind nginx).
+|===
+
+If you're packaging Burble as one signed unit, use link:../container/[`container/`].
+If you're standing up a public-internet deployment with a TLS-terminating
+front, TURN server, and static-asset serving, use this directory.
+
+== Files in this directory
+
+* `Containerfile.server` — Burble Elixir/Phoenix server image.
+* `Containerfile.web` — front-end (static-asset + signaling-relay)
+  image.
+* `compose.toml` — base Compose definition (services, networks).
+* `selur-compose.toml` — `selur-compose` (preferred) extension
+  layered on `compose.toml`.
+* `nginx.conf` — primary reverse-proxy config (TLS termination, WSS
+  upgrades, static-asset serving).
+* `nginx-default-disabled.conf` — explicitly-disabled default site
+  (kept so an operator can re-enable a sane default if needed).
+* `coturn.conf` — TURN/STUN server config for NAT-traversed media.
+
+== Related
+
+* link:../container/README.adoc[container/README.adoc] — the
+  single-binary canonical build.
+* link:../docs/INDEX.adoc[docs/INDEX.adoc] — full doc map.
+
+== Future
+
+If maintaining two directories becomes painful, the long-term move is
+to fold this one into `container/` as a sibling `deployment/` subdir.
+Tracked informally in repo-tidy follow-ups.
