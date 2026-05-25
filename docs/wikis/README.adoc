@@ -1,15 +1,63 @@
-= Project Wikis
+// SPDX-License-Identifier: MPL-2.0
+= Project Wikis (source)
 :toc: preamble
 :icons: font
 
-This directory contains the source files for the project wiki. It is intended for long-form documentation, deep-dives, and community-maintained knowledge.
+Source of truth for the GitHub wiki at
+https://github.com/hyperpolymath/burble/wiki. Edit here, then sync —
+the wiki itself is a *mirror*, not a fork.
 
-== Structure
+== Pages
 
-* **Core Concepts:** Fundamental architectural ideas.
-* **Workflows:** Step-by-step guides for contributors.
-* **Glossary:** Definitions of project-specific terminology.
+[cols="1,3", options="header"]
+|===
+| Wiki page | Source
 
-== Wiki Synchronization
+| https://github.com/hyperpolymath/burble/wiki[Home]
+| link:Home.md[`Home.md`] — landing page, signposts to repo docs
 
-Changes made here should be synchronised with the forge-hosted wiki (GitHub/GitLab) using the project's sync scripts.
+| https://github.com/hyperpolymath/burble/wiki/Quickstart[Quickstart]
+| link:Quickstart.md[`Quickstart.md`] — combined audience-specific
+  quickstart (links out to the three full `QUICKSTART-*.adoc` files
+  at repo root)
+
+| https://github.com/hyperpolymath/burble/wiki/Architecture[Architecture]
+| link:Architecture.md[`Architecture.md`] — wiki-level overview;
+  full doc is at `docs/architecture/ARCHITECTURE.adoc`
+
+| https://github.com/hyperpolymath/burble/wiki/Glossary[Glossary]
+| link:Glossary.md[`Glossary.md`] — Burble-specific terms (Bolt,
+  Groove, SNIF, Vext, Avow, etc.) + cross-project tool names
+|===
+
+== Sync procedure
+
+GitHub wikis are themselves a git repo: `.wiki.git` under the same
+organisation. The simplest manual sync:
+
+[source,bash]
+----
+# one-time
+git clone https://github.com/hyperpolymath/burble.wiki.git ~/burble.wiki
+
+# each sync
+cp docs/wikis/Home.md         ~/burble.wiki/Home.md
+cp docs/wikis/Quickstart.md   ~/burble.wiki/Quickstart.md
+cp docs/wikis/Architecture.md ~/burble.wiki/Architecture.md
+cp docs/wikis/Glossary.md     ~/burble.wiki/Glossary.md
+cd ~/burble.wiki && git add -A && git commit -m "sync: from main" && git push
+----
+
+A future `just wiki-sync` recipe will automate this.
+
+== Conventions
+
+* GitHub wikis use Markdown by convention (not AsciiDoc), so wiki
+  source files here are `.md`. The directory README itself is
+  `.adoc` to match the rest of `docs/`.
+* File name = wiki page name. Spaces become `-` in the URL
+  (`Foo Bar.md` → `wiki/Foo-Bar`).
+* Don't duplicate full doc content here — the wiki *signposts* the
+  canonical docs in the repo. Long form belongs under `docs/`.
+* When the wiki page diverges from this source, the source wins —
+  next sync overwrites the wiki.

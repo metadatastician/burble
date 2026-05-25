@@ -1,0 +1,75 @@
+// SPDX-License-Identifier: MPL-2.0
+= client/desktop — Ephapax Desktop Wrapper
+:toc: preamble
+
+== Purpose
+
+Native desktop client for Burble, built on the **Ephapax** runtime
+(Zig + system audio APIs, no Electron/CEF). Gives users a system-tray
+presence, global hotkeys, and platform-native audio routing without
+shipping a 200MB browser engine.
+
+The desktop client embeds the web client (`../web/`) for its UI but
+adds OS integration that a browser can't reach: tray menus, push-to-
+talk hotkeys, exclusive-mode audio device selection, headless start
+on login.
+
+Status: **early** — primary client is still the web one (`../web/`).
+This directory exists so the desktop story is buildable end-to-end,
+but it is not yet the recommended way to run Burble.
+
+== Files
+
+`main.eph`::
+  Ephapax entry point. Boots the embedded web view + wires up the
+  tray icon, hotkeys, and audio router. Equivalent role to
+  `client/web/Main.affine`.
+
+`tray.eph`::
+  System tray icon + context menu — Join Room, Mute, Quit. Uses
+  the OS-native tray API on Linux (StatusNotifier / AppIndicator),
+  macOS (NSStatusItem), Windows (Shell_NotifyIcon).
+
+`hotkeys.eph`::
+  Global hotkey registration — push-to-talk, mute, deafen. OS
+  hotkey APIs vary by platform; this module abstracts them.
+
+`audio_routing.eph`::
+  Exclusive-mode audio device selection (WASAPI on Windows, Core
+  Audio on macOS, PipeWire/PulseAudio on Linux). Picks a low-latency
+  capture/playback pair when available; falls back to the OS default
+  otherwise.
+
+`build.zig`::
+  Zig build script. Compiles the four `.eph` files + links against
+  the system audio + tray libraries.
+
+== Conventions
+
+* `.eph` source files are processed by the Ephapax compiler
+  (`tools/ephapax/` if present as a submodule; otherwise install
+  from upstream).
+* OS abstractions live behind a single interface per concern
+  (one tray API, one hotkey API, one audio API) — per-platform
+  implementations live inside the same `.eph` file using `comptime`
+  switches.
+* No bundled web engine — the desktop client opens system browsers
+  for any auth flow that needs one (PAKE QR scan, OAuth) and uses
+  Ephapax's lightweight web view for everything else.
+
+== Build
+
+[source,bash]
+----
+cd client/desktop
+zig build                # debug
+zig build -Doptimize=ReleaseFast
+----
+
+The output binary is at `zig-out/bin/burble-desktop`.
+
+== See also
+
+* link:../web/README.adoc[`client/web/README.adoc`] — the web UI this embeds
+* link:../lib/README.adoc[`client/lib/README.adoc`] — embeddable library (the desktop client could be rebuilt on top of this)
+* link:../../docs/architecture/ANDROID-CLIENT.adoc[`docs/architecture/ANDROID-CLIENT.adoc`] — mobile counterpart design
