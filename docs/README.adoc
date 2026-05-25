@@ -1,14 +1,121 @@
-= Documentation Layout
+= Burble Documentation
+// SPDX-License-Identifier: MPL-2.0
+:toc: preamble
+:icons: font
 
-Primary tracks:
+This directory holds Burble's long-form documentation. Source-code-level
+docs live next to the code they describe (`server/`, `ffi/zig/`, `src/`,
+etc.) — anything that survives a refactor independent of those modules
+lives here.
 
-* `theory/` for formal and conceptual material
-* `practice/` for operational and implementation material
-* `maintenance/` for baseline checklists and release hard-pass runbooks
-* `whitepapers/academic/` for research-facing whitepapers
-* `whitepapers/industry/` for industry/outreach whitepapers
+The taxonomy follows the RSR (Rhodium Standard Repository) template's
+pillar / unit pattern, augmented for Burble's voice-platform domain.
 
-Core docs:
+[#index]
+== Quick navigation
 
-* `maintenance/MAINTENANCE-CHECKLIST.md`
-* `practice/SOFTWARE-DEVELOPMENT-APPROACH.adoc`
+If you only read one file, see link:INDEX.adoc[INDEX.adoc] — a one-page
+map of everything below.
+
+== Layout
+
+[cols="1,3", options="header"]
+|===
+| Subdirectory | Contents
+
+| link:architecture/[`architecture/`]
+| Whole-system design: `ARCHITECTURE.adoc`, `THREAT-MODEL.adoc`,
+  `ANDROID-CLIENT.adoc`, integration writeups.
+
+| link:decisions/[`decisions/`]
+| Architecture Decision Records (ADRs). Numbered, append-only, one
+  decision per file. See `README.adoc` in the directory for the index.
+
+| link:developer/[`developer/`]
+| Hands-on guides for developers: ABI/FFI design, Bolt DNS records +
+  DDNS, router port-forwarding, WSL2 mirrored-networking workaround,
+  router-side setup.
+
+| link:governance/[`governance/`]
+| TSDM (project governance method), CRG criteria + audits, software
+  development approach, maintenance checklist, planning by MoSCoW band
+  (must / should / could / aspirational), audit subtypes (effects /
+  compliance / systems), maintenance subtypes (corrective / perfective /
+  adaptive), session-close records.
+
+| link:reports/[`reports/`]
+| Time-stamped audit / quality / compliance / performance / security
+  reports. Append-only; do not edit historical reports in place.
+
+| link:theory/[`theory/`]
+| Formal-methods + conceptual background: mathematics, ontologies,
+  computing, formalisms, socio-technical, other.
+
+| link:practice/[`practice/`]
+| Operational + implementation runbooks. Pair with `theory/`.
+
+| link:accessibility/[`accessibility/`]
+| WCAG conformance, keyboard navigation, screen-reader notes,
+  accessibility roadmap.
+
+| link:standards/[`standards/`]
+| External standards Burble adheres to / references.
+
+| link:compliance/[`compliance/`]
+| Regulatory + legal compliance notes (separate from `legal/`).
+
+| link:legal/[`legal/`]
+| Legal artefacts (notices, third-party-attributions where required by
+  upstream licences).
+
+| link:attribution/[`attribution/`]
+| Credits + third-party attribution that doesn't belong in `legal/`
+  (e.g. design influences, prior art).
+
+| link:templates/[`templates/`]
+| Boilerplate / template files (contractiles, doc templates).
+
+| link:superpowers/[`superpowers/`]
+| Specs for the "superpowers" Burble exposes to Claude/agents.
+
+| link:whitepapers/[`whitepapers/`]
+| Long-form academic (`academic/`), industry (`industry/`), and outreach
+  (`outreach/`) papers.
+
+| link:wikis/[`wikis/`]
+| Source for the GitHub wiki mirror. Edit here, then sync.
+|===
+
+== Conventions
+
+* AsciiDoc (`.adoc`) is preferred for new docs; existing `.md` files are
+  left as-is unless rewriting.
+* Every directory has a `README.adoc` (top-level) plus a numbered
+  `0.X-AI-MANIFEST.a2ml` (machine-readable). Date-stamped reports
+  follow the pattern `<topic>-YYYY-MM-DD.adoc`.
+* Cross-link with `link:` (AsciiDoc) or relative URLs (Markdown). Don't
+  hard-code `https://github.com/...` to repo files; relative links
+  follow renames.
+
+== Quickstarts
+
+For audience-specific landing pages, the three quickstarts are at the
+repo root (not under `docs/`) so they show up first in a fresh clone:
+
+* link:../QUICKSTART-USER.adoc[QUICKSTART-USER.adoc]
+* link:../QUICKSTART-DEV.adoc[QUICKSTART-DEV.adoc]
+* link:../QUICKSTART-MAINTAINER.adoc[QUICKSTART-MAINTAINER.adoc]
+
+== Top-level docs (kept at repo root)
+
+These intentionally live at the repo root so OSS-conventional tooling
+finds them:
+
+`README.adoc`, `CHANGELOG.md`, `LICENSE`, `SECURITY.md`,
+`CODE_OF_CONDUCT.md`, `CONTRIBUTING.md`, `EXPLAINME.adoc`,
+`READINESS.adoc`, `ROADMAP.adoc`, `CLAUDE.md` (Claude Code project
+instructions), plus the three `QUICKSTART-*.adoc` files above.
+
+Status / scratch trackers also at the root (consider moving to `docs/`
+when they stabilise): `BURBLE-PROOF-STATUS.md`, `PROOF-NEEDS.md`,
+`TEST-NEEDS.md`, `TOPOLOGY.md`.
