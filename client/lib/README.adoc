@@ -1,0 +1,89 @@
+// SPDX-License-Identifier: MPL-2.0
+= client/lib — Embeddable Burble Client Library
+:toc: preamble
+
+== Purpose
+
+The headless Burble client as a reusable library — drop voice rooms
+into a game, a workspace, or any host app without re-implementing
+the WebRTC + signaling lifecycle. Used by IDApTIK (asymmetric
+co-op game) and PanLL (panel workspace).
+
+This is **not** the browser UI (`../web/`) and **not** the desktop
+client (`../desktop/`). Those build on top of this library.
+
+== Files
+
+`deno.json`::
+  Deno tasks for build, test, publish.
+
+`rescript.json`::
+  ReScript compiler config (until the AffineScript migration
+  finishes).
+
+`src/BurbleClient.{affine,res}`::
+  The top-level API surface. `connect/join/leave/sendChat/
+  setMicMuted` — the small set of operations a host app should
+  need to wire voice into its own UI.
+
+`src/BurbleSignaling.{affine,res}`::
+  Signaling client (WebSocket connection to a Burble server,
+  channel join, presence). Used internally by `BurbleClient`.
+
+`src/BurbleVoice.{affine,res}`::
+  WebRTC peer-connection + audio plumbing. Voice-only — no video.
+
+`src/BurbleSpatial.{affine,res}`::
+  Optional spatial-audio extension. Apply per-peer 3D position to
+  the audio mixer. Used by IDApTIK for proximity voice.
+
+`src/BurbleProfile.{affine,res}`::
+  Per-user profile (display name, avatar, preferences) abstraction
+  for host apps that want their own identity system instead of
+  Burble's.
+
+`src/BurbleLOL.{affine,res}`::
+  Larger-Of-Larger — fanout helper for very-large-group voice
+  optimisation. Reserved; subject to redesign.
+
+`src/extensions/`::
+  Pluggable extension hooks for host apps.
+
+`*.res.mjs`::
+  Compiled ReScript output, checked in so consumers don't need a
+  ReScript build to import. Drops out once the AffineScript
+  migration completes and the canary is required-for-merge.
+
+== Conventions
+
+* `.affine` is canonical; `.res` is fallback; `.res.mjs` is the
+  built artifact. Don't hand-edit `.res.mjs`.
+* The public API is exactly `BurbleClient.*` — modules whose names
+  don't start with `Burble` are internal.
+* Host apps may import `BurbleSpatial` / `BurbleProfile` /
+  `BurbleSignaling` directly if they want to override behaviour,
+  but `BurbleClient` should remain enough for the common case.
+* No browser-DOM assumptions — this library runs in browsers,
+  Node-via-jsdom, and Deno-with-webcrypto-polyfill alike.
+
+== Build
+
+[source,bash]
+----
+cd client/lib
+deno task build              # bundle for publication
+deno task test               # unit tests
+----
+
+== Consumers
+
+* IDApTIK — asymmetric co-op game, uses spatial audio.
+* PanLL — panel workspace, uses ambient presence.
+* `../desktop/` — embeds this library (eventually).
+* `../web/` — partially overlaps; convergence is on the roadmap.
+
+== See also
+
+* link:../web/README.adoc[`client/web/README.adoc`] — full browser app (overlaps with this library)
+* link:../desktop/README.adoc[`client/desktop/README.adoc`] — desktop wrapper
+* link:../../docs/architecture/ARCHITECTURE.adoc[`docs/architecture/ARCHITECTURE.adoc`] — system overview

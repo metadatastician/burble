@@ -1,0 +1,187 @@
+// SPDX-License-Identifier: MPL-2.0
+= server/lib/burble — Elixir Application Core
+:toc: preamble
+
+== Purpose
+
+The Burble application's domain logic. Everything that isn't the
+Phoenix web layer (`burble_web/`) lives here: supervision tree,
+business rules, transport, media, persistence, observability, and
+the bridges to NIFs and external services.
+
+Boots via `Burble.Application.start/2`. See `application.ex` for the
+top-level supervision tree.
+
+== Top-level modules
+
+`application.ex`::
+  OTP `Application` callback. Boots all children in dependency order
+  with `:one_for_one` strategy. Children that depend on external
+  resources (`Store`, `Bolt.Listener`, `Transport.RTSP`,
+  `LLM.Supervisor`) degrade gracefully rather than crashing boot.
+
+`bolt.ex` / `bolt/`::
+  Burble's lightweight "incoming call" UDP signal (udp/7373 + WoL
+  poke udp/9). `Burble.Bolt.Listener` opens the socket;
+  `Burble.Bolt.Packet` encodes/decodes the framing;
+  `Burble.Bolt.Quic` provides optional QUIC framing when `:quicer`
+  is available. See ADR-0004, ADR-0005.
+
+`groove.ex` / `groove/`::
+  `.well-known/groove` discovery surface for sibling-service mesh
+  (Gossamer, PanLL, etc.). Includes `HealthMesh` (peer probing) and
+  `Feedback` (in-mesh telemetry).
+
+`llm.ex` / `llm/`::
+  LLM service supervisor + transport. Listens on QUIC 8503 (when
+  available) with TCP-TLS 8085 fallback. Provider-pluggable via
+  `Burble.LLM.configure_provider/1`. See `llm/transport.ex` for the
+  endpoint-redundancy logic.
+
+`presence.ex`::
+  `Phoenix.Presence` tracker — who's in which room, voice state.
+
+`store.ex` / `store/`::
+  Persistent state backend (VeriSimDB). `offline_ok: true` in test
+  config so it boots in degraded mode when the DB isn't reachable;
+  production fail-fasts.
+
+`topology.ex` / `topology/`::
+  Deployment topology (monarchic / oligarchic / distributed /
+  serverless) + room-level topology transitions. Reads from
+  `Application.get_env(:burble, Burble.Topology, [])` (default
+  `:monarchic`).
+
+`telemetry.ex`::
+  Metrics + periodic polling.
+
+`mailer.ex`::
+  Swoosh adapter. `Swoosh.Adapters.Test` in test config.
+
+`room_namer.ex`::
+  Three-word room ID generator.
+
+`circuit_breaker.ex`::
+  Generic supervisor-friendly circuit breaker used by external-service
+  callouts.
+
+== Subdirectories
+
+`accessibility/`::
+  Accessibility-specific server logic (keyboard, screen-reader).
+
+`audit/`::
+  Audit logging hooks (governance trail).
+
+`auth/`::
+  Authentication primitives (PAKE + SAS, per ADR-0003).
+
+`bebop/`::
+  Bebop wire-format integration (binary payload framing).
+
+`bolt/`::
+  Bolt UDP/QUIC listener + packet codec (see `bolt.ex` above).
+
+`bridges/`::
+  Inbound bridges: Mumble/Murmur (operational), Discord (crypto
+  validation), SIP (codec negotiation), Matrix (planned).
+
+`chat/`::
+  Ephemeral chat message store (ETS-backed, per-room).
+
+`cluster/`::
+  Multi-node clustering glue.
+
+`coprocessor/`::
+  NIF backend dispatch: `ZigBackend` (SIMD), `SNIFBackend`
+  (WASM/wasmex when present), pure-Elixir fallback. `Pipeline`
+  starts a per-peer coprocessor under the
+  `Burble.CoprocessorSupervisor`.
+
+`diagnostics/`::
+  Self-test + health-check helpers.
+
+`groove/`::
+  Discovery mesh (see `groove.ex` above).
+
+`llm/`::
+  LLM service (see `llm.ex` above).
+
+`media/`::
+  Membrane SFU + per-room playout. `Engine` is the supervisor;
+  `Peer` is the per-participant GenServer; `LmdbPlayout` is the
+  per-room playout buffer.
+
+`moderation/`::
+  Server-side moderation (mute / kick / room policy).
+
+`network/`::
+  NAT helpers, STUN/TURN glue, IPv4/6 utilities.
+
+`permissions/`::
+  Role lattice + capability checks. Backed by the Idris2
+  `Burble.ABI.Permissions` proof (`src/Burble/ABI/Permissions.idr`).
+
+`presence/`::
+  Phoenix.Presence customisations.
+
+`protocol/`::
+  Wire-protocol modules (channel-level framing, version negotiation).
+
+`rooms/`::
+  Room GenServers + supervision. `RoomSupervisor` =
+  `DynamicSupervisor` of per-room processes; `RoomRegistry` maps
+  room ID → PID.
+
+`safety/`::
+  `ProvenBridge` — wrappers around critical-path operations
+  (constant-time compare, password strength, secure random, email
+  validation, path validation) that prefer the formally-verified
+  `proven` NIF when available and fall back to Erlang stdlib
+  otherwise.
+
+`security/`::
+  E2EE key rotation (`KeyRotation`), SDP validation.
+
+`store/`::
+  VeriSimDB driver + backup scheduler.
+
+`text/`::
+  Persistent threaded-message backend (NNTPS).
+
+`timing/`::
+  PTP precision timing (`PTP`), wall-clock correlator
+  (`ClockCorrelator`), multi-node playout alignment (`Alignment`).
+  Falls back gracefully when PTP hardware is absent.
+
+`topology/`::
+  Topology transitions (see `topology.ex` above).
+
+`transport/`::
+  Non-WebRTC media transports — `RTSP` for broadcast/stage rooms
+  and screen-share streams. Listens on TCP 8554 + dynamic UDP RTP
+  ports. Degrades gracefully on bind failure.
+
+`verification/`::
+  Bridge to the Idris2 ABI proofs (`src/Burble/ABI/`). Per
+  ADR-0008 Option C the proofs are type-check-level today;
+  runtime enforcement is roadmap.
+
+== Conventions
+
+* Singletons (PubSub, Presence, Engine, Bolt.Listener, etc.) are
+  named processes — the test suite's `test_helper.exs`
+  SingletonWatcher monitors each and reports mid-run deaths.
+* External-dependency children (`Store`, `LLM`, `RTSP`, `Bolt`)
+  MUST degrade gracefully on resource failure rather than crashing
+  the supervisor.
+* Per ADR-0007, every claim in `README.adoc` maps to a module
+  here and a corresponding test in `server/test/burble/`, or is
+  flagged as experimental.
+
+== See also
+
+* `application.ex` — entry point and supervision tree
+* `../burble_web/` — Phoenix endpoint, channels, controllers
+* `../../test/burble/` — corresponding test files (mirror structure)
+* link:../../../docs/architecture/ARCHITECTURE.adoc[`docs/architecture/ARCHITECTURE.adoc`] — system overview

@@ -1,0 +1,106 @@
+// SPDX-License-Identifier: MPL-2.0
+= client/web — Browser Client
+:toc: preamble
+
+== Purpose
+
+The browser-side of Burble — voice rooms, signaling, WebRTC peer
+connection, optional AI bridge. No native install required; users
+open a page, grant mic permission, and join. This is half of the
+core value proposition ("browser join — no downloads").
+
+Currently mid-migration from ReScript to AffineScript (Phase 5
+≈ 95%, per `STATE.a2ml`). Every `.affine` file has a `.res`
+fallback sibling — `MIGRATION.md` covers the migration policy.
+
+== Top-level files
+
+`index.html`::
+  Main app entry. Loads `Main.bs.js` (built from `Main.affine` /
+  `Main.res`) and hands off the entire UI.
+
+`p2p-voice.html`::
+  Server-less peer-to-peer mode. Two parties exchange WebRTC
+  offer/answer codes manually, then connect direct. Powers the
+  60-second quickstart in `QUICKSTART-USER.adoc`.
+
+`p2p-voice-pake.html`::
+  P2P mode with PAKE + SAS authentication (per ADR-0003 +
+  `PAKE-PROTOTYPE.adoc`).
+
+`quick-join.html`::
+  Server-mediated join page — paste a room ID, mic permission, in.
+
+`burble-ai-bridge.js`::
+  Deno HTTP/WS bridge on `:6474` / `:6475`. Lets a local AI tool
+  (Claude Code, etc.) send/receive messages over the in-browser
+  P2P data channel. Browser auto-discovers the bridge if running.
+  See `../../CLAUDE.md` for the Claude Code integration.
+
+`deno.json`::
+  Deno tasks for dev server, build, test.
+
+`rescript.json`::
+  ReScript compiler config (until the AffineScript migration
+  finishes and this can be dropped).
+
+`MIGRATION.md`::
+  ReScript → AffineScript migration policy + status. Read this
+  before editing `.res` files.
+
+`PAKE-PROTOTYPE.adoc`::
+  PAKE-over-WebRTC handshake prototype writeup. Feeds back into
+  ADR-0003.
+
+== Subdirectories
+
+`src/`::
+  Source modules. Convention: `Foo.affine` is canonical, `Foo.res`
+  is the fallback. Modules: `Audio` (mic capture + WebAudio
+  pipeline), `Bindings` (JS interop), `Main` (app entry),
+  `Room` (room state machine), `Signaling` (WebSocket signaling
+  client), `WebRTC` (peer connection lifecycle).
+
+`src/app/`::
+  UI components.
+
+`src/bindings/`::
+  External JS / WebRTC API bindings.
+
+`src/styles/`::
+  CSS.
+
+`tests/`::
+  Deno test suite (the AffineScript canary uses this).
+
+== Conventions
+
+* `.affine` is canonical going forward; `.res` exists only as a
+  fallback during the migration. Don't add new `.res`-only
+  modules.
+* Browser-only — no Node/npm/bun (per repo policy). Deno is the
+  only JS toolchain used here.
+* WebRTC peer connection lifecycle is owned by `WebRTC.affine`;
+  business logic for room state belongs in `Room.affine`.
+* Bridge mode (AI data channel) is opt-in — `burble-ai-bridge.js`
+  must be explicitly running for the green dot to show in the
+  AI Channel card.
+
+== Build + run
+
+[source,bash]
+----
+just client          # dev server on :8080
+deno task build      # production bundle
+deno task test       # run tests/
+----
+
+Or open `p2p-voice.html` directly in a browser for the
+no-build, no-server mode.
+
+== See also
+
+* link:../../docs/architecture/ARCHITECTURE.adoc[`docs/architecture/ARCHITECTURE.adoc`] — system overview (web client is "Plane 1")
+* link:../lib/README.adoc[`client/lib/README.adoc`] — embeddable client library (reuses much of this)
+* link:../desktop/README.adoc[`client/desktop/README.adoc`] — Ephapax desktop wrapper
+* `../../server/lib/burble_web/channels/` — server-side counterpart
