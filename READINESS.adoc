@@ -19,6 +19,23 @@ The other two are per-directory READMEs in core subtrees and CI test-pass eviden
 * Per-directory README coverage was absent from the seven core server and client subtrees.
 * No CI workflow providing test-pass evidence existed for the Elixir server.
 
+=== Progress toward grade C (post-audit)
+
+* ✅ READINESS file: this document (created 2026-04-21).
+* ✅ Per-directory READMEs (issue #50): `README.adoc` now present in
+  all seven audit-cited subtrees — `server/lib/burble`,
+  `server/lib/burble_web`, `client/web`, `client/desktop`,
+  `client/lib`, `signaling`, `ffi/zig`. Closes the second of the
+  three grade-C artefacts.
+* ❌ CI test-pass evidence: `.github/workflows/elixir-ci.yml`
+  exists, but the Run-server-tests / Build-Zig-FFI / Run-Dialyzer
+  steps carry `continue-on-error: true` ("GATE DEACTIVATED
+  2026-05-15"). Re-arming is tracked in issue #39 and attempted
+  in PR #87 — the boot-collapse root cause is fixed, but
+  pre-existing test-residue failures need addressing per-cluster
+  before the gate can stay green. **This is the remaining blocker
+  for grade C.**
+
 ---
 
 == What IS ready for production use

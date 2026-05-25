@@ -1,0 +1,74 @@
+// SPDX-License-Identifier: MPL-2.0
+= server/lib/burble_web — Phoenix Web Layer
+:toc: preamble
+
+== Purpose
+
+The HTTP + WebSocket surface for Burble. Thin layer — the heavy
+lifting is in `../burble/` (the application core); this directory
+owns routing, request/response shaping, channel-level WebRTC
+signaling, and static-asset serving.
+
+Boots as `BurbleWeb.Endpoint` (last child of
+`Burble.Application.start/2`). Test config sets `server: false` so
+no port is bound during `mix test`.
+
+== Top-level files
+
+`endpoint.ex`::
+  Phoenix endpoint. Configures sockets, static files, the
+  request pipeline (parsers, telemetry, session, CORS, rate
+  limiting), and the Plug stack. WebSocket transport for room
+  channels is mounted here.
+
+`router.ex`::
+  HTTP route definitions. Browser-pipeline scopes for
+  user-facing pages, API-pipeline scopes for JSON endpoints,
+  `.well-known/*` for federation and discovery surfaces (Groove
+  mesh, security.txt, change-password redirect).
+
+`cdn.ex`::
+  Static-asset / CDN helpers — cache-busting, integrity hashes
+  for `<script>` tags, content-type sniffing.
+
+`layouts.ex`::
+  Root + per-template HEEx layouts.
+
+`error_json.ex`::
+  JSON error renderer (parallel to Phoenix's `ErrorHTML`).
+
+== Subdirectories
+
+`channels/`::
+  WebSocket channels — the WebRTC signaling layer. `RoomChannel`
+  handles join, peer SDP/ICE exchange, presence, and chat.
+  Backed by `Burble.PubSub` + `Burble.Presence`.
+
+`controllers/`::
+  Plug controllers for HTTP routes (health checks, static
+  callbacks, .well-known endpoints, OAuth / IndieAuth handshakes).
+
+`plugs/`::
+  Custom Plug modules — rate limiter (`RateLimiter` — ETS table
+  created at app startup in `application.ex` so it survives the
+  compile-time `Plug.init/1` ephemerality), CSRF guards, request
+  ID propagation.
+
+== Conventions
+
+* Phoenix 1.7+ patterns: HEEx + verified routes (`~p"/..."`).
+* No business logic in controllers/channels — delegate to
+  `../burble/` modules.
+* Rate-limiter table is created in `Burble.Application.start/2`
+  (not in `init/1`) because Plug `init/1` runs at compile time
+  in releases and the table would die with the compilation
+  process.
+* All endpoints emit telemetry events consumed by
+  `Burble.Telemetry`.
+
+== See also
+
+* link:../burble/README.adoc[`server/lib/burble/README.adoc`] — application core
+* `../../test/burble_web/` — corresponding test files
+* link:../../../docs/architecture/ARCHITECTURE.adoc[`docs/architecture/ARCHITECTURE.adoc`] — system overview
+* link:../../../docs/architecture/THREAT-MODEL.adoc[`docs/architecture/THREAT-MODEL.adoc`] — threat model (web layer is the largest attack surface)
