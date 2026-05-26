@@ -1,0 +1,159 @@
+# SPDX-License-Identifier: MPL-2.0
+# Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath)
+#
+# Machine-readable companion to:
+#   SESSION-CLOSE-2026-05-25-install-machinery-and-grade-c.adoc
+#
+# Format mirrors the AsciiDoc record but is structured for tooling +
+# downstream agents. The human-readable .adoc is the source of truth
+# for narrative; this file is the source of truth for state.
+
+@a2ml-version: 1.0
+@a2ml-kind: session-close
+@a2ml-schema: session-close.v1.enriched
+
+(
+  protocol         = "continuity / planned-session-close"
+  protocol-version = "1.1.0"
+  session-id       = "2026-05-25-install-machinery-and-grade-c"
+  session-end      = "2026-05-25"
+  assistant        = "Claude (Sonnet 4.6 + Opus 4.7)"
+  author           = "Jonathan D.A. Jewell"
+  cross-references = [
+    "docs/governance/session-close/SESSION-CLOSE-2026-04-17-burble-baseline-guards.adoc"
+    "docs/governance/session-close/SESSION-CLOSE-2026-05-25-install-machinery-and-grade-c.adoc"
+    "READINESS.adoc"
+    "docs/governance/CRG-AUDIT-2026-04-18.adoc"
+  ]
+)
+
+[goals]
+ordered = [
+  "Cross-platform install machinery (service + tray-free background) for Linux/macOS/Windows-with-WSL"
+  "Re-arm Elixir test gate (#39) or determine right narrowing"
+  "Tidy + reconcile repo documentation; update wiki; audit PRs/issues"
+  "Move down open-issues list in tractability order"
+]
+
+[branches-touched]
+# branch-name = state | purpose
+claude/dreamy-carson-mTifq           = "merged-pr-81 | cross-platform service install"
+claude/install-roundtrip-tests       = "merged-pr-85 | round-trip + lint tests for install"
+claude/repo-tidy-doc-navigability    = "merged-pr-88 | docs INDEX + wiki source + container clarity"
+claude/issue-50-per-dir-readmes      = "merged-pr-89 | per-dir READMEs (closes #50)"
+claude/rearm-elixir-test-gate        = "open-pr-87  | narrow re-arm of FFI gate only"
+claude/test-residue-investigation    = "abandoned   | static analysis, no commits"
+claude/session-close-2026-05-25      = "this-record | session-close docs"
+
+[pull-requests]
+# (number) = (state, head-sha, summary, closes-issues)
+81 = (state="merged",  head="<merged>",  summary="cross-platform install machinery", closes=[])
+85 = (state="merged",  head="<merged>",  summary="install round-trip + lint tests",  closes=[])
+88 = (state="merged",  head="<merged>",  summary="docs navigability pass",            closes=[])
+89 = (state="merged",  head="<merged>",  summary="per-dir READMEs",                   closes=[50])
+87 = (state="open",    head="b923a7a",   summary="re-arm Elixir test gate (narrowed to FFI)", closes=[])
+
+[issues-touched]
+# (number) = (state-after, action-taken)
+39 = (state-after="open-partial",     action="boot-collapse root cause fixed; FFI gate re-armed via PR #87; server-tests + Dialyzer remain suppressed pending per-cluster fixes")
+50 = (state-after="closed-by-pr-89",  action="five missing READMEs shipped; READINESS.adoc updated")
+35 = (state-after="recommended-close", action="comment posted documenting that all three sub-items are addressed on main")
+74 = (state-after="recommended-close", action="comment posted documenting the opam-switch fix at affinescript-canary.yml:86-97")
+
+# Untouched (listed for next-session memory)
+77 = (state-after="open-untouched", reason="tractable but needs deep RTSP knowledge + Elixir runtime")
+48 = (state-after="open-untouched", reason="larger scope (web client test suite); did not reach")
+52 = (state-after="open-untouched", reason="needs real hardware/cluster for perf bench")
+55 = (state-after="open-untouched", reason="research-flavoured; needs maintainer scoping")
+49 = (state-after="open-untouched", reason="blocked on external maintainer action (create + tag selur-compose repo)")
+
+[grade-c-artefacts]
+# CRG v2.0 STRICT audit (docs/governance/CRG-AUDIT-2026-04-18.adoc) requires three.
+readiness-adoc           = (state="done",    notes="exists pre-session; this session added a post-audit progress section")
+per-dir-readmes          = (state="done",    notes="closed by PR #89 this session")
+ci-test-pass-evidence    = (state="partial", notes="FFI gate active via PR #87; server-tests + Dialyzer suppressed pending per-cluster work; tracked under #39")
+
+[install-machinery-summary]
+linux-default     = "systemd system unit; AmbientCapabilities=CAP_NET_BIND_SERVICE so udp/9 binds without root; sudo install"
+linux-user-optin  = "systemd --user unit; --setcap flag handles udp/9 via setcap on BEAM binary"
+macos             = "launchd LaunchAgent in ~/Library/LaunchAgents/; tested on macos-14 (arm64)"
+windows-host      = "true Windows Service via New-Service -Credential (runs as installing user); minimal C# ServiceBase compiled in-place by in-box csc.exe; no NSSM/srvany dependency"
+wsl-handoff       = "setup.sh prints exact elevated-PowerShell command with \\wsl.localhost\\<distro>\\... UNC path pre-filled"
+
+[tests-shipped]
+lint-suite        = ("tests/install/run.sh", "Linux/macOS/Windows lint via .github/workflows/install-tests.yml")
+roundtrip-linux   = ("tests/install/roundtrip-linux.sh", "systemctl --user install/start/stop/uninstall; also kills MainPID and asserts Restart=on-failure")
+roundtrip-macos   = ("tests/install/roundtrip-macos.sh", "launchctl bootstrap/bootout gui/$UID")
+roundtrip-windows = ("tests/install/roundtrip-windows.ps1", "creates throwaway local user; New-Service -Credential; asserts SCM state; uninstall + cleanup in finally{}")
+
+[files-of-interest]
+new = [
+  ".github/workflows/install-tests.yml"
+  ".github/workflows/install-roundtrip.yml"
+  "assets/services/burble.service"
+  "assets/services/burble.user.service"
+  "assets/services/burble-ai-bridge.service"
+  "assets/services/com.hyperpolymath.burble.plist"
+  "assets/services/com.hyperpolymath.burble.ai-bridge.plist"
+  "scripts/install-service.sh"
+  "scripts/wsl-bolt-udp-forward.ps1"
+  "setup.ps1"
+  "tests/install/run.sh"
+  "tests/install/roundtrip-linux.sh"
+  "tests/install/roundtrip-macos.sh"
+  "tests/install/roundtrip-windows.ps1"
+  "tests/install/stubs/mix"
+  "tests/install/stubs/deno"
+  "tests/install/README.md"
+  "docs/INDEX.adoc"
+  "docs/wikis/Home.md"
+  "docs/wikis/Quickstart.md"
+  "docs/wikis/Architecture.md"
+  "docs/wikis/Glossary.md"
+  "containers/README.adoc"
+  "server/lib/burble/README.adoc"
+  "server/lib/burble_web/README.adoc"
+  "client/web/README.adoc"
+  "client/desktop/README.adoc"
+  "client/lib/README.adoc"
+]
+substantially-changed = [
+  "setup.sh"
+  "Justfile"
+  "docs/README.adoc"
+  "docs/wikis/README.adoc"
+  "README.adoc"
+  "READINESS.adoc"
+  ".github/workflows/elixir-ci.yml"
+]
+
+[blockers-and-risks]
+open-pr-87-ci      = "Awaiting CI on b923a7a. Safe-to-close hinges on this run."
+issue-39-residue   = "Boot-collapse fixed but pre-existing test residue (LLM.Transport, Packet, Safety.ProvenBridge, Timing, Topology clusters) remains. Per-cluster work ~½-1 day each."
+wiki-unsynced      = "Four new wiki pages exist as source under docs/wikis/ but live wiki still shows pre-session 1-page Home. Run `just wiki-sync` from a maintainer machine."
+hypatia-false-pos  = "Repeated Hypatia bot comments cite pre-existing scanner false positives (Idris docstring mentions of believe_me; .envrc:24 commented placeholder; Password-token matches on validate_password_strength and SIP module names). Hypatia's check itself passes. Informational only."
+wsl-real-verify    = "End-to-end install on the maintainer's actual Windows + WSL machine has not been done. Only GH Actions runners + this session's Linux container verified the install path."
+
+[next-protocol]
+ordered = [
+  "Wait for PR #87 CI on b923a7a"
+  "Open https://github.com/hyperpolymath/burble/wiki and run `just wiki-sync` to publish the four new pages"
+  "Triage close #74 and #35 (comments already recommend so)"
+  "Pick next: #77 (RTSP test isolation, most tractable), #48 (web client tests), #52 (perf), #49 (selur-compose publish — external action), or per-cluster fixes for the test residue exposed by PR #87"
+  "Real-world verification on Windows + WSL for the install machinery if PR #87 doesn't surface anything new"
+]
+
+[safe-to-close]
+criteria = [
+  "No work mid-edit; all files saved; all branches pushed"
+  "All planned PRs either merged or open with documented state; none abandoned silently"
+  "Maintainer has visibility into every state change via PR comments + session-close doc"
+]
+gate     = "PR #87 CI on b923a7a reports back (green or red — either is fine; decision tree documented in PR comment)"
+
+[discipline-check]
+file-moves                  = "none outside PR scope"
+deletions                   = "none"
+structural-changes-deferred = "containers/ rename, brand/+assets/ merge, top-level scratch-trackers → docs/ — all documented as future-direction, not actioned"
+authorship-credit           = "maintainer flagged a credit-shape issue mid-session; subsequent commits framed as edits-against-existing-architecture rather than novel design"
+hypatia-comments            = "triaged as pre-existing scanner false positives; none silenced or rewritten in repo"
