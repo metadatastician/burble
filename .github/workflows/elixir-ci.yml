@@ -72,15 +72,12 @@ jobs:
 
       - name: Build Zig FFI
         working-directory: ${{ github.workspace }}
-        # GATE DEACTIVATED 2026-05-15: the FFI build no longer fails CI.
-        # The build still RUNS and every error stays visible in this
-        # step's log and as a step annotation; only the pass/fail gate
-        # is severed (consistent with the non-gating "Run server tests"
-        # and "Run Dialyzer" steps). Deliberate, temporary signal
-        # suppression while the Zig 0.15 / setup-beam build is
-        # stabilised — not a fix. To re-arm the gate, delete the single
-        # continue-on-error line below.
-        continue-on-error: true
+        # Re-armed as part of #39 follow-up: the Zig 0.15 / setup-beam
+        # build path has been stable since #62 landed; the prior
+        # GATE DEACTIVATED 2026-05-15 marker is removed. Every failure
+        # still appears in this step's log and as a step annotation,
+        # but a real FFI break now turns CI red — which is what users
+        # of the coprocessor NIF depend on.
         run: |
           # erlef/setup-beam installs OTP under the tool cache, not at
           # build.zig's hardcoded /usr/lib/erlang default. Derive the real
@@ -96,12 +93,17 @@ jobs:
 
       - name: Run server tests
         working-directory: ${{ github.workspace }}
-        # GATE DEACTIVATED 2026-05-15 by maintainer request: the test
-        # result no longer fails CI. The suite still RUNS and every
-        # failure remains visible in this step's log and as a step
-        # annotation; only the pass/fail gate is severed. This is a
-        # deliberate, temporary suppression of signal, not a fix. To
-        # re-arm the gate, delete the single line below.
+        # GATE NARROWED 2026-05-25: the underlying boot-failure root cause
+        # from #39 IS fixed (`offline_ok: true` on Burble.Store, optional
+        # :quicer, graceful Bolt/RTSP bind degradation, SingletonWatcher
+        # in test_helper.exs) — confirmed by PR #87 reaching 3m30s
+        # of executing tests rather than fast-bailing at boot.
+        # However the re-armed gate then exposed pre-existing test
+        # residue in LLM.Transport, Packet, Safety.ProvenBridge,
+        # Timing, and Topology clusters that pre-date #39 and need
+        # per-cluster fixes (some tracked in #77 etc.). Keeping the
+        # gate suppressed until those land — *not* the same situation
+        # as the 2026-05-15 "test suite won't even boot" deactivation.
         continue-on-error: true
         run: just test-server
 
@@ -161,14 +163,14 @@ jobs:
         run: mkdir -p priv/plts
 
       - name: Run Dialyzer
-        # GATE DEACTIVATED 2026-05-15: Dialyzer no longer fails CI.
-        # It still RUNS and every finding stays visible in this step's
-        # log and as a step annotation; only the pass/fail gate is
-        # severed (consistent with the non-gating "Run server tests"
-        # and "Build Zig FFI" steps in the test job above). These are
-        # pre-existing findings, surfaced for the first time now that
-        # the test job reaches completion — deliberate, temporary
-        # signal suppression, not a fix. To re-arm the gate, delete
-        # the single line below.
+        # GATE NARROWED 2026-05-25: Dialyzer ran clean before the
+        # 2026-05-15 deactivation; the deactivation only landed because
+        # the test job (which it `needs`) was itself suppressed.
+        # However Dialyzer findings are typically Warning-level
+        # type-correctness issues that need triage before re-gating
+        # cleanly. Keep suppressed in this PR; re-arm in a follow-up
+        # once any pre-existing findings have been addressed
+        # (per-warning suppression in dialyzer mix config, *not*
+        # blanket continue-on-error).
         continue-on-error: true
         run: mix dialyzer --plt-file priv/plts/dialyzer.plt
