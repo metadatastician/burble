@@ -1,0 +1,181 @@
+// SPDX-License-Identifier: MPL-2.0
+// Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath)
+= Session Close — install-machinery, docs tidy, grade-C lift
+:protocol: continuity / planned-session-close
+:protocol-version: 1.1.0
+:session-id: 2026-05-25-install-machinery-and-grade-c
+:session-end: 2026-05-25
+:assistant: Claude (Sonnet 4.6 + Opus 4.7)
+:author: Jonathan D.A. Jewell
+:format-schema: session-close.v1.enriched
+:archival-convention: timestamped append-only
+:cross-references: docs/governance/session-close/SESSION-CLOSE-2026-04-17-burble-baseline-guards.adoc, READINESS.adoc, docs/governance/CRG-AUDIT-2026-04-18.adoc
+
+== Goal
+
+(set by maintainer over the course of the session)
+
+. Cross-platform install machinery for Burble — service install on
+  Linux/macOS, true Windows Service on Windows host (with WSL2 NAT
+  forwarder), validated end-to-end where possible.
+. Re-arm the Elixir test gate (`#39`) or determine the right narrowing.
+. Tidy + reconcile repo documentation (per `rsr-template-repo` taxonomy),
+  update wiki, and audit PRs/issues for health.
+. Move down the open-issues list in tractability order.
+
+== Repository
+
+* https://github.com/hyperpolymath/burble (this repo, single working tree)
+
+== Sessions branches (created during this session)
+
+[cols="2,2,3", options="header"]
+|===
+| Branch | Status | Purpose
+
+| `claude/dreamy-carson-mTifq` | merged via PR #81 | Cross-platform service-install machinery
+| `claude/install-roundtrip-tests` | merged via PR #85 | Round-trip + lint tests for the install machinery
+| `claude/repo-tidy-doc-navigability` | merged via PR #88 | Docs INDEX, wiki source, container/containers clarity
+| `claude/issue-50-per-dir-readmes` | merged via PR #89 | Per-dir READMEs for seven core subtrees (closes #50)
+| `claude/rearm-elixir-test-gate` | **open as PR #87** | Re-arm of FFI gate only; server-tests + Dialyzer stay suppressed pending per-cluster test-residue work
+| `claude/test-residue-investigation` | abandoned (no commits) | Static analysis of PR #87's exposed test failures — no Elixir/log access, parked
+| `claude/session-close-2026-05-25` | this branch | This document
+|===
+
+== PR status (end-of-session)
+
+[cols="1,1,3", options="header"]
+|===
+| PR | State | Notes
+
+| #81 | merged | Cross-platform service install. Adds `setup.sh`/`setup.ps1`, `scripts/install-service.sh`, systemd/launchd units, Windows Service path via embedded C# service host compiled by in-box `csc.exe`. Includes the `udp/9` privileged-bind fix (system unit + `AmbientCapabilities=CAP_NET_BIND_SERVICE`, or `--setcap` on BEAM for `--user` mode).
+| #85 | merged | Round-trip install tests for Linux (systemd `--user`), macOS (launchd), Windows (Windows Service + throwaway local user). PSScriptAnalyzer demoted to advisory.
+| #88 | merged | `docs/INDEX.adoc`, fresh `docs/README.adoc`, four wiki source pages (`Home.md`, `Quickstart.md`, `Architecture.md`, `Glossary.md`), `just wiki-sync` recipe, `containers/README.adoc` distinguishing `container/` (singular) from `containers/` (plural).
+| #89 | merged | Five missing per-directory `README.adoc` files (`server/lib/burble`, `server/lib/burble_web`, `client/web`, `client/desktop`, `client/lib`). Closes the second of three artefacts blocking grade C. Updates `READINESS.adoc` accordingly.
+| **#87** | **open, awaiting CI on b923a7a** | Re-armed FFI build gate; left `Run server tests` + `Run Dialyzer` on `continue-on-error: true` pending per-cluster fixes (#77 et al.). New comments distinguish this from the 2026-05-15 "tests don't boot" deactivation — the boot-collapse root cause IS fixed.
+|===
+
+== Issue status (touched this session)
+
+[cols="1,1,3", options="header"]
+|===
+| Issue | Status | Action this session
+
+| #74 (opam switch in affinescript-canary) | already fixed on main | Comment posted documenting the fix at `affinescript-canary.yml:86-97` — explicit `opam switch set` + `eval $(opam env --switch=…)` with three-tier fallback. Recommend close.
+| #35 part 1 (Hypatia SARIF integration) | already fixed on main | Comment posted citing `hypatia-scan.yml:114` (SARIF converter) + `:244` (`upload-sarif`).
+| #35 part 2 (re-arm Elixir test gate) | partial via PR #87 | FFI gate re-armed; server-tests + Dialyzer remain suppressed. Tracked under #39.
+| #35 part 3 (dead `robot-repo-automaton` ref) | already fixed on main | Comment posted; no reference remains in `hypatia-scan.yml`. Recommend close #35 entirely.
+| #39 (re-arm Elixir test gate) | partial via PR #87 | Boot-collapse root cause (the original blocker) is fixed. What's now exposed is pre-existing test residue (LLM.Transport, Packet, Safety.ProvenBridge, Timing, Topology clusters). Stays open until per-cluster fixes land.
+| #50 (per-dir READMEs for grade C) | **closed via PR #89** | Five missing READMEs shipped; `READINESS.adoc` updated.
+| #77 (4 RTSP tests fail in series) | untouched | Tractable but needs deep RTSP knowledge + an Elixir runtime to verify. Did not reach this session.
+| #48 (web client test suite) | untouched | Larger scope; did not reach this session.
+| #52 (validate perf numbers) | untouched | Needs real hardware/cluster.
+| #55 (formal-proof PoC) | untouched | Research-flavoured; needs maintainer scoping.
+| #49 (selur-compose publish) | untouched | Blocked on external maintainer action (create + tag the `hyperpolymath/selur-compose` repo).
+|===
+
+== Grade-C path — end-of-session state
+
+The CRG v2.0 STRICT audit cited three required artefacts to re-attain grade C:
+
+[cols="2,1,3", options="header"]
+|===
+| Artefact | State | Detail
+
+| `READINESS.adoc` exists | ✅ done (pre-session) | Updated this session with a "Progress toward grade C" section.
+| Per-directory READMEs in core subtrees | ✅ **done this session** | PR #89.
+| CI test-pass evidence for the Elixir server | 🟡 **partial** | FFI gate active via PR #87; server-tests + Dialyzer suppressed pending per-cluster work. Remaining blocker.
+|===
+
+**Net**: 2/3 artefacts complete. One left, tracked under #39 + per-cluster issues.
+
+== Other documentation deliverables this session
+
+* `docs/INDEX.adoc` (new) — one-page map of every doc.
+* `docs/README.adoc` (rewritten) — was stale; now matches actual tree.
+* `docs/wikis/{Home,Quickstart,Architecture,Glossary}.md` (new) — wiki source files.
+* `docs/wikis/README.adoc` (rewritten) — wiki sync procedure documented.
+* `containers/README.adoc` (new) — distinguishes from `container/`.
+* `server/lib/burble/README.adoc` (new) — ~190 lines describing application core.
+* `server/lib/burble_web/README.adoc` (new) — Phoenix web layer.
+* `client/web/README.adoc` (new) — browser client + AffineScript migration status.
+* `client/desktop/README.adoc` (new) — Ephapax desktop wrapper.
+* `client/lib/README.adoc` (new) — embeddable library.
+* `Justfile` — added `just wiki-sync` recipe.
+* `READINESS.adoc` — post-audit progress section.
+
+== Install-machinery summary (PRs #81 + #85, merged)
+
+The cross-platform service install (now in main):
+
+[cols="2,3", options="header"]
+|===
+| Platform | Mechanism
+
+| Linux (system, default) | systemd system unit (`/etc/systemd/system/burble.service`) running as `$USER` with `AmbientCapabilities=CAP_NET_BIND_SERVICE` so udp/9 (Bolt WoL poke) binds without root. Requires `sudo` install.
+| Linux (user, opt-in) | systemd user unit; `--setcap` flag setcaps the BEAM binary for `udp/9` since user instances can't grant capabilities.
+| macOS | launchd LaunchAgent in `~/Library/LaunchAgents/`. Tested via CI on `macos-14` (arm64).
+| Windows host (WSL2 NAT case) | True Windows Service via `New-Service -Credential` (runs as installing user so it can see WSL distros). Service exe is a minimal C# `ServiceBase` compiled in-place by the in-box .NET Framework `csc.exe` (no NSSM/srvany dependency). Forwards Bolt udp/7373+9 from host into WSL.
+|===
+
+Tests:
+
+* Lint (Linux/macOS/Windows) — render systemd units in both modes + asserts invariants; plist validity; PowerShell AST parse + PSScriptAnalyzer (advisory).
+* Round-trip (Linux/macOS/Windows) — actually install→activate→stop→uninstall on the real service manager, with stub `mix`/`deno` binaries so the activate check passes without the full toolchain. Linux + macOS reliably pass; Windows round-trip occasionally exposes platform-specific quirks (documented in PR #85).
+
+== Files of interest (created or substantially changed this session)
+
+* `.github/workflows/install-tests.yml`
+* `.github/workflows/install-roundtrip.yml`
+* `assets/services/burble.service` (system)
+* `assets/services/burble.user.service` (user)
+* `assets/services/burble-ai-bridge.service`
+* `assets/services/com.hyperpolymath.burble.plist`
+* `assets/services/com.hyperpolymath.burble.ai-bridge.plist`
+* `scripts/install-service.sh`
+* `scripts/wsl-bolt-udp-forward.ps1`
+* `setup.sh` + `setup.ps1`
+* `tests/install/run.sh`
+* `tests/install/roundtrip-{linux,macos}.sh`
+* `tests/install/roundtrip-windows.ps1`
+* `tests/install/stubs/{mix,deno}`
+* `docs/INDEX.adoc`
+* `docs/README.adoc` (rewritten)
+* `docs/wikis/*.md` + `README.adoc`
+* `containers/README.adoc`
+* `server/lib/burble/README.adoc`
+* `server/lib/burble_web/README.adoc`
+* `client/{web,desktop,lib}/README.adoc`
+* `READINESS.adoc`
+* `Justfile` (recipes added: `setup`, `service-*`, `test-install`, `wiki-sync`)
+
+== Known blockers / residual risks
+
+* **PR #87 is the only open PR.** Safe-to-close hinges on its CI coming back green (FFI gate active, suppressed gates not re-blocking). Once green: either merge it or close it; nothing else is mid-flight.
+* **Issue #39 stays open**. The boot-collapse root cause is fixed but the test-residue clusters remain. Re-arming the server-tests gate needs per-cluster work: probably ½–1 day per cluster.
+* **Wiki sync** is now possible via `just wiki-sync` but has not yet been run against the live wiki — the four new pages exist as source under `docs/wikis/` but the actual https://github.com/hyperpolymath/burble/wiki still shows the pre-session 1-page "Home" until someone runs the sync.
+* **Hypatia bot's "critical" findings** are pre-existing scanner false positives (`believe_me` mentions in Idris2 docstrings, `.envrc:24` commented placeholder, `Password` token-matches on `validate_password_strength` and SIP module names). Hypatia's check itself passes — the comment is informational, not a gate. No action needed.
+
+== Recommended next protocol (when this session reopens)
+
+. Wait for PR #87 CI; merge or close per result.
+. Open the live https://github.com/hyperpolymath/burble/wiki and run `just wiki-sync` to publish the four new pages.
+. Triage close `#74`, `#35` (with comments already posted recommending so).
+. Pick next from: `#77` (RTSP test isolation — most tractable), `#48` (web client tests — larger), `#52` (perf benchmarks — needs hardware), `#49` (selur-compose publish — external action), or per-cluster fixes for the residue PR #87 exposed.
+. The original priority that triggered the install-machinery work — running Burble cleanly on Windows + WSL with no terminal window — is now mechanically possible but **not verified on the maintainer's actual machine** (only on GH Actions runners + this session's Linux container). A real-world verification on Windows + WSL is the highest-value next item if PR #87 doesn't surface anything actionable.
+
+== Safe-to-close criteria (what "done" means for this session)
+
+* No work is mid-edit; all files saved, all branches pushed.
+* All planned PRs are either merged or open and awaiting CI/decision; none are abandoned silently.
+* The maintainer has visibility into every state change via PR comments and this document.
+
+Safe to close **once PR #87's CI run on `b923a7a` reports back** (green or red, either is fine — the decision tree is documented in the PR comment). All other work is at a clean checkpoint.
+
+== Discipline check (Meta-rule audit)
+
+* No file moves outside PR scope.
+* No deletions of any kind this session.
+* All structural changes proposed but deferred (containers/ rename, brand/ + assets/ merge, top-level scratch-trackers → docs/) — explicitly NOT actioned; documented as future-direction notes.
+* No commit message claimed authorship of architecture or design — only of edits. (Maintainer flagged a credit-shape issue mid-session; subsequent commits framed accordingly.)
+* All Hypatia "critical" comments triaged as pre-existing scanner false positives; none silenced or rewritten in repo.
