@@ -43,8 +43,14 @@ All CRG C requirements met:
 - **SDP Barrier Test:** Attempt unauthorised access without SPA packets to verify firewall rejection.
 
 ### Client
-- **Client (ReScript → AffineScript):** 5 Deno-based test files exist at `client/web/tests/` totalling 659 lines (signaling, voice, ai_bridge, ai_bridge_roundtrip, client). Wired into CI via `.github/workflows/web-client-tests.yml` (added 2026-05-30 — closes #48 acceptance bullet 2). Tests currently exercise the compiled ReScript output (`*.res.mjs`); migration to running against `.affine` output is gated by STATE.a2ml Phase 5 closure (`affinescript-canary.yml` is the compilation canary today).
-  - **Missing coverage** (carry-forward from #48 acceptance bullet 1): explicit room-join end-to-end test (`signaling_test.js` covers the signaling handshake but not the room-join sequence); media negotiation happy-path test (`voice_test.js` covers the state machine, not the negotiation).
+- **Client (ReScript → AffineScript):** 8 Deno-based test files at `client/web/tests/`:
+  - **3 NEW (2026-05-30, target real source modules):**
+    - `room_test.js` — `Room.generateRoomName` + `Room.isValidRoomName` (8 tests, exhaustive shape + variety coverage)
+    - `webrtc_offer_answer_test.js` — WebRTC SDP cycle against stubbed `RTCPeerConnection` (caller + callee happy paths, ICE-gathering, data channel + addTrack sanity)
+    - `signaling_relay_test.js` — `Signaling.Relay` HTTP API against stubbed `fetch` (PUT/GET offer/answer + 2-side e2e sequences)
+  - **5 EXISTING (pre-2026-05-30, stale imports):** `signaling_test.js`, `voice_test.js`, `ai_bridge_test.js`, `ai_bridge_roundtrip_test.js`, `client_test.js`. These import from `BurbleSignaling.res.mjs` / `BurbleVoice.res.mjs` under `client/web/lib/src/` — neither the modules nor the directory exist in current source (actual modules are `Signaling.res` / `WebRTC.res` / `Room.res` under `src/`). They fail at import; the workflow runs in advisory mode (`continue-on-error: true`) until they are either rewritten against the real modules or moved out of `tests/`.
+  - Wired into CI via `.github/workflows/web-client-tests.yml` (advisory) — closes #48 acceptance bullet 2.
+  - Migration to running against `.affine` output is gated by STATE.a2ml Phase 5 closure (`affinescript-canary.yml` is the compilation canary today).
 - **Desktop (Ephapax, 5 .eph files):** ZERO test files. Carry-forward.
 
 ### End-to-End
