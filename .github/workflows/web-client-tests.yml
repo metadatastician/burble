@@ -1,0 +1,77 @@
+# SPDX-License-Identifier: MPL-2.0
+# Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+#
+# web-client-tests.yml — Deno-based web-client test suite
+#
+# Runs the 5 web-client tests at client/web/tests/ on every PR.
+# Tests exercise the compiled ReScript output (*.res.mjs) for now;
+# AffineScript-output parity is tracked by affinescript-canary.yml
+# and graduates to required-for-merge when STATE.a2ml Phase 5 closes.
+#
+# Closes the second acceptance bullet of #48:
+#   "CI runs the client suite on every PR"
+
+name: Web Client Tests
+
+on:
+  pull_request:
+    branches: ['**']
+    paths:
+      - 'client/web/**'
+      - '.github/workflows/web-client-tests.yml'
+  push:
+    branches: [main, master]
+    paths:
+      - 'client/web/**'
+      - '.github/workflows/web-client-tests.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DENO_VERSION: 'v2.x'
+
+jobs:
+  deno-tests:
+    name: Deno test — client/web (advisory)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # Advisory mode while the test suite contains references to
+    # BurbleSignaling / BurbleVoice modules that no longer exist in
+    # source (the actual modules are Signaling.res / WebRTC.res /
+    # Room.res). Flip to gating once the stale-import suite is either
+    # fixed or moved out of `tests/`. Tracked on #48.
+    continue-on-error: true
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Setup Deno
+        uses: denoland/setup-deno@e95548e56dfa95d4e1a28d6f422fafe75c4c26fb # v2.0.3
+        with:
+          deno-version: ${{ env.DENO_VERSION }}
+
+      - name: Build ReScript (compiles .res to .res.mjs for tests)
+        working-directory: client/web
+        run: deno task res:build
+
+      - name: Run web-client tests
+        working-directory: client/web
+        run: deno task test
+
+      - name: Summarise
+        if: always()
+        run: |
+          echo "## Web client test run" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Tests live under \`client/web/tests/\` and exercise the compiled" >> "$GITHUB_STEP_SUMMARY"
+          echo "ReScript output (\`*.res.mjs\`). The parallel \`.affine\` source" >> "$GITHUB_STEP_SUMMARY"
+          echo "tree is exercised separately by \`affinescript-canary.yml\`;" >> "$GITHUB_STEP_SUMMARY"
+          echo "this workflow graduates to gating the .affine build once" >> "$GITHUB_STEP_SUMMARY"
+          echo "STATE.a2ml Phase 5 closes." >> "$GITHUB_STEP_SUMMARY"
