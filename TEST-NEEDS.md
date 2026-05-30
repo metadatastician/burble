@@ -43,8 +43,9 @@ All CRG C requirements met:
 - **SDP Barrier Test:** Attempt unauthorised access without SPA packets to verify firewall rejection.
 
 ### Client
-- **Client (ReScript → AffineScript):** ZERO test files for the web client. Migration to AffineScript (Phase 3/5) is the opportunity to add them.
-- **Desktop (Ephapax, 5 .eph files):** ZERO test files.
+- **Client (ReScript → AffineScript):** 5 Deno-based test files exist at `client/web/tests/` totalling 659 lines (signaling, voice, ai_bridge, ai_bridge_roundtrip, client). Wired into CI via `.github/workflows/web-client-tests.yml` (added 2026-05-30 — closes #48 acceptance bullet 2). Tests currently exercise the compiled ReScript output (`*.res.mjs`); migration to running against `.affine` output is gated by STATE.a2ml Phase 5 closure (`affinescript-canary.yml` is the compilation canary today).
+  - **Missing coverage** (carry-forward from #48 acceptance bullet 1): explicit room-join end-to-end test (`signaling_test.js` covers the signaling handshake but not the room-join sequence); media negotiation happy-path test (`voice_test.js` covers the state machine, not the negotiation).
+- **Desktop (Ephapax, 5 .eph files):** ZERO test files. Carry-forward.
 
 ### End-to-End
 - **Accessibility E2E:** Screen reader focus trap testing and ARIA live region announcement verification.

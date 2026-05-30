@@ -126,10 +126,21 @@ acceptable for all current use cases.
 === AffineScript Runtime Compilation
 
 All 35 ReScript source files have been ported to AffineScript (`.affine`). The
-`affinec` compiler is bundled in the `Containerfile` (OCaml + dune build). However,
-runtime compilation of `.affine` modules has not been exercised under the full CI
-matrix — only local developer builds have been validated. The `.res` files remain
-as fallback until this is verified.
+`affinec` compiler is bundled in the `Containerfile` (OCaml + dune build).
+
+CI status (2026-05-30):
+
+* Compilation: `affinescript-canary.yml` compiles every `.affine` file in CI on
+  every PR + push, as an advisory (`continue-on-error: true`) job. Graduation to
+  required-for-merge is gated on parity with the `.res` fallback (Burble grade B
+  target).
+* Web-client tests: `web-client-tests.yml` runs the Deno test suite at
+  `client/web/tests/` (5 files / 659 lines) against the compiled ReScript output
+  (`*.res.mjs`) on every PR. Migration of the test suite to the `.affine` output
+  is gated by STATE.a2ml Phase 5 closure.
+
+The `.res` files remain as fallback until both the canary graduates and the
+test suite is switched to the `.affine` output.
 
 === Avow Dependent-Type Enforcement
 
