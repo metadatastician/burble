@@ -51,7 +51,7 @@ defmodule Burble.MixProject do
   defp package do
     [
       name: "burble",
-      licenses: ["AGPL-3.0-or-later"],
+      licenses: ["MPL-2.0"],
       links: %{
         "GitHub" => @source_url,
         "Changelog" => "#{@source_url}/blob/main/CHANGELOG.md"
