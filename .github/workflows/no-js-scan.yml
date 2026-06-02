@@ -1,0 +1,96 @@
+# SPDX-License-Identifier: MPL-2.0
+name: No-JS Scan (warn-first)
+
+# Estate policy: no hand-authored JavaScript/TypeScript source
+# (see standards docs/NO-JAVASCRIPT-SOURCE-POLICY.adoc). This workflow is
+# WARN-FIRST: it reports the authored-JS surface for migration but never fails
+# the build. The authoritative hard-block for NEW JS in non-carve-out paths is
+# hypatia (cicd_rules/javascript_detected); this is an additive companion.
+
+on:
+  push:
+    paths:
+      - '**/*.js'
+      - '**/*.jsx'
+      - '**/*.mjs'
+      - '**/*.cjs'
+      - '**/*.ts'
+      - '**/*.tsx'
+  pull_request:
+    paths:
+      - '**/*.js'
+      - '**/*.jsx'
+      - '**/*.mjs'
+      - '**/*.cjs'
+      - '**/*.ts'
+      - '**/*.tsx'
+
+# Estate guardrail: cancel superseded runs (read-only check, no mutation).
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  scan-authored-js:
+    name: Scan for hand-authored JavaScript/TypeScript
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v4
+
+      - name: Report authored JS/TS (warn-first, non-blocking)
+        shell: bash
+        run: |
+          # Exclude only things that are NOT hand-authored source: vendored
+          # (node_modules, deps, vendor, .git), generated/compiled (*.res.js,
+          # *.res.mjs, lib/{js,es6,bs}, out, dist, .deno, generated/, *.min.js),
+          # and declaration headers (*.d.ts). Everything else is reported.
+          mapfile -t hits < <(
+            find . \
+              \( -path './.git' -o -name node_modules -o -path '*/deps/*' \
+                 -o -path '*/vendor/*' -o -path '*/lib/js/*' -o -path '*/lib/es6/*' \
+                 -o -path '*/lib/bs/*' -o -path '*/out/*' -o -path '*/dist/*' \
+                 -o -path '*/.deno/*' -o -path '*/generated/*' \) -prune -o \
+              -type f \
+              \( -name '*.js' -o -name '*.jsx' -o -name '*.mjs' -o -name '*.cjs' \
+                 -o -name '*.ts' -o -name '*.tsx' \) \
+              ! -name '*.res.js' ! -name '*.res.mjs' ! -name '*.min.js' ! -name '*.d.ts' \
+              -print 2>/dev/null | sort || true
+          )
+
+          count=${#hits[@]}
+
+          {
+            echo "# No-JS scan (warn-first)"
+            echo
+            echo "Estate policy: **no hand-authored JavaScript/TypeScript source.**"
+            echo "Destination is AffineScript -> typed-wasm, or Rust + Zig -> wasm."
+            echo "This check is **non-blocking** — it reports the migration surface only."
+            echo "Authoritative hard-block for new files: hypatia \`cicd_rules/javascript_detected\`."
+            echo "Policy: standards \`docs/NO-JAVASCRIPT-SOURCE-POLICY.adoc\`."
+            echo
+            echo "**Hand-authored JS/TS files found: ${count}**"
+            if [ "${count}" -gt 0 ]; then
+              echo
+              echo '| # | File |'
+              echo '|---|------|'
+              i=0
+              for f in "${hits[@]}"; do
+                i=$((i + 1))
+                echo "| ${i} | \`${f#./}\` |"
+              done
+            else
+              echo
+              echo "No hand-authored JavaScript/TypeScript found. :white_check_mark:"
+            fi
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+          if [ "${count}" -gt 0 ]; then
+            echo "::warning title=No-JS (warn-first)::${count} hand-authored JS/TS file(s) present. Estate target is AffineScript->typed-wasm / Rust+Zig->wasm. See standards docs/NO-JAVASCRIPT-SOURCE-POLICY.adoc (non-blocking)."
+          fi
+
+          # Warn-first: never fail the build.
+          exit 0
