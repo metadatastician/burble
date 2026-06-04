@@ -26,6 +26,7 @@ jobs:
   test:
     name: "test (${{ matrix.toolchain }})"
     runs-on: ubuntu-24.04
+    timeout-minutes: 15
 
     strategy:
       fail-fast: false
@@ -72,6 +73,7 @@ jobs:
   integration:
     name: "integration tests (podman-it)"
     runs-on: ubuntu-24.04
+    timeout-minutes: 15
 
     # Only run on push to main, or on PRs touching the driver or e2e code.
     if: |
@@ -124,6 +126,7 @@ jobs:
   audit:
     name: "cargo audit + deny"
     runs-on: ubuntu-24.04
+    timeout-minutes: 15
 
     steps:
       - name: Checkout

@@ -29,6 +29,7 @@ jobs:
   publish:
     name: Build and Push VeriSimDB
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
       contents: read
       packages: write

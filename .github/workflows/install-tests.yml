@@ -53,6 +53,7 @@ jobs:
   lint-linux:
     name: Lint (Linux / systemd / shellcheck)
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11  # v4.1.1
       - name: Install validators
@@ -106,6 +107,7 @@ jobs:
   lint-macos:
     name: Lint (macOS / launchd plists)
     runs-on: macos-14
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11  # v4.1.1
       - name: Show env diagnostics
@@ -150,6 +152,7 @@ jobs:
   lint-windows:
     name: Lint (Windows / PowerShell + csc.exe)
     runs-on: windows-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11  # v4.1.1
 

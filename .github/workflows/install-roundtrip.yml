@@ -41,6 +41,7 @@ jobs:
   linux-user-roundtrip:
     name: Linux --user systemd round-trip
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11  # v4.1.1
 
@@ -66,6 +67,7 @@ jobs:
   macos-roundtrip:
     name: macOS launchd LaunchAgent round-trip
     runs-on: macos-14
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11  # v4.1.1
       - name: Run round-trip
@@ -74,6 +76,7 @@ jobs:
   windows-roundtrip:
     name: Windows Service round-trip
     runs-on: windows-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11  # v4.1.1
       - name: Run round-trip

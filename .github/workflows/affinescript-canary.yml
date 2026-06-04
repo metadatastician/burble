@@ -43,6 +43,7 @@ jobs:
   compile-affinescript:
     name: Compile .affine files (canary)
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     continue-on-error: true  # canary: surface failures, do not block merges
 
     steps:
@@ -149,6 +150,7 @@ jobs:
   pairing-audit:
     name: Pairing audit (.affine ↔ .res)
     runs-on: ubuntu-latest
+    timeout-minutes: 15
 
     steps:
       - name: Checkout repository

@@ -181,7 +181,7 @@ These requirements ensure Burble is usable by everyone, regardless of ability.
 ### k9-accessibility-validator
 - description: Integrate K9 accessibility validator
 - status: planned
-- reference: /var/mnt/eclipse/repos/verification-ecosystem/panll/contractiles/k9/validators/accessibility-baseline.k9.ncl
+- reference: /var/mnt/eclipse/repos/verification-ecosystem/panll/contractiles/self-validating/validators/accessibility-baseline.k9.ncl
 - target: Q2 2026
 
 ### accessibility-testing

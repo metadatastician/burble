@@ -15,6 +15,7 @@ jobs:
   test:
     name: Test (OTP 27 / Elixir 1.17)
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     defaults:
       run:
         working-directory: server/
@@ -110,6 +111,7 @@ jobs:
   dialyzer:
     name: Dialyzer
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     needs: test
     defaults:
       run:

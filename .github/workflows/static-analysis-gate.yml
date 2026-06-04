@@ -19,6 +19,7 @@ jobs:
   panic-attack-assail:
     name: panic-attack assail
     runs-on: ubuntu-latest
+    timeout-minutes: 15
 
     steps:
       - name: Checkout repository
@@ -123,6 +124,7 @@ jobs:
   hypatia-scan:
     name: Hypatia neurosymbolic scan
     runs-on: ubuntu-latest
+    timeout-minutes: 15
 
     steps:
       - name: Checkout repository
@@ -235,6 +237,7 @@ jobs:
   deposit-findings:
     name: Deposit findings for gitbot-fleet
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     needs: [panic-attack-assail, hypatia-scan]
     if: always()
 

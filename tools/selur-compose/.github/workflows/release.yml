@@ -36,6 +36,7 @@ jobs:
   dist:
     name: "cargo-dist build (${{ matrix.target }})"
     runs-on: ubuntu-24.04
+    timeout-minutes: 15
 
     strategy:
       fail-fast: false
@@ -114,6 +115,7 @@ jobs:
   release:
     name: "Create GitHub Release"
     runs-on: ubuntu-24.04
+    timeout-minutes: 15
     needs: dist
 
     steps:
@@ -160,6 +162,7 @@ jobs:
   publish:
     name: "cargo publish"
     runs-on: ubuntu-24.04
+    timeout-minutes: 15
     needs: release
     # Only publish on non-prerelease tags.
     if: "!contains(github.ref_name, '-rc') && !contains(github.ref_name, '-alpha') && !contains(github.ref_name, '-beta')"
