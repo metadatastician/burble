@@ -5,8 +5,8 @@
 
 [metadata]
 project = "burble"
-version = "1.2.0-pre"
-last-updated = "2026-05-20"
+version = "1.3.0-pre"
+last-updated = "2026-06-05"
 status = "active"
 
 [project-context]
@@ -27,7 +27,7 @@ milestones = [
   { name = "Phase 1 — Audio dependable (Opus honest, comfort noise, REMB, Avow chain, echo-cancel ref, neural spectral-gate verified)", completion = 100 },
   { name = "Phase 2 — P2P AI channel dependable (burble-ai-bridge fixes, round-trip tests, docs) — CRITICAL PATH for family/pair-programming use case", completion = 100 },
   { name = "Phase 2b — server-side Burble.LLM (provider, circuit breaker, fixed parse_frame, NimblePool wired) — SECONDARY, not required for family use case", completion = 100 },
-  { name = "Phase 3 — RTSP + signaling + text + AffineScript client start", completion = 85 },
+  { name = "Phase 3 — RTSP + signaling + text + AffineScript client start + web client tests", completion = 90 },
   { name = "Phase 4 — PTP hardware clock via Zig NIF, phc2sys supervisor, multi-node align", completion = 85 },
   { name = "Phase 5 — ReScript -> AffineScript completion", completion = 95 },
   { name = "Bolt — magic incoming-call packets (UDP+QUIC dual-bind, ALPN burble-bolt-v1)", completion = 100, date = "2026-05-13" }
@@ -74,7 +74,7 @@ phase-1-audio = [
 ]
 
 [maintenance-status]
-last-run-utc = "2026-04-01"
+last-run-utc = "2026-06-05"
 last-report = "docs/reports/maintenance/latest.json"
 last-result = "pass"
 open-warnings = 0
@@ -213,13 +213,29 @@ open-failures = 0
 #             exhausted at merge time (concurrency-pool throttle);
 #             will surface in next post-merge run on main.
 
+# 2026-05-20 to 2026-06-05 (window since last update):
+# 2026-06-01: CI/CD configuration fixed (campaigns C001-C005): CodeQL language
+#             fixes, license identifier standardization, outdated actions audit,
+#             standards refs pinned to SHA 861b5e9, workflow-level permissions added
+#             (PR #98, #97, #96 reusable-workflow replacements; PR #102 scorecard;
+#             PR #103 fake-SHA fix; PR #104 web-client tests; PR #111 CodeQL cron
+#             monthly; PR #112 a2ml-validate-action bump; PR #113 no-JS scan).
+# 2026-06-02: SECURITY-DEPLOY.md published (self-hosting hardening checklist, PR #108).
+#             PROTOCOL.md published (discoverable wire surface, PR #107).
+#             Open-issue triage 2026-06-02 report (PR #110).
+#             Signaling failure-mode coverage added (PR #109).
+# 2026-06-02: License drift fixed — LICENSE + 3 manifests (admin/deno.json,
+#             client/lib/deno.json, server/mix.exs) were AGPL drift while 679
+#             source files already declared MPL-2.0. Owner-confirmed alignment
+#             to MPL-2.0 throughout (PR #114). LICENSE is now pure MPL-2.0.
+
 [crg]
 grade = "C"
 achieved = "2026-04-21"
 previous-grade = "D"
 demoted-on = "2026-04-18"
 demotion-reference = "docs/governance/CRG-AUDIT-2026-04-18.adoc"
-notes = "CRG C provisionally — CI workflow added, awaiting first green run. Three D-blockers resolved 2026-04-21: (1) READINESS.adoc created at repo root (verified complete), (2) per-directory README.adoc added to all seven core subtrees (timing, llm, chat, transport, media, client/web/src, ffi/zig), (3) .github/workflows/elixir-ci.yml created (test + dialyzer jobs, OTP 27 / Elixir 1.17, PLT cache). CODEOWNERS already covered * @hyperpolymath — no change needed."
+notes = "CRG C provisionally — CI workflow present; gate still deactivated (continue-on-error: true) pending OTP27 CI run (issue #39). Post-2026-05-20 progress: web-client test suite wired (PR #104), CI/CD campaigns C001-C005 completed, SECURITY-DEPLOY.md + PROTOCOL.md published, license drift resolved (MPL-2.0 throughout, PR #114). Remaining blocker: re-arm CI test gate once OTP27 run validates suite. READINESS.adoc + per-directory READMEs + elixir-ci.yml all present."
 
 [ecosystem]
 part-of = ["Burble Platform"]

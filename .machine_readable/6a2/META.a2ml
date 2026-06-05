@@ -5,13 +5,13 @@
 # Architecture decisions, design rationale, governance.
 
 [metadata]
-version = "0.1.0"
-last-updated = "2026-04-11"
+version = "0.2.0"
+last-updated = "2026-06-05"
 
 [project-info]
 type = "service"
-languages = ["elixir", "zig", "idris2", "javascript", "rescript", "ephapax"]
-languages-target = ["elixir", "zig", "idris2", "javascript", "affinescript", "ephapax"]
+languages = ["elixir", "zig", "idris2", "javascript", "affinescript"]
+languages-legacy = ["rescript"]
 license = "MPL-2.0"
 author = "Jonathan D.A. Jewell (hyperpolymath)"
 
@@ -26,6 +26,12 @@ decisions = [
   { id = "ADR-007", title = "ReScript → AffineScript client migration", status = "accepted", date = "2026-04-16" },
   { id = "ADR-008", title = "Server-side Opus not implemented — SFU-opaque E2EE model", status = "accepted", date = "2026-04-16" },
   { id = "ADR-009", title = "P2P AI bridge is primary Claude-to-Claude channel (not server-side Burble.LLM)", status = "accepted", date = "2026-04-16" },
+  { id = "ADR-0003", title = "Bolt wire format — UDP+QUIC dual-bind, ALPN burble-bolt-v1", status = "accepted", date = "2026-05-13" },
+  { id = "ADR-0004", title = "Bolt-over-QUIC with optional quicer NIF for sender authentication", status = "accepted", date = "2026-05-13" },
+  { id = "ADR-0005", title = "WSL2 Bolt inbound — NAT + host UDP forwarder (default), mirrored last-resort", status = "accepted", date = "2026-05-19" },
+  { id = "ADR-0006", title = "Signaling failure-mode coverage added (relay + connection loss)", status = "accepted", date = "2026-06-02" },
+  { id = "ADR-0007", title = "Claims-to-evidence discipline — every README claim maps to code + test or flagged", status = "accepted", date = "2026-05-19" },
+  { id = "ADR-0008", title = "Formal-proof enforcement scope — compile/type-check only; runtime PoC tracked as issue #55", status = "accepted", date = "2026-05-19" },
 ]
 
 [development-practices]
