@@ -5,8 +5,8 @@
 # Relationships, dependencies, integration points.
 
 [metadata]
-version = "0.1.0"
-last-updated = "2026-04-11"
+version = "0.2.0"
+last-updated = "2026-06-05"
 
 [project]
 name = "burble"
@@ -38,4 +38,6 @@ points = [
   { system = "VeriSimDB", direction = "outbound", protocol = "HTTP REST + ClickHouse" },
   { system = "gitbot-fleet", direction = "outbound", protocol = "repository_dispatch (CI)" },
   { system = "hypatia", direction = "inbound", protocol = "Hypatia scan rules via .hypatia/ config" },
+  { system = "PROTOCOL.md (wire surface)", direction = "internal", protocol = "Bolt wire format (UDP/7373), WebRTC DataChannel, AI bridge HTTP REST" },
+  { system = "SECURITY-DEPLOY.md", direction = "internal", protocol = "Self-hosting hardening checklist" },
 ]
