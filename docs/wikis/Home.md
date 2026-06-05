@@ -63,6 +63,7 @@ See [Glossary](Glossary).
 - **Code of Conduct**: [CODE_OF_CONDUCT.md](https://github.com/hyperpolymath/burble/blob/main/CODE_OF_CONDUCT.md).
 - **Security policy**: [SECURITY.md](https://github.com/hyperpolymath/burble/blob/main/SECURITY.md). Vulnerabilities → maintainer email there, *not* a public issue.
 - **CRG grade**: D provisional, targeting C — see [READINESS.adoc](https://github.com/hyperpolymath/burble/blob/main/READINESS.adoc) and [docs/governance/CRG-AUDIT-2026-04-18.adoc](https://github.com/hyperpolymath/burble/blob/main/docs/governance/CRG-AUDIT-2026-04-18.adoc).
+- **Machine-readable governance**: 6-verb contractiles complete (`must/trust/bust/adjust/dust/intend`), `bot_directives/` methodology layer, `svc/k9/` self-validation — see [`.machine_readable/`](https://github.com/hyperpolymath/burble/tree/main/.machine_readable).
 - **Open issues**: [github.com/hyperpolymath/burble/issues](https://github.com/hyperpolymath/burble/issues).
 - **Contributing**: [CONTRIBUTING.md](https://github.com/hyperpolymath/burble/blob/main/CONTRIBUTING.md).
 
