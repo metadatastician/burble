@@ -2,16 +2,13 @@
 # Static Analysis Gate — Required by branch protection rules.
 # Runs panic-attack and hypatia, deposits findings for gitbot-fleet learning.
 name: Static Analysis Gate
-
 on:
   pull_request:
     branches: ['**']
   push:
     branches: [main, master]
-
 permissions:
   contents: read
-
 jobs:
   # ---------------------------------------------------------------------------
   # Job 1: panic-attack assail
@@ -20,13 +17,11 @@ jobs:
     name: panic-attack assail
     runs-on: ubuntu-latest
     timeout-minutes: 15
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           fetch-depth: 0
-
       - name: Install panic-attack (if available)
         id: install
         run: |
@@ -40,7 +35,6 @@ jobs:
             echo "::notice::panic-attack binary not available — skipping assail"
             echo "installed=false" >> "$GITHUB_OUTPUT"
           fi
-
       - name: Run panic-attack assail
         id: assail
         if: steps.install.outputs.installed == 'true'
@@ -67,7 +61,6 @@ jobs:
           echo "medium=$MEDIUM" >> "$GITHUB_OUTPUT"
           echo "low=$LOW" >> "$GITHUB_OUTPUT"
           echo "exit_code=$PA_EXIT" >> "$GITHUB_OUTPUT"
-
       - name: Emit check annotations
         if: steps.install.outputs.installed == 'true'
         run: |
@@ -81,7 +74,6 @@ jobs:
               "::warning file=\(.file),line=\(.line // 1)::[panic-attack] \(.message)"
             end
           ' panic-attack-findings.json || true
-
       - name: Write step summary
         if: steps.install.outputs.installed == 'true'
         run: |
@@ -96,7 +88,6 @@ jobs:
           | Low      | ${{ steps.assail.outputs.low }} |
           | **Total**| ${{ steps.assail.outputs.total }} |
           EOF
-
       - name: Create stub findings (when panic-attack unavailable)
         if: steps.install.outputs.installed != 'true'
         run: |
@@ -104,20 +95,17 @@ jobs:
           echo "## panic-attack assail" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "Skipped: panic-attack not available in this environment." >> "$GITHUB_STEP_SUMMARY"
-
       - name: Upload panic-attack findings
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: panic-attack-findings
           path: panic-attack-findings.json
           retention-days: 90
-
       - name: Fail on critical findings
         if: steps.install.outputs.installed == 'true' && steps.assail.outputs.critical > 0
         run: |
           echo "::error::panic-attack found ${{ steps.assail.outputs.critical }} critical issue(s) — blocking merge"
           exit 1
-
   # ---------------------------------------------------------------------------
   # Job 2: hypatia-scan
   # ---------------------------------------------------------------------------
@@ -125,13 +113,11 @@ jobs:
     name: Hypatia neurosymbolic scan
     runs-on: ubuntu-latest
     timeout-minutes: 15
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           fetch-depth: 0
-
       - name: Setup Elixir for Hypatia scanner
         id: beam
         continue-on-error: true
@@ -139,7 +125,6 @@ jobs:
         with:
           elixir-version: '1.19.4'
           otp-version: '28.3'
-
       - name: Clone and build Hypatia
         id: build
         continue-on-error: true
@@ -156,7 +141,6 @@ jobs:
             echo "::notice::Hypatia scanner not available — skipping scan"
             echo "ready=false" >> "$GITHUB_OUTPUT"
           fi
-
       - name: Run Hypatia scan
         id: scan
         if: steps.build.outputs.ready == 'true'
@@ -181,7 +165,6 @@ jobs:
           echo "high=$HIGH" >> "$GITHUB_OUTPUT"
           echo "medium=$MEDIUM" >> "$GITHUB_OUTPUT"
           echo "low=$LOW" >> "$GITHUB_OUTPUT"
-
       - name: Emit check annotations
         if: steps.build.outputs.ready == 'true'
         run: |
@@ -194,7 +177,6 @@ jobs:
               "::warning file=\(.file),line=\(.line // 1)::[hypatia] \(.message)"
             end
           ' hypatia-findings.json || true
-
       - name: Write step summary
         if: steps.build.outputs.ready == 'true'
         run: |
@@ -209,7 +191,6 @@ jobs:
           | Low      | ${{ steps.scan.outputs.low }} |
           | **Total**| ${{ steps.scan.outputs.total }} |
           EOF
-
       - name: Create stub findings (when Hypatia unavailable)
         if: steps.build.outputs.ready != 'true'
         run: |
@@ -217,20 +198,17 @@ jobs:
           echo "## Hypatia Scan" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "Skipped: Hypatia scanner not available in this environment." >> "$GITHUB_STEP_SUMMARY"
-
       - name: Upload hypatia findings
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: hypatia-findings
           path: hypatia-findings.json
           retention-days: 90
-
       - name: Fail on critical security findings
         if: steps.build.outputs.ready == 'true' && steps.scan.outputs.critical > 0
         run: |
           echo "::error::Hypatia found ${{ steps.scan.outputs.critical }} critical security issue(s) — blocking merge"
           exit 1
-
   # ---------------------------------------------------------------------------
   # Job 3: deposit-findings (combines + archives for gitbot-fleet)
   # ---------------------------------------------------------------------------
@@ -240,20 +218,17 @@ jobs:
     timeout-minutes: 15
     needs: [panic-attack-assail, hypatia-scan]
     if: always()
-
     steps:
       - name: Download panic-attack findings
         uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16 # v4
         with:
           name: panic-attack-findings
           path: findings/
-
       - name: Download hypatia findings
         uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16 # v4
         with:
           name: hypatia-findings
           path: findings/
-
       - name: Combine findings into unified report
         id: combine
         run: |
@@ -301,16 +276,14 @@ jobs:
           echo "high=$HIGH"         >> "$GITHUB_OUTPUT"
           echo "medium=$MEDIUM"     >> "$GITHUB_OUTPUT"
           echo "low=$LOW"           >> "$GITHUB_OUTPUT"
-
       - name: Upload unified findings (fleet scanner picks these up)
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: unified-findings
           path: findings/unified-findings.json
           retention-days: 90
-
       - name: Write deposit summary
-        run: |
+        run: |-
           cat <<EOF >> "$GITHUB_STEP_SUMMARY"
           ## Unified Findings Deposit
 

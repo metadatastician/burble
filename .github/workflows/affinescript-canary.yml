@@ -14,7 +14,6 @@
 # To bump the affinescript version, change AFFINESCRIPT_REF below.
 
 name: AffineScript Canary
-
 on:
   pull_request:
     branches: ['**']
@@ -27,15 +26,12 @@ on:
       - '**.affine'
       - '.github/workflows/affinescript-canary.yml'
   workflow_dispatch:
-
 permissions:
   contents: read
-
 env:
   AFFINESCRIPT_REPO: hyperpolymath/affinescript
-  AFFINESCRIPT_REF: fc37bb5896de24cefe65dbfc5cd657a2d0087df7  # main as of 2026-05-02; bump as needed
+  AFFINESCRIPT_REF: fc37bb5896de24cefe65dbfc5cd657a2d0087df7 # main as of 2026-05-02; bump as needed
   OCAML_COMPILER: '5.1'
-
 jobs:
   # ---------------------------------------------------------------------------
   # Job 1: Compile every .affine file (canary — advisory)
@@ -44,12 +40,10 @@ jobs:
     name: Compile .affine files (canary)
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    continue-on-error: true  # canary: surface failures, do not block merges
-
+    continue-on-error: true # canary: surface failures, do not block merges
     steps:
       - name: Checkout repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-
       - name: Detect .affine files
         id: detect
         run: |
@@ -59,7 +53,6 @@ jobs:
           if [ "$COUNT" -eq 0 ]; then
             echo "::notice::No .affine files in repo — canary has nothing to do"
           fi
-
       - name: Cache affinescript build
         if: steps.detect.outputs.count > 0
         id: cache-affinescript
@@ -67,13 +60,11 @@ jobs:
         with:
           path: /usr/local/bin/affinescript
           key: affinescript-${{ env.AFFINESCRIPT_REF }}-${{ runner.os }}
-
       - name: Setup OCaml (cache miss only)
         if: steps.detect.outputs.count > 0 && steps.cache-affinescript.outputs.cache-hit != 'true'
         uses: ocaml/setup-ocaml@e32b06a3e831ff2fbc6f08cf35be2085e3918014 # v3.6.1
         with:
           ocaml-compiler: ${{ env.OCAML_COMPILER }}
-
       - name: Build affinescript from source (cache miss only)
         if: steps.detect.outputs.count > 0 && steps.cache-affinescript.outputs.cache-hit != 'true'
         run: |
@@ -100,7 +91,6 @@ jobs:
           opam exec --switch="$OPAM_SWITCH" -- dune build bin/main.exe
           sudo cp _build/default/bin/main.exe /usr/local/bin/affinescript
           affinescript --help | head -5 || echo "(--help unavailable, binary installed)"
-
       - name: Compile every .affine file
         if: steps.detect.outputs.count > 0
         id: compile
@@ -140,7 +130,6 @@ jobs:
             echo ""
             echo "All .affine files compiled cleanly."
           } >> "$GITHUB_STEP_SUMMARY"
-
   # ---------------------------------------------------------------------------
   # Job 2: Pairing audit (.affine ↔ .res fallback)
   # ---------------------------------------------------------------------------
@@ -151,11 +140,9 @@ jobs:
     name: Pairing audit (.affine ↔ .res)
     runs-on: ubuntu-latest
     timeout-minutes: 15
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-
       - name: Audit .affine ↔ .res pairing
         run: |
           unpaired=0

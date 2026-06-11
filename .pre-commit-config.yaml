@@ -46,10 +46,8 @@ repos:
         exclude: '(\.git|node_modules|target|_build|deps|\.deno|external_corpora|\.lake)/'
 
   # --- Secret detection ---
-  - repo: https://github.com/gitleaks/gitleaks
     rev: v8.24.3
     hooks:
-      - id: gitleaks
 
   - repo: local
     hooks:

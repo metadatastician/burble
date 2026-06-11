@@ -10,19 +10,16 @@
 #
 # Runs weekly and on Hypatia scan completion.
 
-name: "🤖 Rhodibot — RSR Auto-Fix"
-
+name: "\U0001F916 Rhodibot — RSR Auto-Fix"
 on:
   schedule:
-    - cron: '0 6 * * 1'  # Every Monday at 06:00 UTC
-  workflow_dispatch:       # Manual trigger
+    - cron: '0 6 * * 1' # Every Monday at 06:00 UTC
+  workflow_dispatch: # Manual trigger
   workflow_run:
     workflows: ["Hypatia Neurosymbolic Analysis"]
     types: [completed]
-
 permissions:
   contents: read
-
 jobs:
   rhodibot:
     runs-on: ubuntu-latest
@@ -35,7 +32,6 @@ jobs:
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           fetch-depth: 1
-
       - name: Rhodibot — Scan and Fix
         id: fix
         run: |
@@ -176,56 +172,14 @@ jobs:
             echo -e "$DANGEROUS"
             echo "EOF"
           } >> $GITHUB_OUTPUT
-
       - name: Create PR with fixes
         if: steps.fix.outputs.CHANGED == 'true'
-        run: |
-          git config user.name "rhodibot"
-          git config user.email "rhodibot@hyperpolymath.dev"
-          BRANCH="rhodibot/rsr-compliance-$(date +%Y%m%d)"
-          git checkout -b "$BRANCH"
-          git add -A
-          git commit -m "fix(rhodibot): automated RSR compliance fixes
-
-          $FIXES
-
-          Co-Authored-By: rhodibot <rhodibot@hyperpolymath.dev>"
-
-          git push origin "$BRANCH"
-
-          BODY="## 🤖 Rhodibot — RSR Compliance Fixes
-
-          ### Changes Made
-          $FIXES
-          "
-
-          if [ -n "$ISSUES" ]; then
-            BODY="$BODY
-          ### Issues Found (manual fix needed)
-          $ISSUES
-          "
-          fi
-
-          if [ -n "$DANGEROUS" ]; then
-            BODY="$BODY
-          ### ⚠️ Dangerous Patterns Detected
-          $DANGEROUS
-
-          _These bypass formal verification. See \`proven\` repo for alternatives._
-          "
-          fi
-
-          gh pr create \
-            --title "🤖 Rhodibot: RSR compliance fixes" \
-            --body "$BODY" \
-            --base main \
-            --head "$BRANCH"
+        run: "git config user.name \"rhodibot\"\ngit config user.email \"rhodibot@hyperpolymath.dev\"\nBRANCH=\"rhodibot/rsr-compliance-$(date +%Y%m%d)\"\ngit checkout -b \"$BRANCH\"\ngit add -A\ngit commit -m \"fix(rhodibot): automated RSR compliance fixes\n\n$FIXES\n\nCo-Authored-By: rhodibot <rhodibot@hyperpolymath.dev>\"\n\ngit push origin \"$BRANCH\"\n\nBODY=\"## \U0001F916 Rhodibot — RSR Compliance Fixes\n\n### Changes Made\n$FIXES\n\"\n\nif [ -n \"$ISSUES\" ]; then\n  BODY=\"$BODY\n### Issues Found (manual fix needed)\n$ISSUES\n\"\nfi\n\nif [ -n \"$DANGEROUS\" ]; then\n  BODY=\"$BODY\n### ⚠️ Dangerous Patterns Detected\n$DANGEROUS\n\n_These bypass formal verification. See \\`proven\\` repo for alternatives._\n\"\nfi\n\ngh pr create \\\n  --title \"\U0001F916 Rhodibot: RSR compliance fixes\" \\\n  --body \"$BODY\" \\\n  --base main \\\n  --head \"$BRANCH\"\n"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           FIXES: ${{ steps.fix.outputs.FIXES }}
           ISSUES: ${{ steps.fix.outputs.ISSUES }}
           DANGEROUS: ${{ steps.fix.outputs.DANGEROUS }}
-
       - name: Report (no changes needed)
         if: steps.fix.outputs.CHANGED != 'true'
         env:

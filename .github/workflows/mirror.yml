@@ -1,14 +1,11 @@
 # SPDX-License-Identifier: MPL-2.0
 name: Mirror to Git Forges
-
 on:
   push:
     branches: [main]
   workflow_dispatch:
-
 permissions:
   contents: read
-
 jobs:
   mirror:
     uses: hyperpolymath/standards/.github/workflows/mirror-reusable.yml@fc7abf589b93f9a33b8af74dbfe98ba22707156f

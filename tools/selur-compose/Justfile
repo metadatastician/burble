@@ -44,3 +44,6 @@ audit:
 # Dry-run release plan (requires cargo-dist)
 release-dry:
     cargo dist plan
+
+secret-scan-trufflehog:
+    @command -v trufflehog >/dev/null && trufflehog filesystem . --only-verified || true

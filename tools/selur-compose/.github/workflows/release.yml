@@ -15,20 +15,16 @@
 # Language policy: no Python, no Go, no Node.js.
 
 name: Release
-
 on:
   push:
     tags:
       - "v*"
-
 permissions:
-  contents: write  # Required to create/edit GitHub Releases and upload assets.
-  packages: write  # Required to push container images to ghcr.io (future).
-
+  contents: write # Required to create/edit GitHub Releases and upload assets.
+  packages: write # Required to push container images to ghcr.io (future).
 env:
   CARGO_TERM_COLOR: always
   CARGO_INCREMENTAL: "0"
-
 jobs:
   # ─────────────────────────────────────────────────────────────────────────────
   # Build musl static binaries with cargo-dist
@@ -37,55 +33,46 @@ jobs:
     name: "cargo-dist build (${{ matrix.target }})"
     runs-on: ubuntu-24.04
     timeout-minutes: 15
-
     strategy:
       fail-fast: false
       matrix:
         target:
           - x86_64-unknown-linux-musl
           - aarch64-unknown-linux-musl
-
     steps:
       - name: Checkout
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
-
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - name: Install Rust (stable)
         uses: dtolnay/rust-toolchain@56f84321dbccf1a80e8ea509c24e7e01a7fb5157
         with:
           toolchain: stable
           targets: ${{ matrix.target }}
-
       - name: Install musl cross-toolchain (aarch64)
         if: matrix.target == 'aarch64-unknown-linux-musl'
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends \
             gcc-aarch64-linux-gnu musl-tools
-
       - name: Install musl tools (x86_64)
         if: matrix.target == 'x86_64-unknown-linux-musl'
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends musl-tools
-
       - name: Install cargo-dist
         run: cargo install cargo-dist --locked
-
       - name: Cache cargo
-        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684  # v4.2.3
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
         with:
           path: |
             ~/.cargo/registry/index/
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
           key: ${{ runner.os }}-cargo-release-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
-
       - name: Build static binary
         env:
           CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER: aarch64-linux-gnu-gcc
         run: |
           cargo build --release --target ${{ matrix.target }} --bin selur-compose
-
       - name: Package tarball
         run: |
           TAG="${GITHUB_REF_NAME}"
@@ -96,19 +83,16 @@ jobs:
           cp LICENSE README.adoc CHANGELOG.md "dist/${ARCHIVE}/"
           tar -czf "dist/${ARCHIVE}.tar.gz" -C dist "${ARCHIVE}"
           echo "ARCHIVE_NAME=${ARCHIVE}.tar.gz" >> "$GITHUB_ENV"
-
       - name: Verify static linkage
         run: |
           file "target/${{ matrix.target }}/release/selur-compose"
           file "target/${{ matrix.target }}/release/selur-compose" | grep -q "statically linked"
-
       - name: Upload tarball artifact
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: dist-${{ matrix.target }}
           path: dist/*.tar.gz
           if-no-files-found: error
-
   # ─────────────────────────────────────────────────────────────────────────────
   # Assemble release: SHA256SUMS + GitHub Release
   # ─────────────────────────────────────────────────────────────────────────────
@@ -117,36 +101,30 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     needs: dist
-
     steps:
       - name: Checkout
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
-
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - name: Download all dist artifacts
-        uses: actions/download-artifact@95815c38cf2ff2164869cbab79da8d1f422bc89e  # v4.2.1
+        uses: actions/download-artifact@95815c38cf2ff2164869cbab79da8d1f422bc89e # v4.2.1
         with:
           pattern: dist-*
           merge-multiple: true
           path: dist/
-
       - name: Generate SHA256SUMS
         run: |
           cd dist
           sha256sum *.tar.gz > SHA256SUMS
           cat SHA256SUMS
-
       - name: Extract version from tag
         run: echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
-
       - name: Extract CHANGELOG section
         run: |
           # Extract the first release section from CHANGELOG.md.
           awk '/^## \['"${VERSION}"'\]/{found=1; next} found && /^## \[/{exit} found{print}' \
             CHANGELOG.md > release-notes.md
           cat release-notes.md
-
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@da05d552573ad5aba1770b3825f4a29e84d24429  # v2.2.2
+        uses: softprops/action-gh-release@da05d552573ad5aba1770b3825f4a29e84d24429 # v2.2.2
         with:
           name: "selur-compose ${{ github.ref_name }}"
           body_path: release-notes.md
@@ -155,7 +133,6 @@ jobs:
             dist/SHA256SUMS
           draft: false
           prerelease: ${{ contains(github.ref_name, '-rc') || contains(github.ref_name, '-alpha') || contains(github.ref_name, '-beta') }}
-
   # ─────────────────────────────────────────────────────────────────────────────
   # Publish to crates.io in dependency order
   # ─────────────────────────────────────────────────────────────────────────────
@@ -166,42 +143,30 @@ jobs:
     needs: release
     # Only publish on non-prerelease tags.
     if: "!contains(github.ref_name, '-rc') && !contains(github.ref_name, '-alpha') && !contains(github.ref_name, '-beta')"
-
     env:
       CARGO_REGISTRY_TOKEN: ${{ secrets.CRATES_IO_TOKEN }}
-
     steps:
       - name: Checkout
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
-
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - name: Install Rust (stable)
         uses: dtolnay/rust-toolchain@56f84321dbccf1a80e8ea509c24e7e01a7fb5157
         with:
           toolchain: stable
-
       - name: Publish selur-compose-schema
         run: cargo publish -p selur-compose-schema --no-verify
-
       - name: Wait for crates.io index propagation
         run: sleep 30
-
       - name: Publish selur-compose-interp
         run: cargo publish -p selur-compose-interp --no-verify
-
       - name: Wait for crates.io index propagation
         run: sleep 30
-
       - name: Publish selur-compose-plan
         run: cargo publish -p selur-compose-plan --no-verify
-
       - name: Wait for crates.io index propagation
         run: sleep 30
-
       - name: Publish selur-compose-driver
         run: cargo publish -p selur-compose-driver --no-verify
-
       - name: Wait for crates.io index propagation
         run: sleep 30
-
       - name: Publish selur-compose (binary)
         run: cargo publish -p selur-compose --no-verify

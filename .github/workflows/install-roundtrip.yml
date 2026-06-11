@@ -11,7 +11,6 @@
 #   3. Drivers always clean up after themselves (trap EXIT / try/finally).
 
 name: Install round-trip
-
 on:
   push:
     branches: [main, master, 'claude/**']
@@ -33,18 +32,15 @@ on:
       - 'assets/services/**'
       - 'tests/install/**'
       - '.github/workflows/install-roundtrip.yml'
-
 permissions:
   contents: read
-
 jobs:
   linux-user-roundtrip:
     name: Linux --user systemd round-trip
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11  # v4.1.1
-
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
       - name: Enable user-systemd lingering for runner
         # GH Actions runs jobs without a real login session, so the
         # per-user systemd instance isn't auto-started. `enable-linger`
@@ -60,25 +56,22 @@ jobs:
               sleep 1
           done
           echo "user-systemd never became reachable"; exit 1
-
       - name: Run round-trip
         run: tests/install/roundtrip-linux.sh
-
   macos-roundtrip:
     name: macOS launchd LaunchAgent round-trip
     runs-on: macos-14
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11  # v4.1.1
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
       - name: Run round-trip
         run: tests/install/roundtrip-macos.sh
-
   windows-roundtrip:
     name: Windows Service round-trip
     runs-on: windows-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11  # v4.1.1
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
       - name: Run round-trip
         shell: pwsh
         run: tests/install/roundtrip-windows.ps1

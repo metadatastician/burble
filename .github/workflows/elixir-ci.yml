@@ -1,16 +1,13 @@
 # SPDX-License-Identifier: MPL-2.0
 # Elixir CI — test-pass evidence for CRG grade C.
 name: Elixir CI
-
 on:
   push:
     branches: [main, master, 'claude/**']
   pull_request:
     branches: [main, master]
-
 permissions:
   contents: read
-
 jobs:
   test:
     name: Test (OTP 27 / Elixir 1.17)
@@ -19,33 +16,29 @@ jobs:
     defaults:
       run:
         working-directory: server/
-
     steps:
       - name: Checkout
-        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11  # v4.1.1
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
         with:
           submodules: recursive
-
       - name: Set up Beam (OTP 27 + Elixir 1.17)
-        uses: erlef/setup-beam@5304e04ea2b355f03681464e683d92e3b2f18451  # v1.18.2
+        uses: erlef/setup-beam@5304e04ea2b355f03681464e683d92e3b2f18451 # v1.18.2
         with:
           otp-version: '27'
           elixir-version: '1.17'
-
       - name: Set up Zig 0.15
         # v2.2.1, not the old v1.2.2: v1.x predates Zig's post-0.14 tarball
         # rename (zig-linux-x86_64- -> zig-x86_64-linux-) and still probes
         # ziglang.org/builds (nightlies) instead of /download/<ver>/, so it
         # 404s on every Zig >= 0.14 regardless of the version string. v2.x
         # uses the community-mirror list + modern download index.
-        uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29  # v2.2.1
+        uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
         with:
           # Exact published tag (not 'latest') for deterministic CI;
           # tracks ffi/zig/build.zig's declared "Zig 0.15".
           version: '0.15.2'
-
       - name: Install just
-        uses: taiki-e/install-action@899b013517f9e7774591216672bf75a46bb9a481  # v2.9.4
+        uses: taiki-e/install-action@899b013517f9e7774591216672bf75a46bb9a481 # v2.9.4
         with:
           # Pin an explicit modern just: the Justfile uses `import?`
           # (optional import, just >= 1.19.0). Unversioned `tool: just`
@@ -54,14 +47,12 @@ jobs:
           # `import? "contractile.just"`, so `mix test --no-start`
           # never ran (root cause of the dead Elixir gate, burble#39).
           tool: just@1.34.0
-
       - name: Install system prerequisites for quicer/msquic
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y cmake perl build-essential libssl-dev
-
       - name: Cache Mix dependencies
-        uses: actions/cache@d4323d4df104b026a6aa633fdb11d772146be0bf  # v4.2.2
+        uses: actions/cache@d4323d4df104b026a6aa633fdb11d772146be0bf # v4.2.2
         with:
           path: |
             server/deps
@@ -70,7 +61,6 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-mix-msquic-v2.3.8-
             ${{ runner.os }}-mix-
-
       - name: Build Zig FFI
         working-directory: ${{ github.workspace }}
         # Re-armed as part of #39 follow-up: the Zig 0.15 / setup-beam
@@ -91,7 +81,6 @@ jobs:
           test -f "$ERL_INCLUDE/erl_nif.h" || { echo "::error::erl_nif.h not found at $ERL_INCLUDE"; exit 1; }
           ( cd ffi/zig && zig build -Doptimize=ReleaseFast -Derl-include="$ERL_INCLUDE" )
           cp ffi/zig/zig-out/lib/libburble_coprocessor.so server/priv/ 2>/dev/null || true
-
       - name: Run server tests
         working-directory: ${{ github.workspace }}
         # GATE NARROWED 2026-05-25: the underlying boot-failure root cause
@@ -107,7 +96,6 @@ jobs:
         # as the 2026-05-15 "test suite won't even boot" deactivation.
         continue-on-error: true
         run: just test-server
-
   dialyzer:
     name: Dialyzer
     runs-on: ubuntu-latest
@@ -116,26 +104,22 @@ jobs:
     defaults:
       run:
         working-directory: server/
-
     steps:
       - name: Checkout
-        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11  # v4.1.1
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
         with:
           submodules: recursive
-
       - name: Set up Beam (OTP 27 + Elixir 1.17)
-        uses: erlef/setup-beam@5304e04ea2b355f03681464e683d92e3b2f18451  # v1.18.2
+        uses: erlef/setup-beam@5304e04ea2b355f03681464e683d92e3b2f18451 # v1.18.2
         with:
           otp-version: '27'
           elixir-version: '1.17'
-
       - name: Install system prerequisites for quicer/msquic
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y cmake perl build-essential libssl-dev
-
       - name: Restore PLT cache
-        uses: actions/cache@d4323d4df104b026a6aa633fdb11d772146be0bf  # v4.2.2
+        uses: actions/cache@d4323d4df104b026a6aa633fdb11d772146be0bf # v4.2.2
         id: plt-cache
         with:
           path: server/priv/plts
@@ -143,9 +127,8 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-dialyzer-plt-otp27-elixir1.17-msquic-v2.3.8-
             ${{ runner.os }}-dialyzer-plt-otp27-elixir1.17-
-
       - name: Cache Mix dependencies
-        uses: actions/cache@d4323d4df104b026a6aa633fdb11d772146be0bf  # v4.2.2
+        uses: actions/cache@d4323d4df104b026a6aa633fdb11d772146be0bf # v4.2.2
         with:
           path: |
             server/deps
@@ -154,16 +137,12 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-mix-msquic-v2.3.8-
             ${{ runner.os }}-mix-
-
       - name: Install dependencies
         run: mix deps.get
-
       - name: Compile
         run: mix compile
-
       - name: Create PLT directory
         run: mkdir -p priv/plts
-
       - name: Run Dialyzer
         # GATE NARROWED 2026-05-25: Dialyzer ran clean before the
         # 2026-05-15 deactivation; the deactivation only landed because
