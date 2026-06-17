@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MPL-2.0
+# Owner: Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
 //! Shared compose-file loader.
 //!
 //! Every subcommand uses [`load`] to locate the compose file, discover `.env`
@@ -56,8 +58,15 @@ pub fn load(
     let compose_path = resolve_compose_file(file)
         .context("could not find a compose file (tried selur-compose.toml, compose.toml)")?;
 
-    let toml_src = std::fs::read_to_string(&compose_path)
-        .with_context(|| format!("failed to read {}", compose_path.display()))?;
+    let toml_src = {
+        use std::io::Read;
+        let mut file = std::fs::File::open(&compose_path)
+            .with_context(|| format!("failed to open {}", compose_path.display()))?;
+        let mut buf = String::new();
+        file.take(5 * 1024 * 1024).read_to_string(&mut buf)
+            .with_context(|| format!("failed to read {}", compose_path.display()))?;
+        buf
+    };
 
     // -----------------------------------------------------------------------
     // 2. Parse

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MPL-2.0
+# Owner: Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
 //! `EnvMap` — ordered environment variable store and `.env` file loader.
 //!
 //! ## Lookup order
@@ -168,10 +170,19 @@ impl EnvMap {
 /// - Leading and trailing whitespace around the key is stripped.
 /// - Trailing whitespace in an unquoted value is stripped.
 pub fn load_env_file(path: &Path) -> Result<Vec<(String, String)>, InterpError> {
-    let content = std::fs::read_to_string(path).map_err(|e| InterpError::EnvFile {
-        path: path.display().to_string(),
-        reason: e.to_string(),
-    })?;
+    let content = {
+        use std::io::Read;
+        let mut file = std::fs::File::open(path).map_err(|e| InterpError::EnvFile {
+            path: path.display().to_string(),
+            reason: e.to_string(),
+        })?;
+        let mut buf = String::new();
+        file.take(1024 * 1024).read_to_string(&mut buf).map_err(|e| InterpError::EnvFile {
+            path: path.display().to_string(),
+            reason: e.to_string(),
+        })?;
+        buf
+    };
     parse_env_str(&content, path)
 }
 

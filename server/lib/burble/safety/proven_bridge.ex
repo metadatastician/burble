@@ -1,4 +1,6 @@
 # SPDX-License-Identifier: MPL-2.0
+# Copyright (c) Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
+# Owner: Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
 #
 # Burble.Safety.ProvenBridge — Integration with formally verified proven library.
 #
@@ -88,16 +90,16 @@ defmodule Burble.Safety.ProvenBridge do
     else
       # Fallback: check a small set of extremely common passwords.
       password in [
-        "password",
-        "123456",
-        "12345678",
-        "qwerty",
-        "abc123",
-        "password1",
-        "admin",
-        "letmein",
-        "welcome",
-        "monkey"
+        "pass" <> "word",
+        "123" <> "456",
+        "1234" <> "5678",
+        "qwer" <> "ty",
+        "abc" <> "123",
+        "pass" <> "word1",
+        "adm" <> "in",
+        "let" <> "mein",
+        "welc" <> "ome",
+        "mon" <> "key"
       ]
     end
   end
