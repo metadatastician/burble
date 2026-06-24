@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: MPL-2.0 -->
+<!-- SPDX-License-Identifier: CC-BY-SA-4.0 -->
 # Glossary
 
 Burble-specific terminology and the names of the cross-project tools it depends on. Alphabetical.

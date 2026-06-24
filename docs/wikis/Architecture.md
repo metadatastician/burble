@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: MPL-2.0 -->
+<!-- SPDX-License-Identifier: CC-BY-SA-4.0 -->
 # Architecture
 
 This is the wiki-level signpost. The canonical, deep architecture doc is [`docs/architecture/ARCHITECTURE.adoc`](https://github.com/hyperpolymath/burble/blob/main/docs/architecture/ARCHITECTURE.adoc) — read that for the full picture.

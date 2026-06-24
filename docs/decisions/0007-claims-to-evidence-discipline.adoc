@@ -1,5 +1,5 @@
 = Architecture Decision Record: 0007-claims-to-evidence-discipline
-<!-- SPDX-License-Identifier: MPL-2.0 -->
+<!-- SPDX-License-Identifier: CC-BY-SA-4.0 -->
 <!-- Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk> -->
 
 # 7. Claims-to-evidence discipline & optional-dependency policy
