@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: MPL-2.0 -->
+<!-- SPDX-License-Identifier: CC-BY-SA-4.0 -->
 # Quickstart
 
 Burble has three audience-specific quickstarts. Pick the one that matches what you're trying to do — they don't repeat each other.

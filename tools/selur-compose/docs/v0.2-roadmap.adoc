@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MPL-2.0
+// SPDX-License-Identifier: CC-BY-SA-4.0
 = selur-compose — v0.2 Roadmap
 :toc: left
 :icons: font
