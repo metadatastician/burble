@@ -30,6 +30,8 @@ jobs:
     permissions:
       contents: read
       packages: write
+      id-token: write       # mint the OIDC token the attestation is signed with
+      attestations: write   # write the build-provenance attestation (the "claim")
     steps:
       - name: Checkout nextgen-databases
         uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
@@ -54,6 +56,7 @@ jobs:
             type=raw,value=${{ inputs.tag || 'latest' }}
             type=sha,prefix=sha-
       - name: Build and push
+        id: push
         uses: docker/build-push-action@4f58ea79222b3b9dc2c8bbdd6debcef730109a75 # v6.9.0
         with:
           context: nextgen-databases/verisimdb
@@ -63,3 +66,9 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+      - name: Attest container provenance
+        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2
+        with:
+          subject-name: ghcr.io/hyperpolymath/verisimdb
+          subject-digest: ${{ steps.push.outputs.digest }}
+          push-to-registry: true
