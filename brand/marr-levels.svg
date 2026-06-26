@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 640">
+  <defs>
+    <filter id="soft" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="1.5" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <radialGradient id="bg" cx="50%" cy="30%" r="80%">
+      <stop offset="0%" stop-color="#161b22"/>
+      <stop offset="100%" stop-color="#0d1117"/>
+    </radialGradient>
+  </defs>
+  <rect width="1280" height="640" fill="url(#bg)"/>
+
+  <!-- Title -->
+  <text x="64" y="68" font-family="system-ui, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="34" font-weight="300" fill="#e6edf3" letter-spacing="1">burble — at Marr's three levels</text>
+  <text x="64" y="100" font-family="system-ui, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="18" font-weight="300" fill="#8b949e">one platform, read from intent down to substrate</text>
+
+  <!-- Refinement arrow (abstract -> concrete) -->
+  <line x1="34" y1="150" x2="34" y2="600" stroke="#3fb950" stroke-width="2" opacity="0.5"/>
+  <path d="M 34,600 l -7,-16 l 14,0 z" fill="#3fb950" opacity="0.6"/>
+  <text x="20" y="380" font-family="system-ui,sans-serif" font-size="14" font-weight="300" fill="#8b949e" transform="rotate(-90 20 380)" text-anchor="middle">abstract → concrete</text>
+
+  <!-- Band 1: Computational -->
+  <g filter="url(#soft)">
+    <rect x="64" y="150" width="1152" height="128" rx="14" fill="#0a2010" stroke="#3fb950" stroke-width="1.5" opacity="0.95"/>
+  </g>
+  <circle cx="118" cy="214" r="26" fill="none" stroke="#3fb950" stroke-width="3"/>
+  <text x="118" y="222" text-anchor="middle" font-family="system-ui,sans-serif" font-size="26" font-weight="300" fill="#3fb950">?</text>
+  <text x="172" y="196" font-family="system-ui,sans-serif" font-size="24" font-weight="400" fill="#3fb950">Computational — what &amp; why</text>
+  <text x="172" y="230" font-family="system-ui,sans-serif" font-size="19" font-weight="300" fill="#e6edf3">Sub-second, self-hostable P2P voice where two Claudes also talk —</text>
+  <text x="172" y="256" font-family="system-ui,sans-serif" font-size="19" font-weight="300" fill="#e6edf3">AI data channel rides the same E2EE WebRTC session as the voice.</text>
+
+  <!-- Band 2: Algorithmic / representational -->
+  <g filter="url(#soft)">
+    <rect x="64" y="296" width="1152" height="128" rx="14" fill="#091c0e" stroke="#2ea043" stroke-width="1.5" opacity="0.95"/>
+  </g>
+  <circle cx="118" cy="360" r="26" fill="none" stroke="#2ea043" stroke-width="3"/>
+  <path d="M 104,360 h 28 M 118,346 v 28" stroke="#2ea043" stroke-width="3"/>
+  <text x="172" y="342" font-family="system-ui,sans-serif" font-size="24" font-weight="400" fill="#2ea043">Algorithmic — representation &amp; process</text>
+  <text x="172" y="376" font-family="system-ui,sans-serif" font-size="19" font-weight="300" fill="#e6edf3">JSON messages over the WebRTC DataChannel: curl → Deno bridge</text>
+  <text x="172" y="402" font-family="system-ui,sans-serif" font-size="19" font-weight="300" fill="#e6edf3">(:6474 HTTP / :6475 WS) → page → DTLS-SRTP peer; Bolt wakes a call.</text>
+
+  <!-- Band 3: Implementational -->
+  <g filter="url(#soft)">
+    <rect x="64" y="442" width="1152" height="128" rx="14" fill="#0b150d" stroke="#8b949e" stroke-width="1.5" opacity="0.95"/>
+  </g>
+  <circle cx="118" cy="506" r="26" fill="none" stroke="#8b949e" stroke-width="3"/>
+  <rect x="106" y="494" width="24" height="24" rx="4" fill="none" stroke="#8b949e" stroke-width="3"/>
+  <text x="172" y="488" font-family="system-ui,sans-serif" font-size="24" font-weight="400" fill="#c9d1d9">Implementational — physical substrate</text>
+  <text x="172" y="522" font-family="system-ui,sans-serif" font-size="19" font-weight="300" fill="#e6edf3">Elixir/OTP control plane (SFU, never MCU) + Zig FFI audio + Idris2</text>
+  <text x="172" y="548" font-family="system-ui,sans-serif" font-size="19" font-weight="300" fill="#e6edf3">ABI proofs; Bolt on udp/7373, QUIC via the quicer NIF; Groove IPC.</text>
+</svg>
