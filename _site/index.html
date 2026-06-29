@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Burble — burble.nexus</title>
+  <meta name="description" content="Burble Nexus — High-throughput decentralized messaging and event aggregation">
+  <meta name="color-scheme" content="light dark">
+  <meta name="generator" content="casket-ssg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/assets/style.css">
+</head>
+<body>
+  <div class="glow-bg"></div>
+  <header class="site-header">
+    <nav class="container nav" aria-label="Primary">
+      <a class="brand" href="/">burble.nexus</a>
+      <div class="nav-links">
+        <a href="#features" class="nav-link">Features</a>
+        <a href="#architecture" class="nav-link">Architecture</a>
+        <a href="https://github.com/hyperpolymath/burble" class="btn-primary" target="_blank">View Repository</a>
+      </div>
+    </nav>
+  </header>
+
+  <main id="main" class="container">
+    <section class="hero">
+      <div class="hero-badge">✨ Casket-SSG Verified Generation</div>
+      <h1>Burble</h1>
+      <p class="hero-subtitle">Burble Nexus — High-throughput decentralized messaging and event aggregation</p>
+      <div class="cta-group">
+        <a href="https://github.com/hyperpolymath/burble" class="btn-primary large" target="_blank">Explore Codebase</a>
+        <a href="#architecture" class="btn-secondary large">Technical Specs</a>
+      </div>
+    </section>
+
+    <section id="features" class="grid-features">
+      <div class="card glass">
+        <div class="card-icon">⚡</div>
+        <h3>Type-Safe Pipelines</h3>
+        <p>Built on robust functional principles and verifiable compilation contracts to guarantee runtime safety and absolute execution reliability.</p>
+      </div>
+      <div class="card glass">
+        <div class="card-icon">🔒</div>
+        <h3>Sovereign Autonomy</h3>
+        <p>Engineered for decentralized infrastructure, incorporating modern zero-trust capability gates and cryptographic attestation headers.</p>
+      </div>
+      <div class="card glass">
+        <div class="card-icon">🚀</div>
+        <h3>High-Fidelity Speed</h3>
+        <p>Optimized for rapid processing and lightweight compilation, ensuring minimal overhead and ultra-fast edge propagation.</p>
+      </div>
+    </section>
+
+    <section id="architecture" class="content-section glass">
+      <h2>Architectural Foundation</h2>
+      <div class="prose">
+        <p>:toc: preamble</p>
+<p>:icons: font</p>
+<p>Voice first. Friction last. Complexity optional.</p>
+<h3>What is Burble?</h3>
+<p>Burble is a **self-hostable voice communications platform** built for people who</p>
+<p>care about latency, privacy, and control. Think Mumble's audio seriousness meets</p>
+<p>modern browser-based joining — no downloads, no accounts, no friction.</p>
+<p>**One command to deploy. Sub-second to join. Your server, your rules.**</p>
+<h3>Status</h3>
+<p>Burble is **pre-production** (targeting CRG grade C). The core — self-hosted</p>
+<p>WebRTC voice, browser join, OTP fault isolation — is operational and tested.</p>
+<p>Per link:docs/decisions/0007-claims-to-evidence-discipline.adoc[ADR-0007],</p>
+<p>every claim below maps to code + a test, or is flagged here:</p>
+<p>• *Experimental (optional, off by default):* QUIC transport and SNIF WASM</p>
+<p>crash-isolation require optional NIFs (`quicer`/msquic, `wasmex`) that are</p>
+<p>**disabled in the default build**; the runtime degrades gracefully without</p>
+<p>them.</p>
+<p>• *Hardware-gated:* sub-microsecond PTP needs a PTP-capable NIC; without one</p>
+<p>the system uses NTP (~1ms). PTP hardware is **unvalidated** (I210 pending).</p>
+<p>• *Roadmap:* the Idris2 ABI proofs compile and type-check; *runtime*</p>
+<p>enforcement is not yet wired</p>
+<p>(link:docs/decisions/0008-formal-proof-enforcement-vs-scope.adoc[ADR-0008],</p>
+<p>Option C; PoC tracked in issue #55).</p>
+<p>• *Not yet benchmarked:* end-to-end mic-to-speaker latency and 500+</p>
+<p>concurrent scale (issue #52).</p>
+<p>Foundational hardening is tracked in the "Earn the Core" epic (issue #53).</p>
+<h3>Why Burble?</h3>
+<p>[cols="1,1,1,1,1"]</p>
+<p>|===</p>
+<p>| | Burble | Mumble | Discord | Jitsi</p>
+<p>| **Self-host**</p>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container footer-content">
+      <p class="muted">Built with <b>casket-ssg</b> · High-Assurance Sovereign Infrastructure</p>
+      <p class="muted">© 2026 Jonathan D.A. Jewell (hyperpolymath) · MPL-2.0 License</p>
+    </div>
+  </footer>
+</body>
+</html>

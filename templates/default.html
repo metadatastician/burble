@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{title} — {domain}</title>
+  <meta name="description" content="{description}">
+  <meta name="color-scheme" content="light dark">
+  <meta name="generator" content="casket-ssg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/assets/style.css">
+</head>
+<body>
+  <div class="glow-bg"></div>
+  <header class="site-header">
+    <nav class="container nav" aria-label="Primary">
+      <a class="brand" href="/">{domain}</a>
+      <div class="nav-links">
+        <a href="#features" class="nav-link">Features</a>
+        <a href="#architecture" class="nav-link">Architecture</a>
+        <a href="https://github.com/hyperpolymath/{repo}" class="btn-primary" target="_blank">View Repository</a>
+      </div>
+    </nav>
+  </header>
+
+  <main id="main" class="container">
+    <section class="hero">
+      <div class="hero-badge">✨ Casket-SSG Verified Generation</div>
+      <h1>{title}</h1>
+      <p class="hero-subtitle">{description}</p>
+      <div class="cta-group">
+        <a href="https://github.com/hyperpolymath/{repo}" class="btn-primary large" target="_blank">Explore Codebase</a>
+        <a href="#architecture" class="btn-secondary large">Technical Specs</a>
+      </div>
+    </section>
+
+    <section id="features" class="grid-features">
+      <div class="card glass">
+        <div class="card-icon">⚡</div>
+        <h3>Type-Safe Pipelines</h3>
+        <p>Built on robust functional principles and verifiable compilation contracts to guarantee runtime safety and absolute execution reliability.</p>
+      </div>
+      <div class="card glass">
+        <div class="card-icon">🔒</div>
+        <h3>Sovereign Autonomy</h3>
+        <p>Engineered for decentralized infrastructure, incorporating modern zero-trust capability gates and cryptographic attestation headers.</p>
+      </div>
+      <div class="card glass">
+        <div class="card-icon">🚀</div>
+        <h3>High-Fidelity Speed</h3>
+        <p>Optimized for rapid processing and lightweight compilation, ensuring minimal overhead and ultra-fast edge propagation.</p>
+      </div>
+    </section>
+
+    <section id="architecture" class="content-section glass">
+      <h2>Architectural Foundation</h2>
+      <div class="prose">
+        {content_html}
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container footer-content">
+      <p class="muted">Built with <b>casket-ssg</b> · High-Assurance Sovereign Infrastructure</p>
+      <p class="muted">© 2026 Jonathan D.A. Jewell (hyperpolymath) · MPL-2.0 License</p>
+    </div>
+  </footer>
+</body>
+</html>
