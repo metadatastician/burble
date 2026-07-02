@@ -1,0 +1,75 @@
+= Architecture Decision Record: 0009-bridge-scope-reduction
+<!-- SPDX-License-Identifier: CC-BY-SA-4.0 -->
+<!-- Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk> -->
+
+# 9. Delete the SIP/Discord/Matrix bridges; quarantine Mumble as experimental
+
+Date: 2026-07-02
+
+## Status
+
+Accepted
+
+Part of the Phase 0 truth-reconciliation pass of the completion roadmap
+(epic #53), applying the ADR-0007 claims-to-evidence rule to the bridge
+subsystem.
+
+## Context
+
+`server/lib/burble/bridges/` carried four bridges totalling ~4,100 LOC:
+Mumble (~713), SIP (1,447), Discord (1,213), Matrix (753). All four shared
+the same status:
+
+* **Never started.** No supervision-tree entry, no controller, no channel,
+  no dynamic start anywhere in the codebase referenced them.
+* **Never proven against a real endpoint.** Their shared test file asserted
+  loadability, GenServer behaviour, and lifecycle against a connection-refused
+  loopback socket (port 1) — structure, not interop.
+* **Known internal gaps, some serious.** SIP had no DNS SRV and a G.711 path
+  that emitted zeroed audio frames (silence) instead of an error; Discord's
+  XSalsa20-Poly1305 encrypt path fell back to sending *plaintext* on cipher
+  unavailability (logged, not raised); Mumble's protobuf handling was
+  simplified. These were catalogued in the 2026-05-13 phase-1 implementation
+  plan (docs/superpowers/specs/) and never scheduled.
+
+Under ADR-0007, unrunnable code that implies a capability ("Bridge interop —
+Discord/SIP/Matrix") is a standing overclaim. Maintaining four protocol
+integrations against moving external targets is multi-person-year work that a
+solo-maintainer project cannot honestly promise.
+
+## Decision
+
+* **Delete** `bridges/{sip,discord,matrix}.ex` and their dedicated test files
+  (`discord_crypto_test.exs`, `sip_codec_negotiation_test.exs`). Git history
+  preserves the implementations; this ADR records where to look.
+* **Quarantine** `bridges/mumble.ex` under `server/lib/burble/experimental/`
+  with an EXPERIMENTAL moduledoc. Mumble stays because it is the one bridge
+  whose audience (self-hosting Mumble/Murmur communities) matches Burble's
+  positioning as a Mumble successor, and its module is the closest to
+  workable.
+* **README/docs** must describe bridge interop as experimental (Mumble) or
+  roadmap (everything else) — no "bidirectional relay" present-tense claims.
+
+## Revival criteria
+
+A deleted bridge comes back when ALL of the following hold:
+
+1. A named user/community asks for that specific bridge (demand, not
+   speculation).
+2. The Mumble bridge has first been taken to "validated against a real
+   Murmur server, started by the supervision tree, integration-tested" —
+   proving the bridge architecture end-to-end before widening it.
+3. The revived bridge ships with an integration test against a real or
+   containerized endpoint in the same PR — loadability tests do not count.
+4. Security-sensitive paths (e.g. Discord's voice encryption) fail closed,
+   never fall back to plaintext.
+
+## Consequences
+
+* ~3,400 LOC and three unkeepable promises removed; the bridges section of
+  the README becomes honest.
+* The server test suite shrinks by the bridge structure tests (part of the
+  #100 failure-count triage).
+* IF a bridge is revived, start from the git history at this ADR's merge
+  commit rather than rewriting from scratch — the deleted code was a real
+  head start, just unproven.
