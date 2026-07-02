@@ -1,12 +1,16 @@
 # SPDX-License-Identifier: MPL-2.0
 # eclexiaiser manifest for burble
+#
+# 2026-07-02: corrected from RSR template drift — the previous version
+# pointed at a Rust src/main.rs that never existed. Burble is an
+# Elixir/OTP server (server/) with a Zig coprocessor NIF (ffi/zig/).
 
 [project]
 name = "burble"
 
 [[functions]]
-name = "serve"
-source = "src/main.rs"
+name = "server"
+source = "server/lib/burble/application.ex"
 energy-budget-mj = 200.0
 
 [carbon]
