@@ -2,9 +2,10 @@
 -- Idris2 package file for Burble ABI proofs (src/Burble/ABI/).
 --
 -- Builds the canonical ABI proof modules under src/Burble/ABI/.
--- The parallel tree at src/interface/abi/ declares the same module name
--- (Burble.ABI.Types) and is deferred to Phase 1 module-path cleanup;
--- it is NOT included here to avoid the duplicate-module collision.
+-- (A parallel tree at src/interface/abi/ once declared the same module
+-- name and was removed in the Phase 0 cleanup, 2026-07-02. Its unique
+-- Layout.idr — never built by this package — lives in git history and
+-- can be revived into this tree deliberately if the proof work needs it.)
 --
 -- All imports (Data.Fin, Data.Vect, Data.Nat) are from the Idris2 base
 -- prelude and require no extra `depends` entries.

@@ -81,9 +81,8 @@ build-ffi-debug:
 build-server:
     cd server && mix deps.get && mix compile
 
-# Build Idris2 ABI proofs (src/Burble/ABI/*)
-# Module collision note: src/interface/abi/ also declares Burble.ABI.Types
-# and is excluded from this recipe (deferred to Phase 1 module-path cleanup).
+# Build Idris2 ABI proofs (src/Burble/ABI/* — the sole ABI proof tree;
+# the duplicate src/interface/abi/ was removed in the Phase 0 cleanup).
 build-proofs:
     # idris2 binaries built elsewhere bake in a wrong prefix; derive it
     # from the idris2 on PATH (override with IDRIS2_PREFIX if needed).

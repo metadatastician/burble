@@ -41,7 +41,7 @@ burble/
 │   └── worker.js                  # Cloudflare Worker wrapper
 ├── src/                           # Idris2 ABI definitions + proofs
 │   ├── ABI.idr                    # Top-level ABI (re-exports)
-│   └── Burble/ABI/                # Types, Permissions, Avow, Vext, MediaPipeline, WebRTCSignaling, Layout, Foreign
+│   └── Burble/ABI/                # Types, Permissions, Avow, Vext, MediaPipeline, WebRTCSignaling, Foreign
 ├── ffi/zig/                       # SOLE Zig FFI — SIMD audio/DSP/neural/compression NIFs
 │   └── src/coprocessor/           # audio.zig, dsp.zig, neural.zig, compression.zig, firewall.zig, nif.zig
 ├── client/
