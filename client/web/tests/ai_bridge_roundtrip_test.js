@@ -25,7 +25,7 @@ const BRIDGE_B_WS = BRIDGE_B_HTTP + 1;
 
 async function startBridge(port) {
   const cmd = new Deno.Command("deno", {
-    args: ["run", "--allow-net", "--allow-env", "../../burble-ai-bridge.js"],
+    args: ["run", "--allow-net", "--allow-env", "../burble-ai-bridge.js"],
     cwd: import.meta.dirname,
     env: { BURBLE_AI_BRIDGE_PORT: String(port) },
     stdout: "null",
