@@ -38,6 +38,11 @@ every claim below maps to code + a test, or is flagged here:
   Option C; PoC tracked in issue #55).
 * *Not yet benchmarked:* end-to-end mic-to-speaker latency and 500+
   concurrent scale (issue #52).
+* *Test gate:* the full server suite (~707 tests) carries known failures and
+  the CI pass/fail gate is temporarily disarmed while they are triaged
+  (issue #100). A green *gated* run is the criterion for CRG grade C;
+  until then the self-assessed grade is D
+  (see `.machine_readable/6a2/STATE.a2ml`).
 
 Foundational hardening is tracked in the "Earn the Core" epic (issue #53).
 
@@ -96,8 +101,10 @@ to NTP (~1ms) and the PTP hardware path remains **unvalidated**.
 == Key Features
 
 **Audio performance** — Zig SIMD coprocessor NIFs deliver 26,350x speedup over
-pure Elixir for LZ4 compression, 62x for echo cancellation, 37x for FFT. Your
-server doesn't break a sweat.
+pure Elixir for LZ4 compression, 62x for echo cancellation, 37x for FFT —
+*as library microbenchmarks*. The live call path forwards opaque Opus and does
+not currently traverse these kernels (they serve self-test and archive paths);
+end-to-end numbers are tracked in issue #52.
 
 **Precision Time Protocol** — IEEE 1588 PTP clock source detection with
 graceful fallback (PTP hardware → phc2sys → NTP → system). Sub-microsecond
@@ -112,8 +119,9 @@ mesh (serverless with mandatory E2EE). Set `BURBLE_TOPOLOGY` and go.
 If a room crashes, everything else keeps running. That's not marketing — that's
 OTP.
 
-**Bridge interop** — Bidirectional Mumble/Murmur relay. Migrate your community
-without forcing everyone to switch at once. Jitsi and Matrix bridges planned.
+**Bridge interop** *(experimental)* — a Mumble/Murmur relay module exists but
+is not yet started by the supervision tree or validated against a real Murmur
+server. Jitsi and Matrix bridges are roadmap items, not code.
 
 **Embeddable client library** — Drop Burble voice into your game, workspace, or
 app. Used in IDApTIK (asymmetric co-op game) and PanLL (panel workspace).
@@ -183,7 +191,10 @@ just bench         # Elixir vs Zig benchmarks
 
 == Coprocessor Benchmarks
 
-SIMD-accelerated audio processing via Zig NIFs:
+SIMD-accelerated audio processing via Zig NIFs. *Honest framing (ADR-0007):
+these are library microbenchmarks of the kernels in isolation — the live SFU
+path forwards opaque Opus RTP and does not execute them. End-to-end
+mic-to-speaker latency is not yet benchmarked (issue #52).*
 
 [cols="1,1,1,1"]
 |===

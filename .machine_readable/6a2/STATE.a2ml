@@ -6,13 +6,44 @@
 [metadata]
 project = "burble"
 version = "1.3.0-pre"
-last-updated = "2026-06-05"
+last-updated = "2026-07-02"
 status = "active"
 
 [project-context]
 name = "burble"
 purpose = "Modern, self-hostable, voice-first communications platform. Mumble successor."
-completion-percentage = 97
+# completion-percentage removed 2026-07-02 (ADR-0007): a single number cannot
+# honestly summarize a multi-surface project. See [feature-status] instead.
+
+[feature-status]
+# Honest per-surface status per ADR-0007. "works" = code + automated test +
+# reachable by a user today; "experimental" = real code, not on a supported
+# path; "absent" = documented or stubbed only.
+works = [
+  "P2P 1:1 voice page (client/web/p2p-voice.html, manual + relay signaling)",
+  "Claude-to-Claude AI data channel + Deno bridge (localhost:6474/6475)",
+  "Signaling relay (Deno + Cloudflare Worker variants)",
+  "Server SFU via ex_webrtc (media/peer.ex) + Phoenix control plane",
+  "Auth (Guardian/bcrypt/magic links), rooms, presence, moderation, audit",
+  "TURN REST credentials (RFC 5766)",
+  "Bolt UDP incoming-call transport",
+  "Server-side LLM service (Anthropic provider + circuit breaker)",
+  "Zig FFI kernels (LZ4/FFT/NLMS) — build + tests CI-gated; NOT on live audio path"
+]
+experimental = [
+  "Mumble bridge (never started by supervision tree; untested against a real server)",
+  "PAKE-authenticated P2P page (HKDF+AES-GCM prototype, NOT SPAKE2)",
+  "PTP timing (source detection real; all timestamps software; hardware unvalidated)",
+  "Idris2 ABI proofs (7/7 compile; design assurance only, no runtime enforcement — ADR-0008)",
+  "VeriSimDB store (real integration; no CI round-trip coverage)"
+]
+absent = [
+  "Opus transcoding (opus_transcode returns :not_implemented on all backends)",
+  "Discord/SIP/Matrix bridges (unwired code, loadability tests only)",
+  "QUIC media transport, Multipath, clustering (not started by anything)",
+  "Runtime proof enforcement (PoC tracked in #55)",
+  "End-to-end latency / 500+ concurrent benchmarks (#52)"
+]
 
 [position]
 phase = "hardening"
@@ -228,14 +259,25 @@ open-failures = 0
 #             client/lib/deno.json, server/mix.exs) were AGPL drift while 679
 #             source files already declared MPL-2.0. Owner-confirmed alignment
 #             to MPL-2.0 throughout (PR #114). LICENSE is now pure MPL-2.0.
+# 2026-07-02: Truth-reconciliation pass (Phase 0 of the completion roadmap,
+#             ADR-0007): completion-percentage removed in favor of
+#             [feature-status]; CRG self-grade set to D (blocked on #100 —
+#             the provisional C is withdrawn until the test gate is re-armed
+#             and green); false labels corrected in code (Media.Engine
+#             "Membrane" -> ex_webrtc session registry, Vext "blake3" ->
+#             sha256, quick-join.html relabeled presence-lobby); dead
+#             Multipath.send call removed from the RTP hot path; run.sh
+#             launcher path, extension /recv rendering, and bridge-test
+#             spawn paths fixed.
 
 [crg]
-grade = "C"
-achieved = "2026-04-21"
-previous-grade = "D"
+grade = "D"
+target-grade = "C"
+blocked-on = "#100"
+previous-grade = "C (provisional, 2026-04-21; withdrawn 2026-07-02)"
 demoted-on = "2026-04-18"
 demotion-reference = "docs/governance/CRG-AUDIT-2026-04-18.adoc"
-notes = "CRG C provisionally — CI workflow present; gate still deactivated (continue-on-error: true) pending OTP27 CI run (issue #39). Post-2026-05-20 progress: web-client test suite wired (PR #104), CI/CD campaigns C001-C005 completed, SECURITY-DEPLOY.md + PROTOCOL.md published, license drift resolved (MPL-2.0 throughout, PR #114). Remaining blocker: re-arm CI test gate once OTP27 run validates suite. READINESS.adoc + per-directory READMEs + elixir-ci.yml all present."
+notes = "Grade set to D 2026-07-02 per ADR-0007 receipts-first discipline: a disarmed CI test gate (continue-on-error: true, issue #100) cannot support grade C — the provisional C claimed 2026-04-21 predates that standard and is withdrawn until the gate is re-armed and green. Everything else needed for C is in place: web-client test suite wired (PR #104), CI/CD campaigns C001-C005 completed, SECURITY-DEPLOY.md + PROTOCOL.md published, license drift resolved (MPL-2.0 throughout, PR #114), READINESS.adoc + per-directory READMEs + elixir-ci.yml present. Re-grade to C with the green gated run URL as the receipt."
 
 [ecosystem]
 part-of = ["Burble Platform"]
