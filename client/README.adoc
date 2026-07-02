@@ -11,11 +11,20 @@ Everything a participant runs. The browser client is first-class
 
 `web/`:: First-class browser client (AffineScript + WebRTC APIs).
 Mid-migration ReScript→AffineScript; client test coverage is tracked in
-issue #48 (Earn-the-Core).
-`desktop/`:: Tauri 2 native wrapper around the web client for power users.
+issue #48 (Earn-the-Core). Note: only the standalone pages
+(`p2p-voice.html`, `p2p-voice-pake.html`, `quick-join.html`) run with no
+build; `index.html` loads compiled `*.res.mjs` output that is not
+committed — run `deno task build` first.
 `lib/`:: Embeddable `@burble/client` library (BurbleClient/Voice/Spatial/
 Signaling) — used by IDApTIK (in-game voice) and PanLL (workspace voice).
+Caveat: `BurbleVoice` does not yet create a real `RTCPeerConnection`
+(mic/device/mute management only) — wiring it is Phase 3 roadmap work.
 `extension/`:: Browser extension for the Claude-to-Claude AI bridge.
+
+(Removed 2026-07-02, Phase 0 cleanup: `desktop/` — an Ephapax `.eph`
+skeleton whose compiler is not vendored in this repo, so it could not be
+built here; the old README line also mislabeled it "Tauri 2". It returns
+when the toolchain is vendored and CI-built. Git history preserves it.)
 
 == Status
 
