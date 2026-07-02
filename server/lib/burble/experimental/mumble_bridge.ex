@@ -2,6 +2,11 @@
 #
 # Burble.Bridges.Mumble — Bidirectional bridge to Mumble/Murmur servers.
 #
+# EXPERIMENTAL (ADR-0009): this module is not started by the supervision
+# tree and has never been validated against a real Murmur server. It lives
+# under experimental/ until both are true. Tests exercise lifecycle against
+# a refused socket only.
+#
 # Connects to a Murmur server as a bot client and relays audio
 # bidirectionally between Burble rooms and Mumble channels.
 #
@@ -28,7 +33,11 @@
 
 defmodule Burble.Bridges.Mumble do
   @moduledoc """
-  Bidirectional voice bridge between Burble and Mumble/Murmur.
+  EXPERIMENTAL — Bidirectional voice bridge between Burble and Mumble/Murmur.
+
+  Not started by the supervision tree; never validated against a real
+  Murmur server (ADR-0009). Start manually via `start_link/1` at your
+  own risk.
 
   Connects to a Murmur server as a bot client and relays audio
   between a Burble room and a Mumble channel. Both communities
