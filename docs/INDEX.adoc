@@ -142,20 +142,9 @@ reports. Append-only.
   `performance/`, `maintenance/`, `security/` — each with its own
   `README.adoc` describing what goes in it)
 
-=== link:theory/[`theory/`]
-
-Formal and conceptual background. Six subdirs:
-
-* `mathematics/`
-* `ontologies/`
-* `computing/`
-* `formalisms/`
-* `socio-technical/`
-* `other/`
-
 === link:practice/[`practice/`]
 
-Operational and implementation material. Pair with `theory/`.
+Operational and implementation material.
 
 === link:accessibility/[`accessibility/`]
 
@@ -188,12 +177,6 @@ documents.
 
 Specs for the "superpowers" Burble exposes to Claude / agents.
 `specs/` holds the per-superpower spec files.
-
-=== link:whitepapers/[`whitepapers/`]
-
-* `academic/`
-* `industry/`
-* `outreach/`
 
 === link:wikis/[`wikis/`]
 
