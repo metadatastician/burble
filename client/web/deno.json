@@ -17,6 +17,6 @@
     "dev": "deno task res:dev & deno task dev:vite",
     "dev:vite": "deno run --node-modules-dir=auto --allow-read --allow-write --allow-env --allow-net --allow-sys --allow-ffi --allow-run npm:vite",
     "build": "deno task res:build && deno run --node-modules-dir=auto --allow-read --allow-write --allow-env --allow-net --allow-sys --allow-ffi --allow-run npm:vite build",
-    "test": "deno test --no-check --node-modules-dir=auto --allow-read --allow-env tests/"
+    "test": "deno test --no-check --node-modules-dir=auto --allow-read --allow-env --allow-run=deno --allow-net=127.0.0.1,localhost tests/"
   }
 }
