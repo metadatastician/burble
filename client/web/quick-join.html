@@ -1,6 +1,9 @@
 <!DOCTYPE html>
 <!-- SPDX-License-Identifier: MPL-2.0 -->
-<!-- Burble Quick Join — minimal voice client for testing -->
+<!-- Burble Quick Join — presence lobby / signaling smoke-test.
+     NOTE: no peer audio — this page joins the room channel and shows
+     presence + local mic level, but never opens an RTCPeerConnection.
+     For actual voice, use p2p-voice.html (serverless) for now. -->
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
@@ -41,7 +44,7 @@
 <body>
   <div class="card">
     <h1>Burble</h1>
-    <p class="subtitle">Voice first. Friction last.</p>
+    <p class="subtitle">Presence lobby — signaling test; peer audio not yet wired. For voice, use p2p-voice.html.</p>
 
     <!-- Join form -->
     <div id="join-form">
@@ -54,7 +57,7 @@
         <input id="room" type="text" placeholder="apple-banana-cat" style="flex: 1;" />
         <button class="btn-primary" onclick="generateNewRoomName()" style="padding: 0 0.5rem;">🎲</button>
       </div>
-      <button class="btn-primary" id="btn-join" onclick="joinRoom()">Join Voice</button>
+      <button class="btn-primary" id="btn-join" onclick="joinRoom()">Join Room</button>
     </div>
 
     <!-- Connected view -->
@@ -74,7 +77,7 @@
 
   <script type="module">
     // SPDX-License-Identifier: MPL-2.0
-    // Burble Quick Join — minimal WebRTC voice client.
+    // Burble Quick Join — presence lobby (no peer audio; see header note).
 
     import { generateRoomName, isValidRoomName } from './src/room.js';
 

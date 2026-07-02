@@ -77,7 +77,7 @@ defmodule Burble.Application do
       # Text channels (NNTPS-backed persistent threaded messages)
       Burble.Text.NNTPSBackend,
 
-      # Media plane — Membrane SFU (WebRTC audio routing)
+      # Media plane — ex_webrtc SFU (WebRTC audio routing)
       Burble.Media.Engine,
 
       # Telemetry

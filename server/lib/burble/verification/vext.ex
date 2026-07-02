@@ -5,8 +5,10 @@
 #
 #   YOU ARE HERE → Burble's Vext INTEGRATION (consumer, not the spec)
 #     This file implements the Vext protocol for Burble's text feeds.
-#     BLAKE3 hash chains proving feeds are chronological, complete,
+#     SHA-256 hash chains proving feeds are chronological, complete,
 #     uninjected, and attributable. Part of burble only.
+#     (The Vext spec targets BLAKE3; this implementation uses SHA-256
+#     via :crypto until a BLAKE3 NIF is adopted.)
 #
 #   PROTOCOL SPEC → hyperpolymath/vext  ← THE CANONICAL HOME OF THE PROTOCOL
 #     The actual Vext protocol definition, Idris2 proofs, reference impl.
@@ -37,7 +39,7 @@
 #
 # Implementation:
 #   Each article gets a Vext verification header containing:
-#   - BLAKE3 hash of (body + author + timestamp)
+#   - SHA-256 hash of (body + author + timestamp)
 #   - Hash chain link to previous article (proves ordering)
 #   - Server signature (Ed25519, proves server attests to this ordering)
 #
@@ -110,7 +112,9 @@ defmodule Burble.Verification.Vext do
       chain_position: position,
       chain_hash: chain_hash,
       server_signature: signature,
-      algorithm: "blake3+ed25519",
+      # SHA-256 via :crypto — the Vext spec's BLAKE3 is a future option;
+      # changing the hash now would break existing chain continuity.
+      algorithm: "sha256+ed25519",
       timestamp: DateTime.to_iso8601(timestamp),
       attestation_id: attestation_id
     }

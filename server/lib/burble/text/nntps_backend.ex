@@ -312,7 +312,7 @@ defmodule Burble.Text.NNTPSBackend do
   3. The timestamp hasn't been altered
   4. No articles have been inserted or removed from the feed
 
-  Uses BLAKE3 for speed + Ed25519 signature chain for ordering proof.
+  Uses SHA-256 + Ed25519 signature chain for ordering proof.
   """
   def compute_vext_hash(body, user_id, timestamp) do
     data = "#{body}|#{user_id}|#{DateTime.to_iso8601(timestamp)}"

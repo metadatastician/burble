@@ -2,7 +2,8 @@
 # Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
 #
 # ── DISAMBIGUATION ────────────────────────────────────────────────────────────
-# "Vext" here = the feed-integrity verification protocol (BLAKE3 hash chains).
+# "Vext" here = the feed-integrity verification protocol (hash chains;
+# SHA-256 in this implementation).
 # NOT the IRC VCS notification daemon, which was renamed to vcs-ircd.
 # See burble/server/lib/burble/verification/vext.ex for the full disambiguation.
 # ─────────────────────────────────────────────────────────────────────────────

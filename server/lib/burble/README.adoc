@@ -108,9 +108,9 @@ top-level supervision tree.
   LLM service (see `llm.ex` above).
 
 `media/`::
-  Membrane SFU + per-room playout. `Engine` is the supervisor;
-  `Peer` is the per-participant GenServer; `LmdbPlayout` is the
-  per-room playout buffer.
+  ex_webrtc SFU + per-room playout. `Engine` is the session registry;
+  `Peer` is the per-participant GenServer (`ExWebRTC.PeerConnection`);
+  `LmdbPlayout` is the per-room playout buffer.
 
 `moderation/`::
   Server-side moderation (mute / kick / room policy).

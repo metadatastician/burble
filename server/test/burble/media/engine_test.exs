@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: MPL-2.0
 # Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
 #
-# Unit tests for Burble.Media.Engine — the Membrane-based SFU engine.
+# Unit tests for Burble.Media.Engine — the ex_webrtc SFU session registry.
 #
 # Covers:
 #   - add_peer/3: session state updated, SDP offer returned
