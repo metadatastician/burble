@@ -25,9 +25,10 @@ async function checkStatus() {
 async function pollMessages() {
   try {
     const res = await fetch(`${bridgeUrl}/recv`, { signal: AbortSignal.timeout(2000) });
-    const messages = await res.json();
-    if (Array.isArray(messages)) {
-      for (const msg of messages) {
+    // /recv returns {messages: [...], count: N} (see burble-ai-bridge.js).
+    const data = await res.json();
+    if (Array.isArray(data.messages)) {
+      for (const msg of data.messages) {
         appendMessage("in", msg);
       }
     }

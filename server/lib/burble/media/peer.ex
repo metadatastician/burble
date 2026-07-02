@@ -326,13 +326,6 @@ defmodule Burble.Media.Peer do
             Logger.warning("[Peer] #{state.peer_id} failed to forward RTP to #{from_peer_id}: #{reason}")
         end
 
-        # Also send via multipath for line bonding (if available)
-        case Burble.Transport.Multipath.send(:voice, {state.peer_id, from_peer_id}, packet) do
-          :ok -> :ok
-          {:error, mp_reason} ->
-            Logger.debug("[Peer] #{state.peer_id} multipath send failed: #{mp_reason}")
-        end
-
       nil ->
         Logger.debug("[Peer] #{state.peer_id} no outbound track for #{from_peer_id}")
     end

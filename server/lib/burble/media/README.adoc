@@ -16,7 +16,7 @@ Burble uses a Selective Forwarding Unit (SFU) rather than a Multipoint Control U
 
 == Key files
 
-`engine.ex`:: Central SFU GenServer. Manages one Membrane RTC Engine instance per active voice room. Handles session lifecycle (`create_room_session`, `destroy_room_session`) and peer membership (`add_peer`, `remove_peer`). Applies privacy hardening to SDP offers based on the room's privacy mode: standard → TURN-only → E2EE → maximum.
+`engine.ex`:: Central SFU session registry (GenServer). Manages one media session per active voice room; the WebRTC connections themselves are per-participant `ExWebRTC.PeerConnection` processes in `peer.ex`. Handles session lifecycle (`create_room_session`, `destroy_room_session`) and peer membership (`add_peer`, `remove_peer`). Applies privacy hardening to SDP offers based on the room's privacy mode: standard → TURN-only → E2EE → maximum.
 
 `peer.ex`:: Per-participant GenServer. Each participant gets one PeerConnection with one recvonly transceiver (their microphone) and N-1 sendonly transceivers (one per other participant). RTP packets received on the recvonly track are forwarded to all other peers' sendonly tracks. The server always initiates offers; when a new peer joins, all existing peers renegotiate. Also integrates with `Burble.Timing.ClockCorrelator` — on each RTP packet arrival it records a `{rtp_ts, wall_ns}` sync point and forwards it to `Burble.Timing.Alignment`.
 

@@ -18,9 +18,12 @@ jobs:
         working-directory: server/
     steps:
       - name: Checkout
+        # No submodules: this job only builds ffi/zig and runs the server
+        # suite, neither of which uses tools/affinescript — and that
+        # submodule's pinned commit is currently unreachable upstream
+        # ("upload-pack: not our ref"), which was hard-failing checkout
+        # before any test could run.
         uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
-        with:
-          submodules: recursive
       - name: Set up Beam (OTP 27 + Elixir 1.17)
         uses: erlef/setup-beam@5304e04ea2b355f03681464e683d92e3b2f18451 # v1.18.2
         with:
@@ -106,9 +109,8 @@ jobs:
         working-directory: server/
     steps:
       - name: Checkout
+        # No submodules — same rationale as the test job above.
         uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
-        with:
-          submodules: recursive
       - name: Set up Beam (OTP 27 + Elixir 1.17)
         uses: erlef/setup-beam@5304e04ea2b355f03681464e683d92e3b2f18451 # v1.18.2
         with:

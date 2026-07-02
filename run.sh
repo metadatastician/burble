@@ -36,7 +36,7 @@ trace "Current directory: $(pwd)"
 BURBLE_DIR="$(cd "$(dirname "$0")" && pwd)"
 trace "BURBLE_DIR resolved to: $BURBLE_DIR"
 
-LAUNCHER_SCRIPT="$BURBLE_DIR/scripts/burble-launcher.sh"
+LAUNCHER_SCRIPT="$BURBLE_DIR/burble-launcher.sh"
 trace "Calling launcher script: $LAUNCHER_SCRIPT"
 trace "Arguments: $*"
 

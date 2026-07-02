@@ -18,7 +18,8 @@ verification). Each implementation subtree has its own README.
 `config/`:: Compile- and runtime-config (`runtime.exs` reads env vars).
 `priv/`:: Static assets, the Zig NIF (`libburble_coprocessor.so`), certs.
 `rel/`:: Release definitions (`mix release` / Containerfile).
-`test/`:: ExUnit suite (222+ tests; property, e2e, contract, concurrency).
+`test/`:: ExUnit suite (~707 tests; property, e2e, contract, concurrency).
+Known failures are being triaged and the CI gate is disarmed meanwhile — #100.
 `mix.exs` / `mix.lock`:: Deps. Optional NIFs (`quicer`, `wasmex`) are
 intentionally disabled — see ADR-0004/0007; runtime degrades gracefully.
 

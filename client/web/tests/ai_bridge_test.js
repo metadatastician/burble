@@ -13,7 +13,8 @@ let bridgeProcess = null;
 // Start the bridge before tests.
 async function startBridge() {
   const cmd = new Deno.Command("deno", {
-    args: ["run", "--allow-net", "../../burble-ai-bridge.js"],
+    // --allow-env: the bridge reads BURBLE_AI_BRIDGE_PORT at module load.
+    args: ["run", "--allow-net", "--allow-env", "../burble-ai-bridge.js"],
     cwd: import.meta.dirname,
     stdout: "null",
     stderr: "null",

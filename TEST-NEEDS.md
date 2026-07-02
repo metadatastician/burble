@@ -1,9 +1,19 @@
 # Test & Benchmark Requirements
 
-## CRG Grade: C — ACHIEVED 2026-04-04
+## CRG Grade: D (targeting C — blocked on #100)
 
-All CRG C requirements met:
-- Unit tests: 222+ ExUnit tests (100% pass)
+Authoritative grade lives in `.machine_readable/6a2/STATE.a2ml` (`[crg]`).
+The provisional C claimed 2026-04-04/2026-04-21 is withdrawn per ADR-0007:
+the CI test gate is disarmed (`continue-on-error: true`, issue #100), and a
+grade cannot rest on a gate that does not gate.
+
+**Honest test state (2026-05-20 local evidence, OTP 25):** the full suite is
+~707 tests with 134–165 failures (nondeterministic; OTP25-local vs OTP27-CI
+skew — see STATE.a2ml session history). The "222+ tests, 100% pass" figure
+below is a historical curated-subset claim retained for context only.
+
+CRG C artefact checklist:
+- Unit tests: 222+ ExUnit tests (curated subset; full suite has known failures — #100)
 - Smoke tests: coprocessor + server self-test covered
 - P2P/property-based: StreamData property tests in `server/test/burble/property/room_property_test.exs`
 - E2E/reflexive: voice pipeline and participant lifecycle tests in `server/test/burble/e2e/`
@@ -14,8 +24,10 @@ All CRG C requirements met:
 ## Current State (Updated 2026-04-16)
 
 ### Elixir server tests
-- Unit tests: **222+ Elixir tests — 100% PASS**
-- Zig FFI tests: **Coprocessor integration tests — 100% PASS**
+- Unit tests: 222+ Elixir tests green as a curated subset; **the full suite
+  (~707 tests) carries 134–165 failures and the CI gate is disarmed — #100**
+- Zig FFI tests: **Coprocessor integration tests — 100% PASS** (this build
+  step IS a real CI gate)
 - E2E voice pipeline and participant lifecycle tests — PASS
 - **Signaling E2E:** 19 existing + 6 new safety-contract regression tests in `signaling_test.exs`
   - Session creation, WebRTC relay, voice state transitions, UserSocket auth

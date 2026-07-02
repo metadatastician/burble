@@ -20,6 +20,11 @@ native code. The NIF boundary adds ~200ns overhead.
 Same operation, same data. One path is an interpreted byte loop, the other is
 compiled SIMD. Run the benchmark yourself: `cd server && mix bench.coprocessor`
 
+**Caveat (ADR-0007):** these are library microbenchmarks of the kernels in
+isolation. The live SFU path forwards opaque Opus RTP end-to-end and does not
+execute these kernels; they currently serve self-test and archive paths.
+End-to-end mic-to-speaker latency is tracked in issue #52.
+
 - Zig implementation: `ffi/zig/src/main.zig`
 - NIF interface: `server/lib/burble/coprocessor.ex`
 - More on Zig: https://ziglang.org
