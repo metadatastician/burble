@@ -46,10 +46,9 @@ burble/
 │   └── src/coprocessor/           # audio.zig, dsp.zig, neural.zig, compression.zig, firewall.zig, nif.zig
 ├── client/
 │   ├── web/                       # Browser client — ReScript (migrating to AffineScript, Phase 3/5)
-│   ├── lib/                       # Embeddable SDK (BurbleClient, BurbleVoice, BurbleSpatial, BurbleSignaling)
-│   └── desktop/                   # Ephapax (.eph) desktop client
-├── admin/                         # Admin dashboard (ReScript — migrates in Phase 5)
-├── verification/                  # Safety case, benchmarks, fuzzing, proofs, traceability
+│   └── lib/                       # Embeddable SDK (BurbleClient, BurbleVoice, BurbleSpatial, BurbleSignaling)
+├── admin/                         # Admin dashboard (ReScript — migrates in Phase 5; needs un-vendored Gossamer runtime)
+├── verification/                  # Pointer README only — real artifacts: src/Burble/ABI, server/test, ffi/zig/test
 ├── containers/                    # Containerfile + compose.toml (Chainguard base)
 └── .machine_readable/             # contractiles (MUST/TRUST/INTENT/ADJUST) + 6a2/*.a2ml
 ```
