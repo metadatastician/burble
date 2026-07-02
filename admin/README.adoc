@@ -1,0 +1,28 @@
+// SPDX-License-Identifier: CC-BY-SA-4.0
+= admin — Burble Admin dashboard (NOT RUNNABLE AS-IS)
+
+== Status: quarantined pending toolchain (Phase 0 note, 2026-07-02)
+
+This is a real ReScript TEA (Elm-architecture) application showcasing a
+capability-token security model — but it **cannot currently be run from
+this repo**:
+
+* `public/index.html` loads `/src/App.res.mjs`, which is **not committed**
+  — it requires a ReScript build (`deno task res:build` against
+  `deno.json`/`rescript.json`).
+* Even built, it only runs inside the **Gossamer webview shell** (invoked
+  via `window.__gossamer_invoke`), which is **not vendored** in this repo.
+  In a plain browser every privileged command rejects by design
+  (`src/RuntimeBridge.res`).
+
+Per the completion roadmap, the admin surface is revisited in Phase 3+
+either by vendoring the Gossamer runtime under CI or by replacing this
+with a no-build admin page in the style of `client/web/p2p-voice.html`.
+Until then, treat this directory as design/reference code.
+
+== Contents
+
+* `src/` — App/Model/Msg/BurbleCmd/Capabilities/RuntimeBridge (ReScript TEA)
+* `panels/` — panel manifest
+* `ephapax/` — recording/voice-permission guard stubs (`.eph`)
+* `gossamer.conf.json` — Gossamer shell configuration

@@ -79,13 +79,19 @@ configure.
 
 - Deployment: `containers/compose.toml`
 
-== Mumble Bridge
+== Mumble Bridge (EXPERIMENTAL)
+
+**Caveat first (ADR-0009):** this module is not started by the supervision
+tree and has never been validated against a real Murmur server — the
+"flows" below describe what the code implements, verified only against
+mocked/refused sockets in tests. It lives under `experimental/` until
+supervised and integration-tested.
 
 Persistent TCP connection to Murmur speaking Mumble's protobuf protocol
 (port 64738). Voice (Opus), presence, and text relay bidirectionally. Channel
 mapping is configurable.
 
-**What flows now:**
+**What the code implements:**
 
 - Server-mute and suppress propagate to Burble — if a Mumble admin mutes a user,
   they are muted in the Burble room too (`UserState` fields 7/9 → PubSub cast)
@@ -106,19 +112,21 @@ mapping is configurable.
   arrive in whatever space the sender's game uses. A configurable axis remapping
   will be needed for cross-game accuracy.
 
-- Implementation: `server/lib/burble/bridges/mumble.ex`
+- Implementation: `server/lib/burble/experimental/mumble_bridge.ex`
 - Mumble protocol: https://mumble-protocol.readthedocs.io
 
-== SIP Bridge
+== Bridges (Mumble — experimental; SIP/Discord/Matrix — removed)
 
-Subset of https://www.rfc-editor.org/rfc/rfc3261[RFC 3261]. Listens on UDP/TCP
-for INVITE/BYE/REGISTER, maps SIP sessions to rooms, transcodes G.711/G.722 ↔
-Opus via the Zig coprocessor.
+A Mumble/Murmur bridge module exists at
+`server/lib/burble/experimental/mumble_bridge.ex` but is **experimental**:
+never started by the supervision tree, never validated against a real
+Murmur server (ADR-0009).
 
-**Caveat:** SIP is a 269-page RFC. We cover common call flows — registration,
-basic setup/teardown, DTMF. Complex call transfer scenarios may not work.
-
-- Implementation: `server/lib/burble/bridges/sip.ex` (1,400+ lines)
+The former SIP, Discord, and Matrix bridge modules were **deleted** in the
+Phase 0 truth-reconciliation pass — they were never wired to anything, and
+SIP's G.711 path emitted silence instead of transcoded audio (there was
+never a G.711↔Opus transcoder). ADR-0009 records the revival criteria;
+git history preserves the code.
 
 == Idris2 ABI Proofs & High-Rigor Stack
 
@@ -275,11 +283,10 @@ hyperpolymath repos:
 | `ffi/zig/src/main.zig` | The SIMD speedups are real (3,470 lines)
 | `server/lib/burble/timing/ptp.ex` | PTP actually works (594 lines)
 | `server/lib/burble/application.ex` | OTP supervision tree exists
-| `server/lib/burble/bridges/sip.ex` | SIP is implemented (1,400+ lines)
-| `server/lib/burble/bridges/mumble.ex` | Mumble bridge is implemented
+| `server/lib/burble/experimental/mumble_bridge.ex` | Mumble bridge code exists (EXPERIMENTAL — not supervised, unvalidated; ADR-0009)
 | `server/lib/mix/tasks/bench_coprocessor.ex` | Benchmarks are runnable
 | `containers/compose.toml` | One-command deployment is real
-| `src/abi/Types.idr` | Formal proofs exist
+| `src/Burble/ABI/Types.idr` | Formal proofs exist (compile-time assurance only; ADR-0008)
 | `server/lib/burble/bolt/packet.ex` | Burble Bolt wire format (WoL-compatible magic packet)
 | `server/lib/burble/bolt/naptr.ex` | DNS NAPTR/SRV resolution for bolt-by-domain
 | `server/lib/burble_web/channels/bolt_channel.ex` | Browser incoming-call notification channel

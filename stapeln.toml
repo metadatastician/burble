@@ -3,17 +3,22 @@
 #
 # stapeln builds containers as composable layers (German: "to stack").
 # Each layer is independently cacheable, verifiable, and signable.
+#
+# 2026-07-02: rewritten for burble's actual stack (Elixir/OTP release +
+# Zig NIF). The previous version was RSR template drift describing a
+# Rust/cargo project that never existed here, with a malformed
+# entrypoint. Canonical container assets: containers/Containerfile.server.
 
 [metadata]
 name = "burble"
 version = "0.1.0"
-description = "burble container service"
+description = "burble voice server (Elixir/OTP + Zig coprocessor NIF)"
 author = "Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>"
 license = "MPL-2.0"
 registry = "ghcr.io/hyperpolymath"
 
 [build]
-containerfile = "Containerfile"
+containerfile = "containers/Containerfile.server"
 context = "."
 runtime = "podman"
 
@@ -25,37 +30,41 @@ from = "cgr.dev/chainguard/wolfi-base:latest"
 cache = true
 verify = true
 
-[layers.rust-toolchain]
-description = "Rust compiler and build dependencies"
+[layers.beam-toolchain]
+description = "Erlang/OTP 27 + Elixir 1.17 + Zig 0.15 build toolchain"
 extends = "base"
-packages = ["rust", "pkgconf", "build-base"]
+packages = ["erlang-27", "elixir-1.17", "zig", "build-base", "git"]
 cache = true
 
-[layers.rust-deps]
-description = "Cargo dependency fetch"
-extends = "rust-toolchain"
-commands = ["cargo fetch --locked"]
-cache-key = "Cargo.lock"
+[layers.mix-deps]
+description = "Mix dependency fetch"
+extends = "beam-toolchain"
+commands = ["cd server && mix deps.get --only prod"]
+cache-key = "server/mix.lock"
 cache = true
 
 [layers.build]
-description = "burble Rust compilation"
-extends = "rust-deps"
-commands = ["cargo build --release"]
+description = "Zig FFI + Elixir release build"
+extends = "mix-deps"
+commands = [
+    "cd ffi/zig && zig build -Doptimize=ReleaseFast",
+    "cp ffi/zig/zig-out/lib/libburble_coprocessor.so server/priv/ || true",
+    "cd server && MIX_ENV=prod mix release",
+]
 artifacts = [
-    { src = "target/release/burble", dst = "/app/burble" },
+    { src = "server/_build/prod/rel/burble", dst = "/app" },
 ]
 
 [layers.runtime]
 description = "Minimal runtime"
 from = "cgr.dev/chainguard/wolfi-base:latest"
-packages = ["ca-certificates", "curl"]
+packages = ["ca-certificates", "curl", "libstdc++", "ncurses"]
 copy-from = [
     { layer = "build", src = "/app/", dst = "/app/" },
 ]
-entrypoint = ["["/app/bin/burble"]"]
+entrypoint = ["/app/bin/burble", "start"]
 user = "nonroot"
-expose = [4020]
+expose = [4020, 7373]
 env = { MIX_ENV = "prod" }
 
 # ── Security ───────────────────────────────────────────────────
@@ -87,7 +96,7 @@ fail-on = ["critical", "high"]
 # ── Targets ────────────────────────────────────────────────────
 
 [targets.development]
-layers = ["base", "rust-toolchain", "build"]
+layers = ["base", "beam-toolchain", "build"]
 env = { LOG_LEVEL = "debug" }
 
 [targets.production]
@@ -95,5 +104,5 @@ layers = ["runtime"]
 env = { LOG_LEVEL = "info" }
 
 [targets.test]
-layers = ["base", "rust-toolchain", "build"]
+layers = ["base", "beam-toolchain", "build"]
 env = { LOG_LEVEL = "debug" }

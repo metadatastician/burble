@@ -1,1 +1,23 @@
-= Verification Pillar
+// SPDX-License-Identifier: CC-BY-SA-4.0
+= Verification
+
+This directory once held RSR-template scaffolding (empty `proofs/`,
+`safety_case/`, `traceability/`, `fuzzing/`, `simulations/`, `benchmarks/`,
+`coverage/`, `tests/` subdirectories with one-line READMEs and no
+artifacts). Per ADR-0007 (claims-to-evidence), empty rigor scaffolding
+implies a safety case that does not exist, so it was removed in the
+Phase 0 truth-reconciliation pass.
+
+Where the real verification artifacts actually live:
+
+* *Formal proofs* — `src/Burble/ABI/*.idr` (Idris2; 7/7 modules compile —
+  design assurance only, no runtime enforcement; see ADR-0008 and
+  link:../BURBLE-PROOF-STATUS.md[BURBLE-PROOF-STATUS.md]).
+* *Server tests* — `server/test/` (ExUnit; status and known failures in
+  link:../TEST-NEEDS.md[TEST-NEEDS.md], gate re-arm tracked in issue #100).
+* *Web client tests* — `client/web/tests/` (Deno).
+* *Zig FFI tests* — `ffi/zig/test/` (CI-gated).
+* *Benchmarks* — planned under issue #52 (honest methodology; nothing
+  committed yet).
+
+Artifacts return to this directory when they exist — not before.

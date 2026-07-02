@@ -4,7 +4,8 @@
 #
 # AWOL provides reliable real-time communication over highly unstable
 # wireless networks (WiFi handover, LTE roaming, high-loss environments).
-# It extends the basic Multipath transport with:
+# It is designed to sit above a multipath UDP transport (not currently
+# implemented — sends are dropped with :multipath_not_wired) and adds:
 #
 #   1. Redundancy — selective duplication of voice/signaling packets.
 #   2. Mobility — seamless IP handover (roaming) without session loss.
@@ -233,10 +234,6 @@ defmodule Burble.Network.AWOL do
   end
 
   # ── Helpers ──
-
-  defp transport do
-    Application.get_env(:burble, :awol_transport, Burble.Transport.Multipath)
-  end
 
   # Path selection with redundancy logic.
   defp select_paths(session, :signaling) do

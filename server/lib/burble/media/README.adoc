@@ -35,7 +35,7 @@ Applied in order when adding a peer:
 . SFU — participants never connect directly; all traffic flows through the server.
 . TURN-only — no ICE host or srflx candidates are exposed; the participant's IP is hidden.
 . E2EE — Insertable Streams; the server forwards opaque frames it cannot decrypt.
-. WebTransport / MoQ — QUIC upgrade (future; tracked in `transport/quic.ex`).
+. WebTransport / MoQ — QUIC upgrade (roadmap idea only; no code — the former `transport/quic.ex` placeholder was removed in the Phase 0 cleanup).
 
 == How it fits into the system
 

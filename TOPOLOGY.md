@@ -41,15 +41,14 @@ burble/
 │   └── worker.js                  # Cloudflare Worker wrapper
 ├── src/                           # Idris2 ABI definitions + proofs
 │   ├── ABI.idr                    # Top-level ABI (re-exports)
-│   └── Burble/ABI/                # Types, Permissions, Avow, Vext, MediaPipeline, WebRTCSignaling, Layout, Foreign
+│   └── Burble/ABI/                # Types, Permissions, Avow, Vext, MediaPipeline, WebRTCSignaling, Foreign
 ├── ffi/zig/                       # SOLE Zig FFI — SIMD audio/DSP/neural/compression NIFs
 │   └── src/coprocessor/           # audio.zig, dsp.zig, neural.zig, compression.zig, firewall.zig, nif.zig
 ├── client/
 │   ├── web/                       # Browser client — ReScript (migrating to AffineScript, Phase 3/5)
-│   ├── lib/                       # Embeddable SDK (BurbleClient, BurbleVoice, BurbleSpatial, BurbleSignaling)
-│   └── desktop/                   # Ephapax (.eph) desktop client
-├── admin/                         # Admin dashboard (ReScript — migrates in Phase 5)
-├── verification/                  # Safety case, benchmarks, fuzzing, proofs, traceability
+│   └── lib/                       # Embeddable SDK (BurbleClient, BurbleVoice, BurbleSpatial, BurbleSignaling)
+├── admin/                         # Admin dashboard (ReScript — migrates in Phase 5; needs un-vendored Gossamer runtime)
+├── verification/                  # Pointer README only — real artifacts: src/Burble/ABI, server/test, ffi/zig/test
 ├── containers/                    # Containerfile + compose.toml (Chainguard base)
 └── .machine_readable/             # contractiles (MUST/TRUST/INTENT/ADJUST) + 6a2/*.a2ml
 ```
@@ -60,6 +59,29 @@ burble/
 - `api/zig/` — broken merge-conflicted half-migration duplicate of `ffi/zig/`
 - `signaling/Relay.res` — ReScript duplicate of the authoritative `relay.js`
 - `alloyiser.toml` — orphaned Alloy spec pointing at deleted zig source
+
+### Removed 2026-07-02 (Phase 0 completion — dispositions + kill list, ADR-0009)
+
+Never-started server subsystems (no supervision-tree entry, unreachable):
+
+- `server/lib/burble/transport/multipath.ex` — multipath UDP manager
+- `server/lib/burble/transport/quic.ex` — QUIC/WebTransport placeholder
+- `server/lib/burble/cluster/distributed.ex` — multi-region scaffold
+- `server/lib/burble/bridges/{sip,discord,matrix}.ex` — unproven bridges
+  (Mumble kept, quarantined at `server/lib/burble/experimental/`)
+- `server/lib/burble/bebop/` — hand-maintained duplicate of the generated
+  `Burble.Protocol.*` Bebop codecs
+
+Repo-wide decorative/drifted artifacts:
+
+- `generated/wokelangiser/` — 7MB compliance scan of *other* repos
+- `generated/tlaiser/` — TLA+ that could not model-check
+- `verification/*/` scaffolding — empty; replaced by a pointer README
+- `docs/theory/`, `docs/whitepapers/` — one-line stubs, no content
+- `src/interface/abi/` — duplicate Idris ABI tree (module collision)
+- `client/desktop/` — Ephapax skeleton; compiler not vendored
+- `container/` — uninitialized `{{PLACEHOLDER}}` template tree
+  (`containers/` is canonical)
 
 ## Data Flow
 

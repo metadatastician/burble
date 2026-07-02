@@ -46,20 +46,10 @@ defmodule Burble.Network.CircuitBreakerTest do
   end
 
   describe "bridge resilience" do
+    # SIP/Discord/Matrix bridges were deleted in the Phase 0 cleanup
+    # (never supervised); Mumble remains as the experimental bridge.
     test "Mumble bridge module is available" do
       assert Code.ensure_loaded?(Burble.Bridges.Mumble)
-    end
-
-    test "SIP bridge module is available" do
-      assert Code.ensure_loaded?(Burble.Bridges.SIP)
-    end
-
-    test "Discord bridge module is available" do
-      assert Code.ensure_loaded?(Burble.Bridges.Discord)
-    end
-
-    test "Matrix bridge module is available" do
-      assert Code.ensure_loaded?(Burble.Bridges.Matrix)
     end
   end
 

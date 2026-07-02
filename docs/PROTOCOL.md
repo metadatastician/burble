@@ -95,17 +95,22 @@ Channels live in `server/lib/burble_web/channels/`. Two primary topics:
 - `room:<room_id>` — chat + presence + room events. Tested in
   `server/test/burble_web/channels/room_channel_text_test.exs`.
 
-Frames over the channel transport are encoded as **Bebop** (see below)
-for the binary fast path; text fallback uses JSON.
+Frames over the channel transport are encoded as **JSON**. A Bebop binary
+encoding (see below) exists as generated, tested codecs but is **not yet
+wired into the live channel transport** — it is the planned binary fast
+path, not the current one (ADR-0007 honesty note).
 
 ## Wire schemas — Bebop
 
-Binary schemas live in `server/lib/burble/protocol/`:
+Binary schemas live in `server/lib/burble/protocol/` (generated from
+`server/priv/schemas/*.bop` by `mix bebop.generate`):
 
 - `voice_signal.ex` — voice signaling frames (offer/answer/ICE/keepalive).
 - `room_event.ex` — room lifecycle events (join/leave/mute/move/kick).
 
-Tests: `server/test/burble/bebop/{voice_signal,room_event}_test.exs`.
+Tests: `server/test/burble/protocol/protocol_test.exs`.
+(A duplicate hand-maintained `Burble.Bebop.*` namespace was removed in the
+Phase 0 cleanup; the generated `Burble.Protocol.*` namespace is canonical.)
 
 ## Auth model
 
