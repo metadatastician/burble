@@ -69,6 +69,21 @@ If either guard fails, it will print which package is missing.
 
 ## Development Workflow
 
+### The liveness invariant (ADR-0007)
+
+Every Elixir module under `server/lib/burble/` must be one of:
+
+1. **Supervised** — started by the supervision tree (`application.ex`), or
+2. **Invoked** — a library called by supervised code, or
+3. **Experimental** — under `server/lib/burble/experimental/` with an
+   `EXPERIMENTAL` moduledoc stating what has and has not been validated.
+
+Code that is none of these is dead weight that misleads readers about what
+Burble can do — it gets deleted (git history preserves it; see ADR-0009
+for the bridge precedent and revival criteria). The same spirit applies
+repo-wide: no empty scaffolding directories, no config files describing
+stacks this project doesn't use, no generated artifacts nothing consumes.
+
 ### Branch Naming
 
 ```

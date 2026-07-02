@@ -60,6 +60,29 @@ burble/
 - `signaling/Relay.res` — ReScript duplicate of the authoritative `relay.js`
 - `alloyiser.toml` — orphaned Alloy spec pointing at deleted zig source
 
+### Removed 2026-07-02 (Phase 0 completion — dispositions + kill list, ADR-0009)
+
+Never-started server subsystems (no supervision-tree entry, unreachable):
+
+- `server/lib/burble/transport/multipath.ex` — multipath UDP manager
+- `server/lib/burble/transport/quic.ex` — QUIC/WebTransport placeholder
+- `server/lib/burble/cluster/distributed.ex` — multi-region scaffold
+- `server/lib/burble/bridges/{sip,discord,matrix}.ex` — unproven bridges
+  (Mumble kept, quarantined at `server/lib/burble/experimental/`)
+- `server/lib/burble/bebop/` — hand-maintained duplicate of the generated
+  `Burble.Protocol.*` Bebop codecs
+
+Repo-wide decorative/drifted artifacts:
+
+- `generated/wokelangiser/` — 7MB compliance scan of *other* repos
+- `generated/tlaiser/` — TLA+ that could not model-check
+- `verification/*/` scaffolding — empty; replaced by a pointer README
+- `docs/theory/`, `docs/whitepapers/` — one-line stubs, no content
+- `src/interface/abi/` — duplicate Idris ABI tree (module collision)
+- `client/desktop/` — Ephapax skeleton; compiler not vendored
+- `container/` — uninitialized `{{PLACEHOLDER}}` template tree
+  (`containers/` is canonical)
+
 ## Data Flow
 
 ```
