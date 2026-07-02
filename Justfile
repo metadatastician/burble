@@ -451,7 +451,7 @@ tour:
     echo "  .github/workflows/        CI/CD workflows" 
     echo "  contractiles/             Must/Trust/Dust contracts" 
     echo "  .machine_readable/        Machine-readable metadata" 
-    echo "  container/                Container configuration" 
+    echo "  containers/               Container configuration"
     echo "  examples/                 Usage examples" 
     echo ""
     echo "Quick commands:"
