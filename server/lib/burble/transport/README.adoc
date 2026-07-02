@@ -1,10 +1,15 @@
 // SPDX-License-Identifier: CC-BY-SA-4.0
-= Burble.Transport — RTSP and Multipath
+= Burble.Transport — RTSP
 :toc: preamble
 
 == Purpose
 
-Handles non-WebRTC transport concerns: RTSP for one-to-many broadcast and screen share, and multipath UDP management for resilient voice delivery in multi-homed environments.
+Handles non-WebRTC transport concerns: RTSP for one-to-many broadcast and screen share.
+
+(Historical note: a multipath UDP manager and a QUIC/WebTransport placeholder
+lived here but were never started by the supervision tree; both were removed
+in the Phase 0 truth-reconciliation pass — see git history and the completion
+roadmap. Multipath line-bonding remains a design idea, not code.)
 
 == Key files
 
@@ -16,21 +21,6 @@ Three use cases are supported:
 * *Screen share*: Screen video is served as `/live/room-{id}/screen`.
 * *IDApTIK CCTV*: Camera feeds for the asymmetric co-op game Q character are served as `/live/idaptik/{level}/cctv/{cam}`.
 
-`multipath.ex`:: GenServer that manages multiple UDP paths for voice, bulk, and signaling traffic. In multi-homed environments (WiFi + Ethernet, or multiple ISPs) it distributes traffic intelligently:
-
-[cols="1,2,2"]
-|===
-| Port | Purpose | Strategy
-
-| 4020 | Voice audio | Lowest-RTT path; failover if loss > 10%
-| 6474 | Bulk data | Striped across all healthy paths
-| 6475 | Signaling | Duplicated on all paths for reliability
-|===
-
-Path quality metrics (RTT, loss rate, jitter, bandwidth) are measured via periodic probe packets. When a path degrades, traffic migrates within one RTT measurement cycle.
-
-`quic.ex`:: Placeholder for future WebTransport/QUIC upgrade path (Phase 4+). Currently a no-op module that logs when QUIC is requested and falls back to standard WebRTC.
-
 == How it fits into the system
 
-Standard voice rooms use the SFU (`Burble.Media.Engine`) directly over WebRTC. The RTSP module is invoked only for broadcast and screen share use cases. Multipath is transparent to the rest of the system — it sits below the UDP socket layer and requires no changes to higher-level code.
+Standard voice rooms use the SFU (`Burble.Media.Peer` / `Burble.Media.Engine`) directly over WebRTC. The RTSP module is invoked only for broadcast and screen share use cases.
