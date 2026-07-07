@@ -122,7 +122,12 @@ defmodule BurbleWeb.Channels.SignalingFailureModesTest do
     test "leave + immediate rejoin succeeds",
          %{socket: socket, room_id: room_id} do
       {:ok, _reply, chan1} = join_signaling(socket, room_id)
-      leave(chan1)
+
+      # Unlink before leaving: the channel exits {:shutdown, :left} and the
+      # exit signal would otherwise race the rejoin and kill the test process.
+      Process.unlink(chan1.channel_pid)
+      ref = leave(chan1)
+      assert_reply ref, :ok
 
       {:ok, _reply, chan2} = join_signaling(socket, room_id)
       ref = push(chan2, "ping", %{})

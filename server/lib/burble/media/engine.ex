@@ -402,7 +402,7 @@ defmodule Burble.Media.Engine do
     # this returns the session-level negotiation parameters only.
     # Privacy hardening is applied via Burble.Media.Privacy.
     offer = %{
-      type: "offer",
+      type: :offer,
       privacy_mode: privacy_mode,
       codec: config.codec,
       ice_policy: ice_policy(privacy_mode),

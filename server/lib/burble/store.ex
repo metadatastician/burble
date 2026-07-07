@@ -236,8 +236,20 @@ defmodule Burble.Store do
         # The server may start before VeriSimDB's DNS entry propagates in the
         # container bridge network — retry with exponential backoff to absorb
         # the startup race.
+        #
+        # Attempts/base delay are configurable because each failed probe also
+        # pays Req's own transient-retry ladder (~7s on connection refused),
+        # so the defaults cost ~60s+ of blocking init when the DB is down —
+        # tests (and impatient deployments) need a shorter ladder.
         {attempts, base_delay} =
-          if offline_ok, do: {1, 200}, else: {@health_check_max_attempts, 1_000}
+          if offline_ok do
+            {1, 200}
+          else
+            {
+              Keyword.get(config, :health_check_attempts, @health_check_max_attempts),
+              Keyword.get(config, :health_check_base_delay_ms, 1_000)
+            }
+          end
 
         case await_verisimdb(client, attempts, base_delay) do
           :ok ->

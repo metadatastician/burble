@@ -173,7 +173,7 @@ defmodule BurbleWeb.SignalingChannel do
   @doc "Health check — reply immediately with pong."
   @impl true
   def handle_in("ping", _params, socket) do
-    {:reply, {:ok, %{"pong" => true}}, socket}
+    {:reply, {:ok, %{pong: true}}, socket}
   end
 
   # Catch-all for unrecognised events — return a structured error rather than

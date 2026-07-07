@@ -270,9 +270,12 @@ defmodule BurbleWeb.RoomChannel do
   def handle_in("text:typing", _params, socket) do
     user_id = socket.assigns.user_id
     now = System.monotonic_time(:millisecond)
-    last_typing = socket.assigns[:last_typing_broadcast_ms] || 0
+    # nil sentinel, NOT 0: monotonic time is typically NEGATIVE on the BEAM,
+    # so `now - 0 >= throttle` was never true and the first (and every)
+    # typing indicator was silently swallowed.
+    last_typing = socket.assigns[:last_typing_broadcast_ms]
 
-    if now - last_typing >= @typing_throttle_ms do
+    if is_nil(last_typing) or now - last_typing >= @typing_throttle_ms do
       broadcast_from!(socket, "text:typing", %{from: user_id})
       socket = assign(socket, :last_typing_broadcast_ms, now)
       {:noreply, socket}

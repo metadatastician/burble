@@ -19,6 +19,9 @@ defmodule Burble.Topology.TopologyTest do
 
   describe "module definition" do
     test "Topology module exists and exports expected functions" do
+      # function_exported?/3 does not load the module — ensure it first.
+      assert Code.ensure_loaded?(Topology)
+
       expected = [
         mode: 0, capabilities: 0, has_store?: 0, has_recording?: 0,
         has_moderation?: 0, e2ee_mandatory?: 0, default_privacy: 0,
@@ -32,6 +35,8 @@ defmodule Burble.Topology.TopologyTest do
     end
 
     test "Transition module exists and exports expected functions" do
+      # function_exported?/3 does not load the module — ensure it first.
+      assert Code.ensure_loaded?(Transition)
       assert function_exported?(Transition, :transition_room, 2)
       assert function_exported?(Transition, :merge_rooms, 3)
     end

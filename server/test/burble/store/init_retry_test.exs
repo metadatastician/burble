@@ -36,23 +36,34 @@ defmodule Burble.Store.InitRetryTest do
         reuseaddr: true
       ])
 
-    # Accept and respond in a separate process so the test is not blocked.
-    Task.start(fn ->
-      case :gen_tcp.accept(lsock, 5_000) do
-        {:ok, sock} ->
-          # Drain the HTTP request (we don't care about its content).
-          :gen_tcp.recv(sock, 0, 2_000)
-
-          response = "HTTP/1.1 200 OK\r\nContent-Length: 4\r\n\r\ntrue"
-          :gen_tcp.send(sock, response)
-          :gen_tcp.close(sock)
-
-        {:error, _} ->
-          :ok
-      end
-    end)
+    # Serve in a loop so the migrator's follow-up requests get an immediate
+    # 500 instead of hanging in connect-backlog until Req's receive_timeout
+    # (+ its transient retries) blow the test budget. First request (the
+    # health check) gets 200 "true"; everything after gets 500.
+    Task.start(fn -> stub_accept_loop(lsock, 0) end)
 
     lsock
+  end
+
+  defp stub_accept_loop(lsock, n) do
+    case :gen_tcp.accept(lsock, 30_000) do
+      {:ok, sock} ->
+        :gen_tcp.recv(sock, 0, 2_000)
+
+        response =
+          if n == 0 do
+            "HTTP/1.1 200 OK\r\nContent-Length: 4\r\n\r\ntrue"
+          else
+            "HTTP/1.1 500 Internal Server Error\r\nContent-Length: 15\r\n\r\nstorage crashed"
+          end
+
+        :gen_tcp.send(sock, response)
+        :gen_tcp.close(sock)
+        stub_accept_loop(lsock, n + 1)
+
+      {:error, _} ->
+        :ok
+    end
   end
 
   defp stop_stub_server(lsock) do
@@ -86,7 +97,12 @@ defmodule Burble.Store.InitRetryTest do
       url: "http://127.0.0.1:#{@test_port + 10}",
       auth: :none,
       # Keep the per-request timeout short so the test finishes quickly.
-      timeout: 500
+      timeout: 500,
+      # Short ladder: each failed probe also pays Req's transient-retry
+      # delays (~7s on econnrefused), so the default 5-attempt/31s ladder
+      # overshoots the 60s test timeout.
+      health_check_attempts: 2,
+      health_check_base_delay_ms: 100
     )
 
     # Temporarily shorten the backoff delays so the test does not take 31s.
@@ -111,7 +127,9 @@ defmodule Burble.Store.InitRetryTest do
     Application.put_env(:burble, Burble.Store,
       url: "http://127.0.0.1:#{@test_port + 1}",
       auth: :none,
-      timeout: 2_000
+      timeout: 2_000,
+      health_check_attempts: 2,
+      health_check_base_delay_ms: 100
     )
 
     # The stub only answers once (health check).  The migrator will also issue
@@ -124,19 +142,6 @@ defmodule Burble.Store.InitRetryTest do
     # Specifically: if the store still silently continued after migration
     # failure, start would return {:ok, pid}. Under the new code it must
     # return {:error, {:migration_failed, _}}.
-    Task.start(fn ->
-      # Accept the health-check connection.
-      case :gen_tcp.accept(lsock, 3_000) do
-        {:ok, sock} ->
-          :gen_tcp.recv(sock, 0, 1_000)
-          :gen_tcp.send(sock, "HTTP/1.1 200 OK\r\nContent-Length: 4\r\n\r\ntrue")
-          :gen_tcp.close(sock)
-
-        _ ->
-          :ok
-      end
-    end)
-
     result = GenServer.start(__MODULE__.TestStore, [])
 
     stop_stub_server(lsock)

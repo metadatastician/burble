@@ -144,7 +144,7 @@ defmodule BurbleWeb.Channels.SignalingChannelTest do
       {:ok, _reply, chan} = join_signaling(socket, room_id)
 
       ref = push(chan, "ping", %{})
-      assert_reply ref, :ok, %{"pong" => true}
+      assert_reply ref, :ok, %{pong: true}
 
       leave(chan)
     end

@@ -14,7 +14,11 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # 15 min starved the cold cabal build of casket-ssg (~40 min): the job
+    # was killed before actions/cache could save, so EVERY run rebuilt cold
+    # and Pages never went green. 90 min lets the first run complete and
+    # seed the dist-newstyle cache; warm runs finish in minutes.
+    timeout-minutes: 90
     steps:
       - name: Checkout
         uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4

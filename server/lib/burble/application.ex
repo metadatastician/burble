@@ -54,7 +54,7 @@ defmodule Burble.Application do
       Burble.Presence,
 
       # Room supervisor — DynamicSupervisor for room processes
-      {DynamicSupervisor, name: Burble.RoomSupervisor, strategy: :one_for_one},
+      {DynamicSupervisor, name: Burble.RoomSupervisor, strategy: :one_for_one, max_restarts: 100, max_seconds: 5},
 
       # Room registry — maps room IDs to PIDs
       {Registry, keys: :unique, name: Burble.RoomRegistry},
@@ -63,13 +63,13 @@ defmodule Burble.Application do
       {Registry, keys: :unique, name: Burble.PeerRegistry},
 
       # WebRTC peer supervisor — one Peer GenServer per active participant
-      {DynamicSupervisor, name: Burble.PeerSupervisor, strategy: :one_for_one},
+      {DynamicSupervisor, name: Burble.PeerSupervisor, strategy: :one_for_one, max_restarts: 100, max_seconds: 5},
 
       # Coprocessor pipeline registry — maps peer IDs to pipeline PIDs
       {Registry, keys: :unique, name: Burble.CoprocessorRegistry},
 
       # Coprocessor pipeline supervisor — one pipeline per active peer
-      {DynamicSupervisor, name: Burble.CoprocessorSupervisor, strategy: :one_for_one},
+      {DynamicSupervisor, name: Burble.CoprocessorSupervisor, strategy: :one_for_one, max_restarts: 100, max_seconds: 5},
 
       # In-memory chat message store (ETS-backed, per-room, ephemeral)
       Burble.Chat.MessageStore,

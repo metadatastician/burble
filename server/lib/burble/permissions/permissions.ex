@@ -100,7 +100,10 @@ defmodule Burble.Permissions do
   end
 
   def role_template(:member) do
-    MapSet.new([:join_room, :speak, :whisper, :text])
+    # :chat_send is included so the LLM-subset invariant holds (an LLM
+    # participant must never hold a permission a human member lacks) and
+    # because members chat with LLM participants.
+    MapSet.new([:join_room, :speak, :whisper, :text, :chat_send])
   end
 
   def role_template(:guest) do
