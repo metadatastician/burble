@@ -14,7 +14,7 @@ Evaluates `burble` against *Component Readiness Grades v2.0 (STRICT)*.
 - Standard: `standards/component-readiness-grades/COMPONENT-READINESS-GRADES.md`
 - Criteria boilerplate: `rsr-template-repo/docs/governance/CRG-CRITERIA.adoc`
 - Self-declared grade:
-  * `.machine_readable/6a2/STATE.a2ml` -> `[crg] grade = "C"`
+  * `.machine_readable/descriptiles/STATE.a2ml` -> `[crg] grade = "C"`
   * Same file: `version = "1.1.0-pre"`, `completion-percentage = 72`
 - Audit date: 2026-04-18
 
@@ -47,9 +47,9 @@ This audit grades Burble *as-is today*, not aspirationally.
 | PRESENT (21)
 | `.github/workflows/`
 
-| `.machine_readable/6a2/` canonical A2ML
+| `.machine_readable/descriptiles/` canonical A2ML
 | PRESENT (STATE, META, ECOSYSTEM, AGENTIC, NEUROSYM, PLAYBOOK)
-| `.machine_readable/6a2/`
+| `.machine_readable/descriptiles/`
 
 | `0-AI-MANIFEST.a2ml`
 | PRESENT
@@ -140,7 +140,7 @@ This does not satisfy v2.0 C's "deep per-file + per-directory annotation" expect
 
 === Dogfooding / home-stable evidence
 
-- `.machine_readable/6a2/STATE.a2ml` has no `[dogfooding-status]` section.
+- `.machine_readable/descriptiles/STATE.a2ml` has no `[dogfooding-status]` section.
 - No `DOGFOOD-LOG` file found under `docs/` (including `docs/practice/`).
 
 Without dated, concrete dogfooding evidence, C cannot be awarded under v2.0 strictness.
@@ -202,7 +202,7 @@ Burble is technically substantial but does not yet meet C's evidence bar.
 
 Strong positive signals:
 
-1. D-floor structure is present (21 workflows, canonical `.machine_readable/6a2/`, contractile trident).
+1. D-floor structure is present (21 workflows, canonical `.machine_readable/descriptiles/`, contractile trident).
 2. Real implementation and proof surface exists (Idris2 ABI modules + Zig FFI + server/client stacks).
 3. Test inventory is non-trivial and partially runnable locally (`zig build test` passed).
 
@@ -216,7 +216,7 @@ Immediate blockers to C:
 
 == Related Files
 
-- `.machine_readable/6a2/STATE.a2ml` — updated to `D` with demotion reference.
+- `.machine_readable/descriptiles/STATE.a2ml` — updated to `D` with demotion reference.
 - `docs/governance/CRG-LIFT-PLAN-2026-04-18.adoc` — D->C action plan.
 
 _End of audit._

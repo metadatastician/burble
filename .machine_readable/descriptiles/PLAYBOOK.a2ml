@@ -27,7 +27,7 @@ steps = [
 
 [incident-response]
 steps = [
-  "1. Check .machine_readable/6a2/STATE.a2ml for current status + known blockers",
+  "1. Check .machine_readable/descriptiles/STATE.a2ml for current status + known blockers",
   "2. Review recent commits and CI results (git log -10, gh run list)",
   "3. Run `just test` (Elixir + Zig tests)",
   "4. Run `just scan` (panic-attacker static analysis)",

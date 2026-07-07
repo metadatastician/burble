@@ -51,7 +51,7 @@ burble/
 ├── ffi/zig/             # SIMD coprocessor NIFs (audio, DSP, neural, compression)
 ├── src/abi/             # Idris2 ABI definitions (Types.idr, Foreign.idr)
 ├── containers/          # Containerfiles + compose.toml
-└── .machine_readable/   # .machine_readable/6a2/STATE.a2ml, .machine_readable/6a2/META.a2ml, .machine_readable/6a2/ECOSYSTEM.a2ml
+└── .machine_readable/   # .machine_readable/descriptiles/STATE.a2ml, .machine_readable/descriptiles/META.a2ml, .machine_readable/descriptiles/ECOSYSTEM.a2ml
 ```
 
 ## INTEGRATION
