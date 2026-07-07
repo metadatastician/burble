@@ -119,7 +119,11 @@ defmodule Burble.Timing.Alignment do
   """
   @spec report_node_sync(atom(), non_neg_integer(), integer()) :: :ok
   def report_node_sync(node, rtp_ts, wall_ns) do
-    GenServer.cast(__MODULE__, {:report_node_sync, node, rtp_ts, wall_ns})
+    # Sample the matching local timestamp HERE, in the caller — measuring it
+    # in the handler adds cast-queue latency to the offset, which shows up
+    # directly as phantom drift (µs of jitter → thousands of bogus PPM).
+    local_ns = :erlang.monotonic_time(:nanosecond)
+    GenServer.cast(__MODULE__, {:report_node_sync, node, rtp_ts, wall_ns, local_ns})
   end
 
   @doc """
@@ -179,9 +183,17 @@ defmodule Burble.Timing.Alignment do
   end
 
   @impl true
-  def handle_cast({:report_node_sync, reporting_node, _rtp_ts, wall_ns}, state) do
+  def handle_cast({:report_node_sync, reporting_node, rtp_ts, wall_ns}, state) do
+    # Legacy 4-tuple form: no caller-side local timestamp — sample here and
+    # accept the cast-latency noise.
+    local_ns = :erlang.monotonic_time(:nanosecond)
+    handle_cast({:report_node_sync, reporting_node, rtp_ts, wall_ns, local_ns}, state)
+  end
+
+  @impl true
+  def handle_cast({:report_node_sync, reporting_node, _rtp_ts, wall_ns, local_ns}, state) do
     now_mono_ms = monotonic_ms()
-    now_ns = :erlang.monotonic_time(:nanosecond)
+    now_ns = local_ns
 
     # Evict stale nodes first (O(N), ≤ ~50 nodes).
     state = evict_stale(state, now_mono_ms)

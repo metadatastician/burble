@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: MPL-2.0
-# Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath)
+# Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
 
 defmodule Burble.LLM.Transport do
   @moduledoc """
@@ -38,34 +38,51 @@ defmodule Burble.LLM.Transport do
   """
   def start_link(opts \\ []) do
     endpoints = Keyword.get(opts, :endpoints, default_endpoints())
-    GenServer.start_link(__MODULE__, endpoints, name: __MODULE__)
+
+    # `auto_health_check: false` (tests) skips the connect-based probe that
+    # would mark unreachable fixture hosts offline.
+    init_arg = %{
+      endpoints: endpoints,
+      auto_health_check: Keyword.get(opts, :auto_health_check, true)
+    }
+
+    # `name: nil` starts an unregistered instance (tests); default is the
+    # app-owned singleton registered under the module name.
+    case Keyword.get(opts, :name, __MODULE__) do
+      nil -> GenServer.start_link(__MODULE__, init_arg)
+      name -> GenServer.start_link(__MODULE__, init_arg, name: name)
+    end
   end
 
   @doc """
   Get the best available LLM endpoint.
   """
-  def get_active_endpoint do
-    GenServer.call(__MODULE__, :get_active_endpoint)
+  def get_active_endpoint(server \\ __MODULE__) do
+    GenServer.call(server, :get_active_endpoint)
   end
 
   @doc """
   Report a failure on an endpoint to trigger failover.
   """
-  def report_failure(host, port) do
-    GenServer.cast(__MODULE__, {:report_failure, host, port})
+  def report_failure(server \\ __MODULE__, host, port)
+
+  def report_failure(server, host, port) do
+    GenServer.cast(server, {:report_failure, host, port})
   end
 
   # --- GenServer Callbacks ---
 
-  def init(endpoints) do
-    # Initial health check
-    send(self(), :health_check)
+  def init(%{endpoints: endpoints, auto_health_check: auto?}) do
+    # Initial health check (skipped when auto_health_check: false)
+    if auto?, do: send(self(), :health_check)
     {:ok, %{endpoints: endpoints, active: nil}}
   end
 
   def handle_call(:get_active_endpoint, _from, state) do
-    active = state.active || select_best_endpoint(state.endpoints)
-    {:reply, {:ok, active}, %{state | active: active}}
+    case state.active || select_best_endpoint(state.endpoints) do
+      nil -> {:reply, {:error, :no_endpoint_available}, state}
+      active -> {:reply, {:ok, active}, %{state | active: active}}
+    end
   end
 
   def handle_cast({:report_failure, host, port}, state) do

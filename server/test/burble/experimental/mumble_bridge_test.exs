@@ -35,6 +35,9 @@ defmodule Burble.Bridges.BridgesTest do
     end
 
     test "exports its public API" do
+      # function_exported?/3 does not load the module — ensure it first
+      # (test order within this file is randomised).
+      assert Code.ensure_loaded?(Mumble)
       assert function_exported?(Mumble, :stop, 1)
       assert function_exported?(Mumble, :status, 1)
       assert function_exported?(Mumble, :mumble_users, 1)

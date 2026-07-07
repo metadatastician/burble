@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: MPL-2.0
+# Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
 #
 # Burble.Bolt.Packet — wire format for Burble Bolt magic packets.
 #
@@ -164,7 +165,12 @@ defmodule Burble.Bolt.Packet do
   @doc "Format a 6-byte MAC binary to \"aa:bb:cc:dd:ee:ff\" string."
   @spec format_mac(mac()) :: String.t()
   def format_mac(<<a, b, c, d, e, f>>),
-    do: Enum.map_join([a, b, c, d, e, f], ":", &(Integer.to_string(&1, 16) |> String.pad_leading(2, "0")))
+    do:
+      Enum.map_join(
+        [a, b, c, d, e, f],
+        ":",
+        &(Integer.to_string(&1, 16) |> String.downcase() |> String.pad_leading(2, "0"))
+      )
 
   # ---------------------------------------------------------------------------
 

@@ -177,6 +177,25 @@ defmodule Burble.Timing.ClockCorrelator do
   @impl true
   def handle_cast({:record_sync_point, rtp_ts, wall_ns}, state) do
     {unwrapped, new_state} = unwrap_rtp(rtp_ts, state)
+
+    # Whole-wrap correction. RTP-space unwrapping can only see ±half a wrap
+    # (2^31 ticks ≈ 12h at 48 kHz); if sync points are farther apart than
+    # that — or a duplicate raw value arrives exactly a full wrap later —
+    # the wall-clock delta says how many whole wraps (k·2^32) were skipped.
+    # For normal per-packet cadence expected ≈ actual, so k = 0.
+    {unwrapped, new_state} =
+      case new_state.sync_points do
+        [{prev_unwrapped, prev_wall} | _] when wall_ns > prev_wall ->
+          expected_ticks = (wall_ns - prev_wall) * new_state.clock_rate / 1.0e9
+          actual_ticks = unwrapped - prev_unwrapped
+          k = round((expected_ticks - actual_ticks) / @rtp_wraparound)
+          corrected = unwrapped + k * @rtp_wraparound
+          {corrected, %{new_state | last_unwrapped: corrected}}
+
+        _ ->
+          {unwrapped, new_state}
+      end
+
     point = {unwrapped, wall_ns}
 
     # Prepend and trim to max window size.  We store newest-first so pattern

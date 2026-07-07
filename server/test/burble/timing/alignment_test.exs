@@ -92,7 +92,7 @@ defmodule Burble.Timing.AlignmentTest do
       Process.sleep(5)
       delta_ns = 10_010_000
       now2 = :erlang.monotonic_time(:nanosecond)
-      GenServer.cast(pid, {:report_node_sync, remote, 96_000, now2 + delta_ns})
+      GenServer.cast(pid, {:report_node_sync, remote, 96_000, now2 + delta_ns, now2})
       flush(pid)
 
       assert {:ok, drift} = GenServer.call(pid, {:node_drift_ppm, remote})
@@ -110,12 +110,12 @@ defmodule Burble.Timing.AlignmentTest do
       fixed_offset = 1_000_000
 
       now1 = :erlang.monotonic_time(:nanosecond)
-      GenServer.cast(pid, {:report_node_sync, remote, 0, now1 + fixed_offset})
+      GenServer.cast(pid, {:report_node_sync, remote, 0, now1 + fixed_offset, now1})
       flush(pid)
 
       Process.sleep(5)
       now2 = :erlang.monotonic_time(:nanosecond)
-      GenServer.cast(pid, {:report_node_sync, remote, 48_000, now2 + fixed_offset})
+      GenServer.cast(pid, {:report_node_sync, remote, 48_000, now2 + fixed_offset, now2})
       flush(pid)
 
       assert {:ok, drift} = GenServer.call(pid, {:node_drift_ppm, remote})

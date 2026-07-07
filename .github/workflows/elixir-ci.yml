@@ -86,18 +86,13 @@ jobs:
           cp ffi/zig/zig-out/lib/libburble_coprocessor.so server/priv/ 2>/dev/null || true
       - name: Run server tests
         working-directory: ${{ github.workspace }}
-        # GATE NARROWED 2026-05-25: the underlying boot-failure root cause
-        # from #39 IS fixed (`offline_ok: true` on Burble.Store, optional
-        # :quicer, graceful Bolt/RTSP bind degradation, SingletonWatcher
-        # in test_helper.exs) — confirmed by PR #87 reaching 3m30s
-        # of executing tests rather than fast-bailing at boot.
-        # However the re-armed gate then exposed pre-existing test
-        # residue in LLM.Transport, Packet, Safety.ProvenBridge,
-        # Timing, and Topology clusters that pre-date #39 and need
-        # per-cluster fixes (some tracked in #77 etc.). Keeping the
-        # gate suppressed until those land — *not* the same situation
-        # as the 2026-05-15 "test suite won't even boot" deactivation.
-        continue-on-error: true
+        # GATE RE-ARMED 2026-07-07: every pre-existing failure cluster is
+        # fixed (LLM singleton stop/start app-collapse cascade, RTSP socket
+        # ownership + instance threading, Groove :pop state wipe, Packet
+        # format_mac, ProvenBridge constant_time_eq?, Timing drift/wraparound,
+        # Topology, Store init-retry ladder, typing-throttle monotonic bug,
+        # circuit-breaker test drift). A failing test turns this job red —
+        # this is the CRG grade-C test-pass-evidence artefact (#35/#39).
         run: just test-server
   dialyzer:
     name: Dialyzer

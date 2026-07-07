@@ -200,10 +200,32 @@ defmodule Burble.Media.EngineTest do
       test_pid = self()
       packet = :crypto.strong_rand_bytes(20)
 
+      # add_peer started a REAL Peer GenServer registered under receiver_id
+      # in the (unique-keys) PeerRegistry — the stub below could never
+      # register over it. Kill the real peer (restart: :temporary, so it
+      # stays down) and let the stub take its registry slot.
+      [{real_peer, _}] = Registry.lookup(Burble.PeerRegistry, receiver_id)
+      real_ref = Process.monitor(real_peer)
+      Process.exit(real_peer, :kill)
+      assert_receive {:DOWN, ^real_ref, :process, _, _}, 500
+
       stub_pid =
         spawn(fn ->
-          # Registry.register/3 registers the *calling* process.
-          {:ok, _} = Registry.register(Burble.PeerRegistry, receiver_id, nil)
+          # Registry.register/3 registers the *calling* process. Registry
+          # cleanup of the killed peer's entry is asynchronous — retry
+          # briefly until the slot frees up.
+          register = fn register, attempts ->
+            case Registry.register(Burble.PeerRegistry, receiver_id, nil) do
+              {:ok, _} ->
+                :ok
+
+              {:error, {:already_registered, _}} when attempts > 0 ->
+                Process.sleep(10)
+                register.(register, attempts - 1)
+            end
+          end
+
+          :ok = register.(register, 50)
           # Signal readiness.
           send(test_pid, :stub_ready)
 

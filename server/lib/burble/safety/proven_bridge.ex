@@ -55,7 +55,9 @@ defmodule Burble.Safety.ProvenBridge do
       apply(@proven_crypto, :constant_time_compare, [a, b])
     else
       # Fallback: Erlang's crypto module provides constant-time compare.
-      :crypto.hash_equals(a, b)
+      # :crypto.hash_equals/2 raises on unequal lengths; unequal-length
+      # inputs are simply not equal (length is not secret content).
+      byte_size(a) == byte_size(b) and :crypto.hash_equals(a, b)
     end
   end
 

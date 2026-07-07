@@ -27,14 +27,18 @@ The other two are per-directory READMEs in core subtrees and CI test-pass eviden
   `server/lib/burble_web`, `client/web`, `client/desktop`,
   `client/lib`, `signaling`, `ffi/zig`. Closes the second of the
   three grade-C artefacts.
-* ❌ CI test-pass evidence: `.github/workflows/elixir-ci.yml`
-  exists, but the Run-server-tests / Build-Zig-FFI / Run-Dialyzer
-  steps carry `continue-on-error: true` ("GATE DEACTIVATED
-  2026-05-15"). Re-arming is tracked in issue #39 and attempted
-  in PR #87 — the boot-collapse root cause is fixed, but
-  pre-existing test-residue failures need addressing per-cluster
-  before the gate can stay green. **This is the remaining blocker
-  for grade C.**
+* ✅ CI test-pass evidence: the Run-server-tests gate in
+  `.github/workflows/elixir-ci.yml` was RE-ARMED 2026-07-07 —
+  `continue-on-error` removed, a failing test turns CI red. All
+  pre-existing failure clusters were fixed: the LLM-test
+  singleton stop/start app-collapse cascade (~50 collateral
+  failures), RTSP socket-ownership + instance threading, Groove
+  `:pop` state wipe, `format_mac` casing, `constant_time_eq?`
+  raise-on-unequal-length, Timing drift/wraparound math, Topology,
+  Store init-retry ladder, and the typing-throttle monotonic-time
+  bug. 652 tests / 0 failures locally (1 skipped: AWOL multipath,
+  data plane not yet built). The Dialyzer step remains advisory
+  pending per-warning suppression work.
 
 ---
 

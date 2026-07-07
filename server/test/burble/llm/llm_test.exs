@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: MPL-2.0
+# Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
 #
 # Burble LLM module tests — covers core query processing, streaming, the
 # connection registry, transport endpoint management, protocol frame parsing,
@@ -168,19 +169,23 @@ defmodule Burble.LLMTest do
   # ---------------------------------------------------------------------------
 
   describe "LLM.Transport" do
+    # Starts a private, UNREGISTERED Transport instance (name: nil) so the
+    # app-owned singleton is untouched — stopping the global instance races
+    # the supervisor restart and can shut the whole application down
+    # mid-suite (see LLM.Supervisor test note above).
     setup do
-      case Process.whereis(Burble.LLM.Transport) do
-        nil -> :ok
-        pid -> GenServer.stop(pid)
-      end
-
       endpoints = [
         %{host: "primary.test", port: 8503, priority: 1, protocol: :quic, status: :online},
         %{host: "backup.test", port: 8503, priority: 2, protocol: :quic, status: :online},
         %{host: "fallback.test", port: 8085, priority: 3, protocol: :tcp, status: :online}
       ]
 
-      {:ok, pid} = Burble.LLM.Transport.start_link(endpoints: endpoints)
+      {:ok, pid} =
+        Burble.LLM.Transport.start_link(
+          endpoints: endpoints,
+          name: nil,
+          auto_health_check: false
+        )
       on_exit(fn -> if Process.alive?(pid), do: GenServer.stop(pid) end)
 
       {:ok, pid: pid, endpoints: endpoints}
@@ -191,26 +196,26 @@ defmodule Burble.LLMTest do
       assert Process.alive?(pid)
     end
 
-    test "get_active_endpoint/0 returns {:ok, endpoint}" do
-      assert {:ok, endpoint} = Burble.LLM.Transport.get_active_endpoint()
+    test "get_active_endpoint/0 returns {:ok, endpoint}", %{pid: pid} do
+      assert {:ok, endpoint} = Burble.LLM.Transport.get_active_endpoint(pid)
       assert is_map(endpoint)
       assert Map.has_key?(endpoint, :host)
       assert Map.has_key?(endpoint, :port)
     end
 
-    test "get_active_endpoint/0 selects the highest-priority online endpoint" do
-      assert {:ok, endpoint} = Burble.LLM.Transport.get_active_endpoint()
+    test "get_active_endpoint/0 selects the highest-priority online endpoint", %{pid: pid} do
+      assert {:ok, endpoint} = Burble.LLM.Transport.get_active_endpoint(pid)
       assert endpoint.host == "primary.test"
       assert endpoint.priority == 1
     end
 
-    test "report_failure/2 marks the endpoint offline and failover selects next" do
-      assert {:ok, %{host: "primary.test"}} = Burble.LLM.Transport.get_active_endpoint()
+    test "report_failure/2 marks the endpoint offline and failover selects next", %{pid: pid} do
+      assert {:ok, %{host: "primary.test"}} = Burble.LLM.Transport.get_active_endpoint(pid)
 
-      Burble.LLM.Transport.report_failure("primary.test", 8503)
-      _ = :sys.get_state(Burble.LLM.Transport)
+      Burble.LLM.Transport.report_failure(pid, "primary.test", 8503)
+      _ = :sys.get_state(pid)
 
-      assert {:ok, next} = Burble.LLM.Transport.get_active_endpoint()
+      assert {:ok, next} = Burble.LLM.Transport.get_active_endpoint(pid)
       refute next.host == "primary.test"
       assert next.status != :offline
     end
@@ -311,13 +316,14 @@ defmodule Burble.LLMTest do
   # ---------------------------------------------------------------------------
 
   describe "LLM.Supervisor" do
-    test "start_link/1 starts the supervisor with children" do
-      case Process.whereis(Burble.LLM.Supervisor) do
-        nil -> :ok
-        pid -> Supervisor.stop(pid)
-      end
-
-      assert {:ok, sup_pid} = Burble.LLM.Supervisor.start_link([])
+    # Uses the app-owned singleton (#62 shared-app strategy). Stopping and
+    # restarting the globally named supervisor here races the application
+    # supervisor's restart of its :permanent child — the loser's restart
+    # fails with :already_started until restart intensity is exceeded and
+    # the WHOLE application shuts down mid-suite (the burble#39/#62 mass
+    # "(EXIT) no process" cascade). Never stop app-owned singletons in tests.
+    test "app-owned supervisor is running with its children" do
+      sup_pid = Process.whereis(Burble.LLM.Supervisor)
       assert is_pid(sup_pid)
       assert Process.alive?(sup_pid)
 
@@ -327,8 +333,6 @@ defmodule Burble.LLMTest do
       assert Enum.any?(children, fn {id, _pid, _type, _mods} ->
         id == Burble.LLM.Transport
       end)
-
-      Supervisor.stop(sup_pid)
     end
   end
 
@@ -347,22 +351,18 @@ defmodule Burble.LLMTest do
     end
 
     test "reset_circuit_breaker/0 resets to :closed" do
-      # Force failures by writing directly to ETS
-      ensure_cb_table()
-      :ets.insert(:burble_llm_circuit_breaker, {:failures, 10})
-      :ets.insert(:burble_llm_circuit_breaker, {:opened_at, System.monotonic_time(:millisecond)})
+      # Trip the breaker through the real API — the provider uses the
+      # generic Burble.CircuitBreaker (:llm_anthropic, threshold 5), not
+      # the legacy :burble_llm_circuit_breaker ETS table this test used
+      # to poke directly.
+      for _ <- 1..5 do
+        Burble.CircuitBreaker.with_breaker(:llm_anthropic, fn -> {:error, :induced} end)
+      end
 
       assert Burble.LLM.AnthropicProvider.circuit_breaker_status() == :open
 
       Burble.LLM.AnthropicProvider.reset_circuit_breaker()
       assert Burble.LLM.AnthropicProvider.circuit_breaker_status() == :closed
-    end
-
-    defp ensure_cb_table do
-      case :ets.info(:burble_llm_circuit_breaker) do
-        :undefined -> :ets.new(:burble_llm_circuit_breaker, [:set, :public, :named_table])
-        _ -> :ok
-      end
     end
   end
 end

@@ -62,7 +62,7 @@ defmodule Burble.Transport.RTSPTest do
     # The `with_named/2` helper still temporarily steals the module name when
     # a test exercises the public API (which hard-codes __MODULE__).
     name = :"rtsp_test_#{System.unique_integer([:positive])}"
-    server = start_supervised!({RTSP, [port: @test_port, name: name]})
+    server = start_supervised!({RTSP, [port: 0, name: name]})
     {:ok, server: server}
   end
 
@@ -206,50 +206,50 @@ defmodule Burble.Transport.RTSPTest do
   # and inspecting the resulting session state stored in the GenServer.
 
   describe "parse_transport_header/1 (via SETUP over TCP)" do
-    # The RTSP SETUP handler calls GenServer.call(__MODULE__, {:register_session, session})
-    # internally, so we need the test server registered under the module name for
-    # each of these tests.
+    # The SETUP handler registers sessions against its OWNING server (threaded
+    # through the acceptor), so each test talks to its private instance on an
+    # ephemeral port — no name-stealing or fixed port needed.
 
     test "standard UDP Transport header stores :udp and client_port pair", %{server: server} do
-      with_named(server, fn ->
-        sid = rtsp_setup(@test_port, "/live/test/speaker",
-          "RTP/AVP;unicast;client_port=4588-4589")
+      {:ok, port} = RTSP.listener_port(server)
 
-        assert {:ok, session} = RTSP.get_session(server, sid)
-        assert session.transport == :udp
-        assert session.client_port == {4588, 4589}
-      end)
+      sid =
+        rtsp_setup(port, "/live/test/speaker", "RTP/AVP;unicast;client_port=4588-4589")
+
+      assert {:ok, session} = RTSP.get_session(server, sid)
+      assert session.transport == :udp
+      assert session.client_port == {4588, 4589}
     end
 
     test "RTP/AVP/TCP Transport header stores :tcp_interleaved", %{server: server} do
-      with_named(server, fn ->
-        sid = rtsp_setup(@test_port, "/live/test/speaker",
-          "RTP/AVP/TCP;unicast;interleaved=0-1")
+      {:ok, port} = RTSP.listener_port(server)
 
-        assert {:ok, session} = RTSP.get_session(server, sid)
-        assert session.transport == :tcp_interleaved
-      end)
+      sid =
+        rtsp_setup(port, "/live/test/speaker", "RTP/AVP/TCP;unicast;interleaved=0-1")
+
+      assert {:ok, session} = RTSP.get_session(server, sid)
+      assert session.transport == :tcp_interleaved
     end
 
     test "explicit 'interleaved' token stores :tcp_interleaved and extracts port", %{server: server} do
-      with_named(server, fn ->
-        sid = rtsp_setup(@test_port, "/live/test/speaker",
-          "RTP/AVP;unicast;interleaved;client_port=5000-5001")
+      {:ok, port} = RTSP.listener_port(server)
 
-        assert {:ok, session} = RTSP.get_session(server, sid)
-        assert session.transport == :tcp_interleaved
-        assert session.client_port == {5000, 5001}
-      end)
+      sid =
+        rtsp_setup(port, "/live/test/speaker", "RTP/AVP;unicast;interleaved;client_port=5000-5001")
+
+      assert {:ok, session} = RTSP.get_session(server, sid)
+      assert session.transport == :tcp_interleaved
+      assert session.client_port == {5000, 5001}
     end
 
     test "absent client_port token stores nil client_port", %{server: server} do
-      with_named(server, fn ->
-        sid = rtsp_setup(@test_port, "/live/test/speaker",
-          "RTP/AVP;unicast")
+      {:ok, port} = RTSP.listener_port(server)
 
-        assert {:ok, session} = RTSP.get_session(server, sid)
-        assert session.client_port == nil
-      end)
+      sid =
+        rtsp_setup(port, "/live/test/speaker", "RTP/AVP;unicast")
+
+      assert {:ok, session} = RTSP.get_session(server, sid)
+      assert session.client_port == nil
     end
   end
 
