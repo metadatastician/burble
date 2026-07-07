@@ -251,9 +251,9 @@ defmodule Burble.Groove do
   end
 
   @impl true
-  def handle_call(:pop, _from, %{queue: q}) do
+  def handle_call(:pop, _from, %{queue: q} = state) do
     messages = :queue.to_list(q)
-    {:reply, messages, %{queue: :queue.new(), depth: 0}}
+    {:reply, messages, %{state | queue: :queue.new(), depth: 0}}
   end
 
   @impl true

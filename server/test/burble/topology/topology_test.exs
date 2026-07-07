@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: MPL-2.0
+# Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
 #
 # Tests for Burble.Topology and Burble.Topology.Transition.
 #
@@ -127,21 +128,27 @@ defmodule Burble.Topology.TopologyTest do
   describe "Topology.Transition" do
     test "transition to monarchic returns :ok (no chain fork needed)" do
       result = Transition.transition_room("test_room", :monarchic)
-      assert result == :ok or match?({:error, :not_found}, result)
+      assert result == :ok or match?({:error, :room_not_found}, result)
     end
 
     test "transition to oligarchic returns :ok (no chain fork needed)" do
       result = Transition.transition_room("test_room", :oligarchic)
-      assert result == :ok or match?({:error, :not_found}, result)
+      assert result == :ok or match?({:error, :room_not_found}, result)
     end
 
     test "transition to distributed returns fork_not_implemented error (Phase 2)" do
-      result = Transition.transition_room("test_room", :distributed)
+      # Transition validates room existence before the fork step, so use a
+      # real room — the test documents that chain fork is Phase 2.
+      room_id = "topo-fork-dist-#{:erlang.unique_integer([:positive])}"
+      {:ok, _pid} = Burble.Rooms.RoomManager.ensure_room(room_id, server_id: "default", name: "Topo")
+      result = Transition.transition_room(room_id, :distributed)
       assert {:error, :fork_not_implemented} = result
     end
 
     test "transition to serverless returns fork_not_implemented error (Phase 2)" do
-      result = Transition.transition_room("test_room", :serverless)
+      room_id = "topo-fork-srvless-#{:erlang.unique_integer([:positive])}"
+      {:ok, _pid} = Burble.Rooms.RoomManager.ensure_room(room_id, server_id: "default", name: "Topo")
+      result = Transition.transition_room(room_id, :serverless)
       assert {:error, :fork_not_implemented} = result
     end
 

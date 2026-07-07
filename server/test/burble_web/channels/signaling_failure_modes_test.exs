@@ -25,6 +25,8 @@ defmodule BurbleWeb.Channels.SignalingFailureModesTest do
     case start_supervised({Phoenix.PubSub, name: Burble.PubSub}) do
       {:ok, _} -> :ok
       {:error, {:already_started, _}} -> :ok
+      # start_supervised wraps the child-start error: {:error, {reason, child_spec}}
+      {:error, {{:already_started, _}, _}} -> :ok
     end
 
     case BurbleWeb.Endpoint.start_link() do

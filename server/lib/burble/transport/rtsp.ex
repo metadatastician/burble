@@ -265,6 +265,17 @@ defmodule Burble.Transport.RTSP do
     GenServer.call(server, {:get_session, session_id})
   end
 
+  @doc """
+  Return the TCP port the RTSP control listener is actually bound to.
+
+  Useful when the server was started with `port: 0` (ephemeral, tests).
+  Returns `{:error, :no_listener}` if the listener failed to start.
+  """
+  @spec listener_port(GenServer.server()) :: {:ok, non_neg_integer()} | {:error, :no_listener}
+  def listener_port(server \\ __MODULE__) do
+    GenServer.call(server, :listener_port)
+  end
+
   # ---------------------------------------------------------------------------
   # GenServer callbacks
   # ---------------------------------------------------------------------------
@@ -295,13 +306,17 @@ defmodule Burble.Transport.RTSP do
     # Start the RTSP TCP listener for control connections.
     case start_rtsp_listener(config[:port]) do
       {:ok, listener} ->
+        # Resolve the port actually bound — `port: 0` (tests) asks the OS
+        # for a free ephemeral port, so the configured value may be 0.
+        {:ok, actual_port} = :inet.port(listener)
+
         Logger.info(
-          "[Burble.Transport.RTSP] RTSP server listening on port #{config[:port]}"
+          "[Burble.Transport.RTSP] RTSP server listening on port #{actual_port}"
         )
 
         # Spawn the acceptor loop to handle incoming RTSP connections.
         spawn_acceptor(listener)
-        {:ok, %{state | listener: listener}}
+        {:ok, %{state | listener: listener, config: Keyword.put(config, :port, actual_port)}}
 
       {:error, reason} ->
         Logger.error(
@@ -421,6 +436,14 @@ defmodule Burble.Transport.RTSP do
   end
 
   @impl true
+  def handle_call(:listener_port, _from, state) do
+    case state.listener do
+      nil -> {:reply, {:error, :no_listener}, state}
+      _ -> {:reply, {:ok, state.config[:port]}, state}
+    end
+  end
+
+  @impl true
   def handle_call({:get_session, session_id}, _from, state) do
     case Map.get(state.sessions, session_id) do
       nil -> {:reply, {:error, :not_found}, state}
@@ -532,14 +555,26 @@ defmodule Burble.Transport.RTSP do
         server_pid = self()
         handler_pid =
           spawn_link(fn ->
+            receive do
+              :socket_ready -> :ok
+            after
+              5_000 -> :ok
+            end
+
             try do
-              handle_rtsp_session(client_socket, state)
+              handle_rtsp_session(client_socket, server_pid, state)
             after
               # Notify the GenServer when the handler exits so we can
               # decrement the active connection count.
               send(server_pid, {:rtsp_handler_exit, self(), client_ip})
             end
           end)
+
+        # Make the handler the socket owner so the socket survives this
+        # GenServer's mailbox turnover, then release the handler (it waits
+        # for :socket_ready so it cannot read before ownership transfers).
+        :ok = :gen_tcp.controlling_process(client_socket, handler_pid)
+        send(handler_pid, :socket_ready)
 
         updated_state = %{state |
           active_handlers: MapSet.put(state.active_handlers, handler_pid),
@@ -609,6 +644,11 @@ defmodule Burble.Transport.RTSP do
     spawn(fn ->
       case :gen_tcp.accept(listener) do
         {:ok, client} ->
+          # Hand the socket to the GenServer BEFORE this acceptor process
+          # exits — a TCP socket is closed when its controlling process
+          # dies, so without the transfer every accepted connection is
+          # dropped the instant the acceptor finishes.
+          :ok = :gen_tcp.controlling_process(client, server)
           send(server, {:rtsp_connection, client})
 
         {:error, reason} ->
@@ -666,10 +706,12 @@ defmodule Burble.Transport.RTSP do
 
   # Handle a single RTSP control session (one TCP connection from a viewer).
   # Implements the minimal RTSP method set: OPTIONS, DESCRIBE, SETUP, PLAY, TEARDOWN.
-  # `session_id` accumulates across requests on the same TCP connection so that
-  # PLAY and TEARDOWN can resolve the correct Session struct.
-  @spec handle_rtsp_session(:gen_tcp.socket(), state(), String.t() | nil) :: :ok
-  defp handle_rtsp_session(client, state, session_id \\ nil) do
+  # `server` is the owning GenServer (NOT the module name — multiple instances
+  # exist under test), and `session_id` accumulates across requests on the same
+  # TCP connection so that PLAY and TEARDOWN can resolve the correct Session.
+  @spec handle_rtsp_session(:gen_tcp.socket(), GenServer.server(), state(), String.t() | nil) ::
+          :ok
+  defp handle_rtsp_session(client, server, state, session_id \\ nil) do
     case :gen_tcp.recv(client, 0, 30_000) do
       {:ok, line} ->
         # Parse the RTSP request line (e.g., "DESCRIBE rtsp://host/path RTSP/1.0").
@@ -677,9 +719,9 @@ defmodule Burble.Transport.RTSP do
           {:ok, method, path, _version} ->
             # Read all headers that follow the request line before dispatching.
             headers = read_headers(client)
-            new_session_id = handle_rtsp_method(client, method, path, headers, session_id)
+            new_session_id = handle_rtsp_method(client, server, method, path, headers, session_id)
             # Continue reading requests on this session.
-            handle_rtsp_session(client, state, new_session_id)
+            handle_rtsp_session(client, server, state, new_session_id)
 
           {:error, _} ->
             Logger.debug("[Burble.Transport.RTSP] Malformed RTSP request, closing")
@@ -749,12 +791,13 @@ defmodule Burble.Transport.RTSP do
   # Returns the (possibly updated) session_id — callers thread it across requests.
   @spec handle_rtsp_method(
           :gen_tcp.socket(),
+          GenServer.server(),
           String.t(),
           String.t(),
           %{String.t() => String.t()},
           String.t() | nil
         ) :: String.t() | nil
-  defp handle_rtsp_method(client, "OPTIONS", _path, _headers, session_id) do
+  defp handle_rtsp_method(client, _server, "OPTIONS", _path, _headers, session_id) do
     response =
       "RTSP/1.0 200 OK\r\n" <>
         "Public: OPTIONS, DESCRIBE, SETUP, PLAY, TEARDOWN\r\n" <>
@@ -764,8 +807,8 @@ defmodule Burble.Transport.RTSP do
     session_id
   end
 
-  defp handle_rtsp_method(client, "DESCRIBE", path, _headers, session_id) do
-    case get_sdp(path) do
+  defp handle_rtsp_method(client, server, "DESCRIBE", path, _headers, session_id) do
+    case GenServer.call(server, {:get_sdp, path}) do
       {:ok, sdp} ->
         response =
           "RTSP/1.0 200 OK\r\n" <>
@@ -783,7 +826,7 @@ defmodule Burble.Transport.RTSP do
     session_id
   end
 
-  defp handle_rtsp_method(client, "SETUP", path, headers, _session_id) do
+  defp handle_rtsp_method(client, server, "SETUP", path, headers, _session_id) do
     # Parse the Transport header to extract client RTP/RTCP port pair.
     # RFC 7826 Transport header example:
     #   Transport: RTP/AVP;unicast;client_port=4588-4589
@@ -809,7 +852,7 @@ defmodule Burble.Transport.RTSP do
     }
 
     # Persist the session in the GenServer's session table.
-    GenServer.call(__MODULE__, {:register_session, session})
+    GenServer.call(server, {:register_session, session})
 
     Logger.debug(
       "[Burble.Transport.RTSP] SETUP session=#{sid} mountpoint=#{path} " <>
@@ -836,15 +879,15 @@ defmodule Burble.Transport.RTSP do
     sid
   end
 
-  defp handle_rtsp_method(client, "PLAY", _path, headers, session_id) do
+  defp handle_rtsp_method(client, server, "PLAY", _path, headers, session_id) do
     # Resolve the session ID: prefer the Session header from the client, fall
     # back to the one we're tracking on this TCP connection.
     resolved_id = Map.get(headers, "session", session_id)
 
-    case resolved_id && GenServer.call(__MODULE__, {:get_session, resolved_id}) do
+    case resolved_id && GenServer.call(server, {:get_session, resolved_id}) do
       {:ok, %Session{state: :ready} = session} ->
         # Transition to :playing.
-        GenServer.call(__MODULE__, {:transition_session, session.id, :playing})
+        GenServer.call(server, {:transition_session, session.id, :playing})
 
         Logger.debug("[Burble.Transport.RTSP] PLAY session=#{session.id} → :playing")
 
@@ -876,13 +919,13 @@ defmodule Burble.Transport.RTSP do
     resolved_id
   end
 
-  defp handle_rtsp_method(client, "TEARDOWN", _path, headers, session_id) do
+  defp handle_rtsp_method(client, server, "TEARDOWN", _path, headers, session_id) do
     resolved_id = Map.get(headers, "session", session_id)
 
     if resolved_id do
       # Transition to :teardown then remove the session.
-      GenServer.call(__MODULE__, {:transition_session, resolved_id, :teardown})
-      GenServer.call(__MODULE__, {:delete_session, resolved_id})
+      GenServer.call(server, {:transition_session, resolved_id, :teardown})
+      GenServer.call(server, {:delete_session, resolved_id})
       Logger.debug("[Burble.Transport.RTSP] TEARDOWN session=#{resolved_id} cleaned up")
     end
 
@@ -891,7 +934,7 @@ defmodule Burble.Transport.RTSP do
     nil
   end
 
-  defp handle_rtsp_method(client, method, _path, _headers, session_id) do
+  defp handle_rtsp_method(client, _server, method, _path, _headers, session_id) do
     Logger.debug("[Burble.Transport.RTSP] Unsupported RTSP method: #{method}")
     :gen_tcp.send(client, "RTSP/1.0 405 Method Not Allowed\r\n\r\n")
     session_id
