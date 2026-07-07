@@ -13,6 +13,7 @@
 @a2ml-schema: session-close.v1.enriched
 
 (
+  name             = "session-close-2026-05-25-install-machinery-and-grade-c"
   protocol         = "continuity / planned-session-close"
   protocol-version = "1.1.0"
   session-id       = "2026-05-25-install-machinery-and-grade-c"

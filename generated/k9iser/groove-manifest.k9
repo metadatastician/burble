@@ -1,4 +1,15 @@
+K9!
+# SPDX-License-Identifier: MPL-2.0
 # Auto-generated K9 contract for groove-manifest
+#
+# NOTE: the K9! magic line, SPDX header, and pedigree block below are
+# required by k9-validate-action — preserve them when regenerating.
+
+pedigree = {
+  name = "groove-manifest",
+  version = "1.0.0",
+  leash = "yard",
+}
 # Safety tier: yard
 
 [must]
