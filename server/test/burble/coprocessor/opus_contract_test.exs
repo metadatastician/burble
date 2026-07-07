@@ -59,8 +59,12 @@ defmodule Burble.Coprocessor.OpusContractTest do
         result = ElixirBackend.opus_transcode(pcm, 48_000, 1, 32_000)
         assert {:error, :not_implemented} = result
       end)
-      # No log output should be emitted — the error is the caller's to handle.
-      assert logs == ""
+      # opus_transcode must not log-and-swallow its own error. capture_log is
+      # process-GLOBAL under async: true, so it also captures unrelated logs
+      # from concurrently-running tests (e.g. the SDP gateway) — asserting a
+      # globally-empty log is therefore racy. Scope the check to opus-relevant
+      # lines, which is what this contract actually governs.
+      refute logs =~ ~r/opus|transcode|not_implemented/i
     end
 
     test "error tuple is returned to caller, not logged and swallowed (ZigBackend)" do
@@ -69,7 +73,7 @@ defmodule Burble.Coprocessor.OpusContractTest do
         result = ZigBackend.opus_transcode(pcm, 48_000, 1, 32_000)
         assert {:error, :not_implemented} = result
       end)
-      assert logs == ""
+      refute logs =~ ~r/opus|transcode|not_implemented/i
     end
 
     test "error tuple is returned to caller, not logged and swallowed (SmartBackend)" do
@@ -78,7 +82,7 @@ defmodule Burble.Coprocessor.OpusContractTest do
         result = SmartBackend.opus_transcode(pcm, 48_000, 1, 32_000)
         assert {:error, :not_implemented} = result
       end)
-      assert logs == ""
+      refute logs =~ ~r/opus|transcode|not_implemented/i
     end
 
     test "error tuple is returned to caller, not logged and swallowed (SNIFBackend)" do
@@ -87,7 +91,7 @@ defmodule Burble.Coprocessor.OpusContractTest do
         result = SNIFBackend.opus_transcode(pcm, 48_000, 1, 32_000)
         assert {:error, :not_implemented} = result
       end)
-      assert logs == ""
+      refute logs =~ ~r/opus|transcode|not_implemented/i
     end
   end
 
