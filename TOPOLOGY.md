@@ -16,7 +16,7 @@ burble/
 │       │   ├── application.ex     # OTP application entry
 │       │   ├── rooms/             # Room lifecycle (room.ex, room_manager.ex, participant.ex, instant_connect.ex)
 │       │   ├── media/             # Media engine (engine.ex, peer.ex, e2ee.ex, pipewire.ex, lmdb_playout.ex)
-│       │   ├── transport/         # Transport layer (multipath.ex, quic.ex, rtsp.ex)
+│       │   ├── transport/         # Transport layer (rtsp.ex)
 │       │   ├── auth/              # Authentication and sessions
 │       │   ├── permissions/       # Room and user permissions
 │       │   ├── groove/            # Groove IPC protocol integration
@@ -50,7 +50,7 @@ burble/
 ├── admin/                         # Admin dashboard (ReScript — migrates in Phase 5; needs un-vendored Gossamer runtime)
 ├── verification/                  # Pointer README only — real artifacts: src/Burble/ABI, server/test, ffi/zig/test
 ├── containers/                    # Containerfile + compose.toml (Chainguard base)
-└── .machine_readable/             # contractiles (MUST/TRUST/INTENT/ADJUST) + 6a2/*.a2ml
+└── .machine_readable/             # contractiles (MUST/TRUST/INTENT/ADJUST) + descriptiles/*.a2ml
 ```
 
 ### Removed 2026-04-16 (Phase 0)
@@ -94,11 +94,11 @@ Repo-wide decorative/drifted artifacts:
                     ┌─────────────────────────────────────────┘
                     │
                     ▼
-          [media/engine.ex] ──► [ffi/zig SIMD NIFs] ──► [transport/multipath.ex]
-                    │                                           │
-                    ▼                                           ▼
-          [media/lmdb_playout.ex]                   [transport/quic.ex]
-          (LMDB ring buffer)                         (QUIC + RTSP egress)
+          [media/engine.ex] ──► [ffi/zig SIMD NIFs] ──► [transport/rtsp.ex]
+                    │                                    (RTSP broadcast egress)
+                    ▼
+          [media/lmdb_playout.ex]
+          (LMDB ring buffer)
                     │
                     ▼
           [timing/] (IEEE 1588 PTP)

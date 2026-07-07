@@ -9,7 +9,7 @@ However, beneath this simple surface lies a **"Majestic"** architecture. For pow
 
 == Current Status
 
-Burble has cleared its foundational milestones. Test suite: ~707 Elixir tests (the full suite carries known failures under triage with the CI gate disarmed meanwhile — issue #100) + Zig coprocessor tests (CI-gated) + 6 channel safety-contract tests + 6 Opus-contract tests + 5 AI bridge Deno tests (round-trip, ordering, reconnect, heartbeat). We are currently in a **phased hardening** cycle: audio reliability (Phase 1), P2P AI bridge dependability (Phase 2), then signaling/channels (Phase 3) and PTP hardware integration (Phase 4). See `.machine_readable/6a2/STATE.a2ml` for the authoritative status. Claim honesty is governed by ADR-0007; foundational hardening is tracked in the "Earn the Core" epic (#53).
+Burble has cleared its foundational milestones. Test suite: ~707 Elixir tests (the full suite carries known failures under triage with the CI gate disarmed meanwhile — issue #100) + Zig coprocessor tests (CI-gated) + 6 channel safety-contract tests + 6 Opus-contract tests + 5 AI bridge Deno tests (round-trip, ordering, reconnect, heartbeat). We are currently in a **phased hardening** cycle: audio reliability (Phase 1), P2P AI bridge dependability (Phase 2), then signaling/channels (Phase 3) and PTP hardware integration (Phase 4). See `.machine_readable/descriptiles/STATE.a2ml` for the authoritative status. Claim honesty is governed by ADR-0007; foundational hardening is tracked in the "Earn the Core" epic (#53).
 
 == Milestones
 

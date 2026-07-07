@@ -17,7 +17,7 @@ to re-earn `C`.
 
 All items below must be complete and evidenced in-repo:
 
-1. `[dogfooding-status]` exists in `.machine_readable/6a2/STATE.a2ml` with dated, concrete entries.
+1. `[dogfooding-status]` exists in `.machine_readable/descriptiles/STATE.a2ml` with dated, concrete entries.
 2. `docs/practice/DOGFOOD-LOG.adoc` exists and records repeatable home-stable runs.
 3. CI contains explicit test-pass workflows for both Elixir server tests and Zig tests on push/PR.
 4. `docs/READINESS.md` (or `.adoc`) exists and is aligned to CRG v2.0 strictness.
@@ -27,7 +27,7 @@ All items below must be complete and evidenced in-repo:
 
 === WP1 — Dogfooding Evidence (Owner: core maintainers)
 
-- Add `[dogfooding-status]` to `.machine_readable/6a2/STATE.a2ml`.
+- Add `[dogfooding-status]` to `.machine_readable/descriptiles/STATE.a2ml`.
 - Create `docs/practice/DOGFOOD-LOG.adoc` and log at least 5 dated runs:
   * room lifecycle and signaling
   * voice pipeline

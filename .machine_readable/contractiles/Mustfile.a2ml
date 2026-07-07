@@ -62,13 +62,13 @@ hooks fail if any check fails.
 - severity: critical
 
 ### six-directory-present
-- description: 6a2 directory exists with required files
-- run: test -d .machine_readable/6a2 && test -f .machine_readable/6a2/META.a2ml && test -f .machine_readable/6a2/ECOSYSTEM.a2ml && test -f .machine_readable/6a2/STATE.a2ml && test -f .machine_readable/6a2/PLAYBOOK.a2ml && test -f .machine_readable/6a2/AGENTIC.a2ml && test -f .machine_readable/6a2/NEUROSYM.a2ml
+- description: descriptiles directory exists with required files
+- run: test -d .machine_readable/descriptiles && test -f .machine_readable/descriptiles/META.a2ml && test -f .machine_readable/descriptiles/ECOSYSTEM.a2ml && test -f .machine_readable/descriptiles/STATE.a2ml && test -f .machine_readable/descriptiles/PLAYBOOK.a2ml && test -f .machine_readable/descriptiles/AGENTIC.a2ml && test -f .machine_readable/descriptiles/NEUROSYM.a2ml
 - severity: critical
 
 ### anchors-directory
-- description: anchors directory exists in 6a2
-- run: test -d .machine_readable/6a2/anchors
+- description: anchors directory exists under .machine_readable (its actual location; the old check pointed inside the metadata dir, where it never lived)
+- run: test -d .machine_readable/anchors
 - severity: warning
 
 ### self-validating-structure
