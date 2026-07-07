@@ -2,7 +2,7 @@
 
 ## CRG Grade: D (targeting C — blocked on #100)
 
-Authoritative grade lives in `.machine_readable/6a2/STATE.a2ml` (`[crg]`).
+Authoritative grade lives in `.machine_readable/descriptiles/STATE.a2ml` (`[crg]`).
 The provisional C claimed 2026-04-04/2026-04-21 is withdrawn per ADR-0007:
 the CI test gate is disarmed (`continue-on-error: true`, issue #100), and a
 grade cannot rest on a gate that does not gate.

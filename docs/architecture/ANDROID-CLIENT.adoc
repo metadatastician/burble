@@ -34,7 +34,7 @@ Two repos, no third. Burble owns the wire protocol, the Android voice client, an
 
 | Wire contract (advertisement schema, knock packet)
 | *burble* (authority)
-| `.machine_readable/6a2/{nearby-presence,ble-spa-knock}.a2ml`, `src/Burble/ABI/{NearbyPresence,BleSpa}.idr`, `client/lib/src/extensions/NeurophonePresence.affine`
+| `.machine_readable/descriptiles/{nearby-presence,ble-spa-knock}.a2ml`, `src/Burble/ABI/{NearbyPresence,BleSpa}.idr`, `client/lib/src/extensions/NeurophonePresence.affine`
 
 | Server-side bridge (presence event forwarding)
 | *burble*
@@ -161,7 +161,7 @@ burble/client/android/
 [source]
 ----
 burble/
-├── .machine_readable/6a2/
+├── .machine_readable/descriptiles/
 │   ├── nearby-presence.a2ml               # NEW — wire format for BLE adv payload
 │   ├── ble-spa-knock.a2ml                 # NEW — SPA knock packet format
 │   └── audio-pipeline.a2ml                # NEW — Zig=intended, soft-fallback=deprecated

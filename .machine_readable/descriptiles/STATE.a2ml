@@ -128,7 +128,7 @@ open-failures = 0
 # 2026-04-20: Re-audit + completion push. Fixed 11 server-side "In reality" stubs
 #             (LLM, topology, auth, SDP, AWOL, SIP). Created PTP Zig NIF stub.
 #             Test coverage: 0% → 100% of 26 server modules (14 new test files,
-#             2,279 lines). All 6a2 + contractile files fully populated.
+#             2,279 lines). All descriptiles + contractile files fully populated.
 #             Multi-agent delegation: Opus planning, Sonnet implementation, Haiku scanning.
 # 2026-04-21: Phase 4 advanced — ClockCorrelator (OLS regression, 64-point sliding window,
 #             RTP 32-bit wraparound, drift PPM), Alignment GenServer (multi-node offset +

@@ -42,7 +42,7 @@ every claim below maps to code + a test, or is flagged here:
   the CI pass/fail gate is temporarily disarmed while they are triaged
   (issue #100). A green *gated* run is the criterion for CRG grade C;
   until then the self-assessed grade is D
-  (see `.machine_readable/6a2/STATE.a2ml`).
+  (see `.machine_readable/descriptiles/STATE.a2ml`).
 
 Foundational hardening is tracked in the "Earn the Core" epic (issue #53).
 
