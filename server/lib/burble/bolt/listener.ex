@@ -17,7 +17,7 @@ defmodule Burble.Bolt.Listener do
   use GenServer
   require Logger
 
-  alias Burble.Bolt.{Packet, Notify, Quic}
+  alias Burble.Bolt.{Packet, Notify, Quic, Spa}
 
   @port Packet.port()
 
@@ -58,6 +58,18 @@ defmodule Burble.Bolt.Listener do
       |> add_active(:udp, udp_state)
 
     log_startup(port, transports, quic_state)
+
+    # SPA replay-protection table + one-time auth-status log.
+    Spa.init_replay_table()
+
+    if Spa.enabled?() do
+      Logger.info("[Bolt] SPA authentication ENABLED — unauthenticated bolts will be dropped")
+    else
+      Logger.warning(
+        "[Bolt] running UNAUTHENTICATED — raw-UDP bolts are spoofable. " <>
+          "Set BURBLE_BOLT_SECRET (or config :burble, :bolt_secret) to require SPA."
+      )
+    end
 
     state = %{
       port: port,
@@ -140,8 +152,23 @@ defmodule Burble.Bolt.Listener do
   defp handle_packet(data, src) do
     case Packet.decode(data) do
       {:ok, packet} ->
-        Logger.debug("[Bolt] Received bolt from #{src}")
-        Notify.incoming(packet, src)
+        # SPA authentication (opt-in): when a bolt secret is configured, every
+        # bolt must carry a valid, fresh, non-replayed tag or it is dropped
+        # before dispatch. Unauthenticated deployments (no secret) accept all
+        # bolts as before.
+        if Spa.enabled?() do
+          case Spa.verify(packet.payload, Spa.secret()) do
+            :ok ->
+              Logger.debug("[Bolt] Received authenticated bolt from #{src}")
+              Notify.incoming(packet, src)
+
+            {:error, reason} ->
+              Logger.warning("[Bolt] Dropped bolt from #{src}: SPA #{reason}")
+          end
+        else
+          Logger.debug("[Bolt] Received bolt from #{src}")
+          Notify.incoming(packet, src)
+        end
 
       {:error, :bad_magic} ->
         # Could be a WoL packet — ignore silently

@@ -29,6 +29,12 @@ if System.get_env("BURBLE_RTSP_BROADCAST") in ["1", "true", "TRUE", "yes"] do
   config :burble, :rtsp_broadcast, true
 end
 
+# Bolt SPA authentication secret — runtime override (see config.exs).
+# When set, every bolt must carry a valid HMAC/timestamp/nonce tag.
+if secret = System.get_env("BURBLE_BOLT_SECRET") do
+  config :burble, :bolt_secret, secret
+end
+
 if config_env() == :prod do
   verisimdb_url =
     System.get_env("VERISIMDB_URL") ||
