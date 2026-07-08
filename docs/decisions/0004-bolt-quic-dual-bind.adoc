@@ -11,7 +11,13 @@ Date: 2026-05-13
 
 ## Status
 
-Accepted
+Accepted — but the QUIC transport is currently *parked*: `:quicer` (msquic)
+is a heavyweight native dependency and is commented out in `mix.exs`. The
+anti-spoofing goal it was to serve is met in the interim by **Bolt SPA**
+(HMAC Single-Packet-Authorisation, pure Elixir — see `server/lib/burble/bolt/spa.ex`).
+QUIC remains wanted for an *encrypted, connection-oriented* warm channel; we
+are seeking a QUIC/msquic expert and maintainer to finish it — see the
+"help wanted" issue (#140).
 
 ## Context
 

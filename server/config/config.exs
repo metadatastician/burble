@@ -66,4 +66,13 @@ config :hammer,
 # feedback, or set BURBLE_RTSP_BROADCAST=true at runtime (see runtime.exs).
 config :burble, :rtsp_broadcast, false
 
+# Bolt SPA (Single-Packet-Authorisation) shared secret.
+#
+# nil (default) = bolts are unauthenticated (legacy, spoofable — a startup
+# warning is logged). Set a secret here or via BURBLE_BOLT_SECRET at runtime
+# to require every bolt to carry a valid HMAC + fresh timestamp + one-shot
+# nonce, dropping spoofed/replayed pokes. Cheap interim while the authenticated
+# QUIC transport (ADR-0004) is parked — see the Bolt-QUIC "help wanted" issue.
+config :burble, :bolt_secret, nil
+
 import_config "#{config_env()}.exs"

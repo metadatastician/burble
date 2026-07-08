@@ -65,11 +65,13 @@ defmodule Burble.Bolt.Sender do
     transport   = Keyword.get(opts, :transport, :auto)
     try_quic    = Keyword.get(opts, :try_quic, false)
 
-    payload = Map.merge(%{
-      "from"    => node_id(),
-      "server"  => server_url(),
-      "ts"      => System.os_time(:millisecond)
-    }, opts[:payload] || %{})
+    payload =
+      Map.merge(%{
+        "from"    => node_id(),
+        "server"  => server_url(),
+        "ts"      => System.os_time(:millisecond)
+      }, opts[:payload] || %{})
+      |> maybe_sign()
 
     packet = Packet.encode(payload,
       target_mac:   target_mac,
@@ -238,5 +240,14 @@ defmodule Burble.Bolt.Sender do
 
   defp server_url do
     Application.get_env(:burble, :server_url, "unknown")
+  end
+
+  # Attach an SPA authentication tag when a bolt secret is configured;
+  # otherwise send the payload as-is (unauthenticated, legacy behaviour).
+  defp maybe_sign(payload) do
+    case Burble.Bolt.Spa.enabled?() && Burble.Bolt.Spa.secret() do
+      secret when is_binary(secret) -> Burble.Bolt.Spa.sign(payload, secret)
+      _ -> payload
+    end
   end
 end
