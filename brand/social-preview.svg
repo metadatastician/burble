@@ -79,17 +79,8 @@
     Q 720,240 740,240
   " fill="none" stroke="#3fb950" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" filter="url(#glow)"/>
 
-  <!-- RIGHT: Clean, gentle voice — processed output -->
-  <path d="
-    M 740,240
-    L 770,240
-    Q 784,236 798,240 Q 812,244 826,240
-    Q 840,236 854,240 Q 868,244 882,240
-    Q 896,237 910,240 Q 924,243 938,240
-    Q 952,238 966,240 Q 978,242 990,240
-    Q 1002,239 1014,240 Q 1026,241 1038,240
-    L 1200,240
-  " fill="none" stroke="#3fb950" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" opacity="0.6" filter="url(#glow)"/>
+  <!-- RIGHT: Clean voice — smooth Fourier harmonics (processed output; alive, not flatlined) -->
+  <path d="M 740,240.0 L 745,239.2 L 750,237.6 L 755,235.5 L 760,233.1 L 765,230.7 L 770,228.6 L 775,226.9 L 780,225.9 L 785,225.4 L 790,225.4 L 795,225.8 L 800,226.5 L 805,227.2 L 810,228.0 L 815,228.7 L 820,229.4 L 825,230.2 L 830,231.5 L 835,233.8 L 840,236.8 L 845,240.6 L 850,245.2 L 855,250.6 L 860,256.5 L 865,262.6 L 870,268.7 L 875,274.1 L 880,278.5 L 885,281.5 L 890,282.7 L 895,282.0 L 900,279.3 L 905,274.6 L 910,268.2 L 915,260.4 L 920,251.7 L 925,242.7 L 930,233.8 L 935,225.6 L 940,218.5 L 945,212.8 L 950,208.8 L 955,206.5 L 960,205.7 L 965,206.4 L 970,208.2 L 975,210.7 L 980,213.7 L 985,216.8 L 990,219.7 L 995,222.3 L 1000,224.5 L 1005,226.4 L 1010,228.0 L 1015,229.6 L 1020,231.5 L 1025,233.8 L 1030,236.8 L 1035,240.6 L 1040,245.2 L 1045,250.6 L 1050,256.5 L 1055,262.6 L 1060,268.7 L 1065,274.1 L 1070,278.5 L 1075,281.5 L 1080,282.7 L 1085,282.0 L 1090,279.3 L 1095,274.6 L 1100,268.2 L 1105,260.4 L 1110,251.7 L 1115,242.7 L 1120,233.8 L 1125,225.6 L 1130,218.5 L 1135,213.7 L 1140,210.8 L 1145,209.7 L 1150,210.1 L 1155,211.8 L 1160,214.3 L 1165,217.3 L 1170,220.5 L 1175,223.5 L 1180,226.3 L 1185,228.6 L 1190,230.5 L 1195,232.1 L 1200,233.4" fill="none" stroke="#3fb950" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" opacity="0.85" filter="url(#glow)"/>
 
   <!-- "Burble" text -->
   <text x="640" y="460" text-anchor="middle" font-family="system-ui, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="96" font-weight="300" fill="#e6edf3" letter-spacing="2" filter="url(#text-glow)">Burble</text>
