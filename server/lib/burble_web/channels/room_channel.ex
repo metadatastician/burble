@@ -62,6 +62,12 @@ defmodule BurbleWeb.RoomChannel do
           # Avow consent attestation for the join.
           Avow.attest_join(user_id, room_id, :direct_join)
 
+          # EXPERIMENTAL (config :burble, :rtsp_broadcast): for stage/broadcast
+          # rooms, revive the server-mediated SFU session so a single RTP
+          # stream can be fanned out to RTSP viewers (VLC/ffmpeg/OBS) as well
+          # as WebRTC peers. Default-off; no effect on the standard P2P path.
+          maybe_start_rtsp_broadcast(room_id, room_state)
+
           # Start WebRTC peer via Media.Engine (passes self() as channel_pid
           # so the Peer GenServer can send SDP offers and ICE candidates back).
           Burble.Media.Engine.add_peer(room_id, user_id, channel_pid: self())
@@ -389,6 +395,26 @@ defmodule BurbleWeb.RoomChannel do
   end
 
   # ── Private helpers ──
+
+  # EXPERIMENTAL: when config :burble, :rtsp_broadcast is enabled and this is
+  # a stage/broadcast room (which owns an RTSP mountpoint), ensure the
+  # Media.Engine SFU session exists so its RTP fanout also reaches RTSP
+  # viewers. Idempotent — the first joiner creates the session, later joiners
+  # no-op ({:error, :session_exists}). No-op entirely on the default P2P path.
+  defp maybe_start_rtsp_broadcast(room_id, room_state) do
+    if Application.get_env(:burble, :rtsp_broadcast, false) do
+      case room_state[:rtsp_mountpoint] do
+        mp when is_binary(mp) ->
+          _ = Burble.Media.Engine.create_room_session(room_id, rtsp_mountpoint: mp)
+          :ok
+
+        _ ->
+          :ok
+      end
+    else
+      :ok
+    end
+  end
 
   # Get the user's effective permissions based on their role.
   # For now, assign based on is_guest flag. Full role-based permissions

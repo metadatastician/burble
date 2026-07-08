@@ -156,16 +156,29 @@ defmodule Burble.Media.Engine do
       privacy_mode = Keyword.get(opts, :privacy, state.default_privacy)
       config = Keyword.get(opts, :config, state.default_config)
 
+      # EXPERIMENTAL (config :burble, :rtsp_broadcast): carry an RTSP
+      # mountpoint for stage/broadcast rooms so distribute_rtp can fan a
+      # single RTP stream out to RTSP viewers (VLC/ffmpeg/OBS) alongside the
+      # WebRTC peers. Only honoured when the feature flag is on; nil on the
+      # default P2P path, so the injection below is a no-op.
+      rtsp_mountpoint =
+        if rtsp_broadcast_enabled?(), do: Keyword.get(opts, :rtsp_mountpoint)
+
       session = %{
         room_id: room_id,
         peers: %{},
         config: config,
         privacy_mode: privacy_mode,
+        rtsp_mountpoint: rtsp_mountpoint,
         created_at: DateTime.utc_now()
       }
 
       new_sessions = Map.put(state.sessions, room_id, session)
-      Logger.info("[Media] Session created: #{room_id} (privacy: #{privacy_mode})")
+
+      Logger.info(
+        "[Media] Session created: #{room_id} (privacy: #{privacy_mode}" <>
+          if(rtsp_mountpoint, do: ", rtsp: #{rtsp_mountpoint}", else: "") <> ")"
+      )
 
       {:reply, {:ok, room_id}, %{state | sessions: new_sessions}}
     end
@@ -501,8 +514,22 @@ defmodule Burble.Media.Engine do
         |> Enum.each(fn peer_id ->
           Burble.Media.Peer.forward_rtp(peer_id, from_peer_id, packet)
         end)
+
+        # EXPERIMENTAL RTSP broadcast egress: also fan this packet out to any
+        # RTSP viewers subscribed to the room's mountpoint. `rtsp_mountpoint`
+        # is only set when config :burble, :rtsp_broadcast is enabled, so this
+        # is nil (no-op) on the default P2P path.
+        case session[:rtsp_mountpoint] do
+          mp when is_binary(mp) -> Burble.Transport.RTSP.inject_rtp(mp, packet)
+          _ -> :ok
+        end
     end
   end
+
+  # EXPERIMENTAL feature flag: server-mediated RTSP broadcast egress.
+  # Read at session-creation time (not per packet) so the hot path only
+  # checks a cheap map key. Switchable at runtime via Application env.
+  defp rtsp_broadcast_enabled?, do: Application.get_env(:burble, :rtsp_broadcast, false)
 
   defp ice_policy(:standard), do: :all
   defp ice_policy(:turn_only), do: :relay

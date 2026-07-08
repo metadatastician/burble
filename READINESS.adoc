@@ -114,6 +114,27 @@ The following server modules have 100 % test coverage (as of 2026-04-20):
 
 ---
 
+== Experimental (opt-in, community preview)
+
+=== RTSP Broadcast Egress
+
+`Burble.Transport.RTSP` can fan a stage/broadcast room's single RTP stream out
+to RTSP viewers (VLC/ffmpeg/OBS play `rtsp://host:8554/live/room-<id>/speaker`)
+alongside the WebRTC peers — one source, N listeners, no per-listener
+PeerConnection. It is *switchable and off by default*: enable with
+`config :burble, :rtsp_broadcast, true` or `BURBLE_RTSP_BROADCAST=true` at
+runtime. When enabled, stage/broadcast rooms revive the server-mediated SFU
+session (`Burble.Media.Engine`) and `distribute_rtp` also calls
+`RTSP.inject_rtp/2`; the default peer-to-peer path is byte-for-byte unchanged
+when the flag is off.
+
+*Status:* the server-side path (session → mountpoint → `inject_rtp` → RTSP
+subscriber fanout) is wired and unit-tested (`rtsp_broadcast_test.exs`). What
+is NOT yet built is a *client* that connects a broadcaster in SFU mode so real
+RTP reaches the server Peer — today's `p2p-voice.html` is pure peer-to-peer.
+Shipped as a preview so the community can experience the mountpoint, give
+feedback, and drive the client-side broadcast increment.
+
 == What is NOT ready
 
 === PTP Hardware Validation
