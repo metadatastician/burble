@@ -1,0 +1,113 @@
+= Architecture Decision Record: 0013-embeddability-and-participation-escalator
+
+// SPDX-License-Identifier: CC-BY-SA-4.0
+// Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+
+# 13. Embeddability, dogfood-first adoption & the community participation escalator
+
+Date: 2026-07-08
+
+## Status
+
+Proposed (first draft)
+
+## Context
+
+Embeddability is the *delivery half* of the founding thesis (ADR-0012): the
+AI-assisted connection & support only matters if it arrives **inside** the
+game / launcher / meeting, not as yet-another-app to configure. It is
+therefore the **primary lever for adoption**.
+
+But adoption tools get exactly **one first impression.** A dev drops the embed
+in and within ninety seconds decides "lovely" or "janky, forget it" — and if
+janky, they *tell people*. Shipping a "final" drop-in before it is proven is
+the most expensive possible version of the "half-measure" mistake (ADR-0011 /
+Q6), because it is made at the point of maximum visibility.
+
+Separately, one person cannot build the whole vision (owner: "I'm just one
+person"). The answer, reached repeatedly today, is to scale the *invitation*
+rather than the person — and there is a ready-made structure for it: **TPCF
+(the Tri-Perimeter Contribution Framework)**, created by the owner for
+`betlang`, never yet adopted for Burble.
+
+## Decision
+
+### 1. Embeddability is the primary adoption lever
+
+The drop-in that puts Burble (voice + AI-assist per ADR-0012, on the E2EE/edge
+substrate per ADR-0010/0011) *inside* a game/launcher/app is the front door.
+See the embeddability work (task: drop-in client module, `Burble.join`-style
+minimal API).
+
+### 2. Dogfood-first — never ship the front door untested
+
+The embed is proven and hardened in the owner's **own estate games first**
+(IDApTIK, Slavia, the game-as-data work) — real embeds, real friction, found
+and fixed where nobody is watching — **before any public "final" release.**
+Only when the owner would happily ship their *own* game on it does it earn a
+public "drop this in." Consistent with the estate `dogfood-gate` and the
+no-half-measure honesty line: the stakes are highest here because embed *is*
+the adoption play.
+
+### 3. Adopt TPCF as the participation escalator
+
+Adopt TPCF's three concentric perimeters — *Inner Sanctum* (core), *Middle
+Ring* (library), *Outer Circle* (community) — with their graduation paths,
+mapped to Burble's structure. See the companion `docs/TPCF-BURBLE.adoc`.
+
+### 4. Add a wish-capture floor *below* the outer circle
+
+TPCF's outer circle still assumes "open a PR." Burble adds a rung beneath it:
+the **feedback-o-tron** wish-capture floor. Anyone — a 7-year-old — *speaks or
+types a wish* ("make Anya's hair blond," "the submarine looks rubbish, can I
+use my own picture?"), with **no code, no PR, no git**, and the escalator
+carries the wish *up* to whoever can grant it. This is **intent over settings
+(ADR-0011 principle), applied to contribution**: you don't need to know *how*
+to contribute; you say what you wish, and the system routes it. The floor
+reaches the ground.
+
+### 5. Gamify the escalator (in time)
+
+Perimeters become levels; wishes and fixes become quests; graduating a
+contribution outer → middle → inner is *levelling up*. Fitting, in a project
+about play. Participation is designed as the game, not bolted on.
+
+### 6. The range is the point: child's wish → proof-theorist's proof
+
+The *same* framework welcomes the blond-hair wish **and** a formal verification
+of a core guarantee (adversarial testing, proof-theoretic rigour). One
+escalator, from "make it blond" to large countable ordinals. That radical
+inclusivity — a seven-year-old and a formal-methods researcher on the same
+rails — is the differentiator.
+
+## Relationship to other decisions
+
+* **ADR-0012 (founding thesis)** — embed is its delivery half; the escalator is
+  *how the thesis gets built by everyone*, at every level.
+* **ADR-0010 / ADR-0011** — the Inner Sanctum is the trustworthy substrate
+  (E2EE/edge/presence); core changes must never weaken the seal, hence the
+  strictest perimeter.
+* **feedback-o-tron** — the estate tool that is the wish-capture floor.
+* **dogfood-gate** — the estate CI value that decision 2 formalises for embed.
+* **"I'm just one person"** — the escalator is the systematised answer: scale
+  the invitation, not the person.
+
+## Consequences
+
+### Positive
+* An adoption moat: radically inclusive participation (child → researcher),
+  with the game itself as the contribution surface (players → participants).
+* Dogfood-first protects the single first impression adoption depends on.
+
+### Negative / caveats
+* Dogfood-first is slower to public release — deliberately; the alternative
+  (ship janky, get branded "pants") is fatal, not merely slow.
+* The wish-capture floor needs triage/routing so wishes don't pile up unheard
+  (a dead feedback box is worse than none).
+* Gamification must reward genuine contribution, not gaming-the-metric.
+
+## Next increments
+
+1. Map TPCF's perimeters onto Burble's actual structure — `docs/TPCF-BURBLE.adoc`.
+2. Dogfood the embed in one internal estate game end-to-end.
+3. Wire feedback-o-tron as the wish-capture floor, with routing to a perimeter.

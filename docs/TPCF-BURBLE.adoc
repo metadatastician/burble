@@ -1,0 +1,84 @@
+= Burble — Tri-Perimeter Contribution Framework (TPCF), with a wish-capture floor
+:toc: preamble
+
+// SPDX-License-Identifier: CC-BY-SA-4.0
+// Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+
+Burble adopts TPCF (created for `betlang`) as its **community participation
+escalator**, and adds a rung *below* the outer circle so the floor reaches the
+ground. See `docs/decisions/0013-embeddability-and-participation-escalator.adoc`.
+
+The whole point: **one framework, from a 7-year-old's spoken wish to a formal
+verification of a core guarantee.** Everyone can get on; the escalator carries
+each contribution up to where it belongs.
+
+== Floor 0 — Wish-capture (the feedback-o-tron)
+
+**Who:** anyone. A child. No code, no PR, no git, no account required.
+
+**How:** speak or type a wish — "make Anya's hair blond," "the submarine looks
+rubbish, can I use my own picture?", "captions were hard to turn on." The
+**feedback-o-tron** captures it; triage routes it *up* the escalator to whoever
+can grant it. This is *intent over settings, applied to contribution* — you say
+what you wish; the system finds the hands.
+
+**Rule:** a wish must never fall into silence. A dead feedback box is worse than
+none — every wish gets acknowledged and routed.
+
+== Perimeter 3 — Outer Circle (community & creativity)
+
+**Scope:** examples, demos, game integrations, skins/assets, art, docs,
+tutorials, translations, the `client/web/*.html` demos.
+
+**Policy:** ✅ new examples/assets/docs/translations/integrations, ✅ bug fixes.
+Any contributor or maintainer can merge; fast (target < 3 days). All skill
+levels welcome — this is where creativity flourishes and where a wish first
+becomes a real thing.
+
+== Perimeter 2 — Middle Ring (features & libraries)
+
+**Scope:** server features (rooms, LLM channel, coprocessor DSP, RTSP), the
+client SDK / embed module, tools, non-core libraries.
+
+**Policy:** ✅ new functions/features/optimisations with tests + docs; ⚠️
+breaking API changes need a deprecation period. One maintainer approval;
+tests required.
+
+== Perimeter 1 — Inner Sanctum (the trustworthy substrate)
+
+**Scope:** the security/E2EE kernel and the guarantees in ADR-0010 / ADR-0011 —
+presence & trust zones, the E2EE content/metadata boundary, Bolt transport +
+SPA, the Idris2 ABI proofs, core protocols.
+
+**Why strictest:** this is where the *seal* lives. A change here can weaken the
+promises the whole project rests on ("it gets smarter without ever being able to
+watch you"). RFC + community discussion + **unanimous maintainer approval** +
+comprehensive tests. Breaking changes extremely rare.
+
+**This is also the ceiling of the escalator:** the deepest contributions live
+here — formal verification, adversarial testing of a core guarantee, proof-
+theoretic rigour. The same escalator that starts at "make it blond" reaches all
+the way to "please check this holds and test it adversarially."
+
+== Graduation (how a wish climbs)
+
+  wish (feedback-o-tron)  →  Outer asset/example  →  Middle feature/library  →  (rarely) Inner core change
+
+Each step up tightens the process (more review, more tests). A contributor
+climbs with their contribution; a casual wisher can become an outer-circle
+regular, then a library contributor, then — if they wish — a core reviewer.
+
+== Gamification (in time)
+
+Perimeters are levels; wishes and fixes are quests; graduating a contribution is
+levelling up. Participation is designed as play, in a project that is about
+play. Reward genuine contribution, never gaming-the-metric.
+
+== Fast-tracks (from TPCF)
+
+* **Security fixes** bypass normal process at every perimeter — immediate,
+  coordinate via `SECURITY.md`.
+* **Docs-only** changes (typos, clarifications) fast-track at every perimeter.
+
+_First draft — owner to refine the perimeter scopes against Burble's evolving
+structure._
