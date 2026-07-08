@@ -1,0 +1,73 @@
+= Burble — Messaging & Positioning
+:toc: preamble
+
+// SPDX-License-Identifier: CC-BY-SA-4.0
+// Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+
+Canonical source for the landing page, README pitch, and wiki messaging. See
+`docs/decisions/0012-founding-thesis-ai-assisted-connection.adoc` for the
+underlying thesis.
+
+== The lens: "the frustration without the frustration"
+
+Every Burble capability has a *pain* and its *resolution* hiding inside it.
+**Market the moment _after_ the feature — the relief the person is aching for
+— never the feature itself.**
+
+* Find the forty minutes; promise the two.
+* Name the customer's own pain, and hand it back to them as relief.
+* Don't sell the mechanism; sell the moment it creates.
+
+This is the repeatable move. Apply it to *anything* Burble does.
+
+== The lens, worked
+
+[cols="1,2,3",options="header"]
+|===
+| Capability | Don't say (the feature) | Say (the moment after)
+
+| Connection / AI-assist
+| "AI-assisted WebRTC connection brokering"
+| **"We're playing in two minutes instead of quitting in forty."**
+
+| Game setup
+| "collaborative session configuration"
+| **"Sorted before the fun dies."**
+
+| Accessibility
+| "advanced accessibility settings"
+| **"She's in from the first second — not the one holding everyone up."**
+
+| E2EE / edge
+| "end-to-end encryption"
+| **"It gets smarter without ever being able to watch you."**
+
+| Resilience / fallback
+| "adaptive codec degradation"
+| **"The call doesn't drop — it just quietly finds a way through."**
+
+| Intent over settings
+| "natural-language configuration"
+| **"You say what you need; it makes it so."**
+
+| Support / overload
+| "reduces IT burden"
+| **"The tool absorbs the load — nobody's the hero, nobody's the scapegoat."**
+|===
+
+== Principle lines (internal north stars that also read well)
+
+* "Never break the seal to save the call." (E2EE)
+* "It gets smarter while staying blind." (edge-first / ages-well moat)
+* "Intent over settings." (configuration by conversation, on the right side)
+* "The tool absorbs the load." (nobody the hero, nobody the scapegoat)
+* "A feature that pretends to work is worse than no feature." (honesty / no half-measures)
+
+== The one-line pitch (draft)
+
+> Burble gets you *talking and playing together in two minutes* — an AI on every
+> side sorts the connection and the settings for you, privately, so nobody's
+> excluded, nobody's the reluctant sysadmin, and the moment isn't ruined before
+> it starts.
+
+_Owner to refine. This is a starting pile, not a final._
