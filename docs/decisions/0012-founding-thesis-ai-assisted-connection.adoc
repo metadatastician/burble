@@ -1,0 +1,147 @@
+= Architecture Decision Record: 0012-founding-thesis-ai-assisted-connection
+
+// SPDX-License-Identifier: CC-BY-SA-4.0
+// Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+
+# 12. The founding thesis: AI-assisted connection & support (why Burble exists)
+
+Date: 2026-07-08
+
+## Status
+
+Proposed (first draft — the motivating stories and thesis, to be refined by
+the owner)
+
+## Context — the problem Burble exists to solve
+
+Burble did not begin as "a voice app." It began from a specific, repeated,
+human pain: **getting people connected, configured, and helped — together —
+is so hard that it excludes people, ruins the moment, damages relationships,
+and dumps an impossible load onto whoever in the room is most technical or
+most vulnerable.** The tool then steps back as if none of that is its fault.
+
+Three lived scenarios, each sharper than the last:
+
+=== 1. Remote support — "just give me your access, this is insane"
+
+You want to help someone, or collaborate, or demo. Instead: "install these
+thirty things first," "turn on these dangerous settings," "just give me your
+remote access." The forward-deployed engineer a company has to *send* purely
+to make adoption happen. All the friction lives between two people who just
+wanted to do a thing together.
+
+=== 2. Game night — sorted before the fun dies
+
+Friends gather to play. Then: whose server, which mod versions, port
+forwarding, "can you hear me," "why can't I connect to you." Forty minutes
+later either it's too late to play, or someone had to leave, or everyone's so
+worn down that the *mood is dead* — the very thing they came for, poisoned by
+the setup. Worst case: they give up and don't play at all. The difficulty
+arrives at exactly the wrong moment — when everyone is excited and ready — and
+drains the excitement out of the room.
+
+=== 3. Accessibility — sorted so no one is shut out
+
+A meeting starts. A disabled woman asks, "did you switch accessibility on?"
+She tries to talk someone through a menu she can't see and he can't find. It's
+buried among a thousand settings, on the wrong account, so the only fix is
+"let's start over with mine" — which nobody does. And the cost is not lost
+time; it is a **person excluded from participating**, while the meeting rolls
+on without her.
+
+And the wreckage the tool manufactures around that one missing setting:
+
+* the technologist is shamed — "call yourself a technologist" — while doing
+  three other things at once, the single point of failure expected to know
+  a thousand settings;
+* the disabled person is resented for "holding things up" *and* hurt, because
+  the fumbling reads as *not caring*;
+* relationships take damage; the deal walks out the door;
+
+— when **nobody did anything wrong.** The software created a situation where
+everyone loses and everyone blames each other.
+
+## Decision — the thesis
+
+Burble is an **AI-assisted connection & support layer**: an AI, **embedded**
+and **present on every side**, that turns *intent* into the right connection
+and the right configuration, in real time — so that **the tool absorbs the
+load instead of dumping it on a human.** Nobody has to be the hero, and nobody
+has to be the scapegoat.
+
+Everything else Burble does — E2EE, presence, edge-cleverness, voice — is the
+**trustworthy substrate**. *This* is the point that sits on top of it.
+
+### The four mechanisms
+
+1. **AI-assist on every side.** Each participant's AI can *see* the connection
+   and configuration state and act on it — walking a human through it,
+   diagnosing failures ("UDP 7373 is blocked — here's the one-liner"),
+   reconciling settings across everyone, and coordinating the two sides with
+   each other. Built on the **P2P AI bridge** (Claude-to-Claude over the data
+   channel) — already the single most-proven part of the codebase, and the
+   original seed of the whole idea.
+
+2. **Intent over settings.** You never hunt a menu. You *say what you need* —
+   "I need captions," "make this work with my screen reader," "I can't hear
+   well," "get us connected" — and the AI turns on the right things **on the
+   right side**, live. No "whose account, let's restart." Configuration by
+   conversation, not by menu archaeology. This is the direct antidote to the
+   thousand-settings problem.
+
+3. **Drop-in embeddability.** For the help to arrive *in time*, it must live
+   inside the game / the launcher / the meeting / the moment — not in
+   yet-another-app you also have to configure. A separate tool you must set up
+   is just more of the friction we are trying to kill. (This is the delivery
+   half of the thesis; see the embeddability work.)
+
+4. **On the trustworthy substrate.** The AI absorbs the load *without*
+   becoming a surveillance layer: E2EE and edge-first (ADR-0011), presence and
+   trust zones (ADR-0010), identity that grows with you. The AI does the
+   sorting; it never becomes the thing that watches you.
+
+### How the thesis dissolves the wreckage (scenario 3, precisely)
+
+* The AI is the tech person, so the human is no longer the single point of
+  failure doing three things at once.
+* The disabled participant's need is stated as intent and sorted instantly, on
+  the correct side — she is included from the first second, never the
+  bottleneck.
+* There is no fumbling to misread as "not caring" — the caring is built into
+  the tool doing the work quietly and immediately.
+* The relationships and the deal survive, because the friction never gets the
+  thirty seconds it needs to turn people against each other.
+
+## Relationship to other decisions
+
+* **Q5 (LLM.Transport)** — the "reach an LLM" plumbing for mechanism 1,
+  including the seam for a local / on-device assist LLM (privacy-preserving,
+  per the ADR-0011 degradation-ladder ethos). *Keep and wire it* — it is not
+  optional infrastructure, it is the founding feature's spine.
+* **Q7 (embeddability)** — mechanism 3, the delivery half. Q5 and Q7 are the
+  two halves of this one thesis; the game-night scenario is where they meet.
+* **ADR-0010 / ADR-0011** — the trustworthy substrate (mechanism 4).
+* **P2P AI bridge** (`client/web/burble-ai-bridge.js`) — the existing,
+  most-proven seed of mechanism 1.
+
+## Consequences
+
+### Positive
+* A genuine differentiator/moat: AI-mediated connection-and-configuration by
+  intent, on every side, embedded — nobody does this.
+* Moves the load off humans; protects the excluded, the overloaded, and the
+  moment itself.
+
+### Negative / caveats
+* Ambitious; must be built incrementally on the proven bridge.
+* The AI acting on a user's behalf must be bounded and consent-gated so
+  "the AI sorts it" never becomes "the AI does something you didn't want."
+
+## Next increment (concrete first step)
+
+**Give the AI eyes on the connection.** Emit connection/configuration state as
+structured events the AI bridge can read — join started, ICE gathering,
+connected, *failed + why* (symmetric NAT, blocked port, bridge offline),
+plus accessibility/config intents. That single step turns the proven
+"two Claudes can talk" into "the AI can *see* what's wrong and help fix it,"
+and everything else in the thesis builds from there.
