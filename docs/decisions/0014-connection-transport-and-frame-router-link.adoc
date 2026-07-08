@@ -1,0 +1,100 @@
+= Architecture Decision Record: 0014-connection-transport-and-frame-router-link
+
+// SPDX-License-Identifier: CC-BY-SA-4.0
+// Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+
+# 14. Connection transport strategy, and the typed-frame-router (v4↔v6) link
+
+Date: 2026-07-08
+
+## Status
+
+Proposed (first draft)
+
+## Context
+
+Getting two peers connected is the hard, unglamorous core under the founding
+thesis (ADR-0012): the AI-assist can only *sort* a connection if the transport
+strategy underneath is sound. Today's analysis, and the recall of a parked
+estate component (`proven-typed-frame-router`), are captured here so neither the
+reasoning nor the cross-repo link gets lost again.
+
+## Decision
+
+### 1. Transport: dual-stack, prefer IPv6, fall back gracefully
+
+* **Prefer IPv6 direct.** Where both ends have it, IPv6 gives a globally
+  routable address and often a *direct, relay-free* path — which is also the
+  *most private* path (no intermediary). Gather both families' ICE candidates
+  and prioritise IPv6.
+* **Fall back to IPv4 STUN** (hole-punching) for the majority case, then
+* **TURN relay** as last resort for the un-traversable minority.
+* This is essentially "Happy Eyeballs" and is largely what ICE already does once
+  IPv6 candidates are enabled and preferred. **Bolt already speaks IPv6.**
+* **Not** "IPv6-only" — ~55% of the world lacks end-to-end IPv6, and IPv6 still
+  has stateful firewalls (so some hole-punching remains, though far easier than
+  IPv4 symmetric-NAT because the address is stable).
+
+### 2. CGNAT is the real-world worst case — design for it
+
+Mobile and roaming peers are almost always behind **carrier-grade NAT** (shared
+public IPv4, no inbound, no port control): hole-punching typically fails and a
+**relay is required**. You cannot assume a direct path or IPv6.
+
+_Live example (the canonical hard case): owner on Virgin Media (public IPv4,
+single home NAT — traversable) ↔ son on EE roaming in Czechia (CGNAT — relay
+almost certainly needed). This v4-NAT ↔ CGNAT-mobile-across-a-border pair is
+about the hardest everyday connection there is, and is precisely the case the
+AI-assist + graceful fallback exists to rescue._
+
+### 3. The relay never costs privacy
+
+When a call falls to a TURN relay, the relay forwards **encrypted** packets
+only — it cannot see content (consistent with ADR-0011, server = pure
+forwarder). **You lose directness, not privacy.** Worst-case connectivity,
+full-strength confidentiality.
+
+### 4. The typed-frame-router link (keep-in-sight, do not promote yet)
+
+A parked estate component is relevant here and is recorded so it stays findable:
+
+* **What:** `proven-servers/not-proven/proven-typed-frame-router` — the
+  *Typed Frame Router*, internally the **"Groove Proxy."** A frame-level proxy
+  that accepts one protocol family and transparently *splices* to another;
+  primary use case **IPv4→IPv6 translation**. `splice(2)` zero-copy fast path,
+  userspace-buffer fallback. Has Idris2 ABI + proof scaffold + Zig FFI +
+  generated C header — a **real but unfinished skeleton** (hence `not-proven/`).
+* **Relevance to Burble:** a candidate **server-/relay-side v4↔v6 bridge** (a
+  *fixed-endpoint* bridge). It is **not** the P2P NAT-traversal mechanism — that
+  is ICE/STUN/TURN (decisions 1–2). Different layer; both useful.
+* **Repo-status decision:** **do not promote to a full repo now** — undeveloped
+  promotion is the hollow-repo anti-pattern. Keep it in `not-proven/`; *this ADR
+  is the link that keeps it in sight.*
+* **Promotion trigger:** when Burble's server/relay side *concretely needs*
+  v4↔v6 bridging, finish it (`not-proven` → proven) and promote then. Promotion
+  follows need, not visibility.
+
+## Relationship to other decisions
+
+* **ADR-0012** — transport is the substrate the AI-assist acts on; the assist
+  should *narrate* the chosen path ("both on IPv6, connecting direct" / "carrier
+  NAT both ends, routing via relay — here's why") — mechanism 1, made legible.
+* **ADR-0011** — the relay-forwards-ciphertext guarantee is the same
+  pure-forwarder / metadata-boundary posture.
+* **groove** — the frame-router is literally the "Groove Proxy"; the v4↔v6
+  bridge belongs to the same joinery family.
+
+## Consequences
+
+* Records today's transport reasoning (previously unwritten) and makes the
+  frame-router link permanent without minting a hollow repo.
+* **Out of scope from the Burble repo:** a reciprocal one-line pointer in
+  `proven-servers` (back to this ADR) — to be added by a session working in that
+  repo; not editable from here.
+
+## Next increments
+
+1. Ensure ICE gathers + prefers IPv6 candidates (verify in the WebRTC path).
+2. Stand up a minimal TURN relay (coturn) for the CGNAT/roaming case; confirm
+   E2EE holds through it.
+3. Revisit the frame-router only when the server-side v4↔v6 bridge is a real need.
