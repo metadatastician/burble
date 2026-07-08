@@ -130,6 +130,37 @@ defmodule Burble.Coprocessor.ZigBackend do
   @impl true
   def opus_available?, do: false
 
+  # Content-DSP / archive kernels the Zig NIF doesn't implement natively are
+  # delegated to ElixirBackend, exactly like the crypto and io kernels above.
+  # Note per ADR-0011: audio *content* DSP does not run on the server's live
+  # media path — the server is a pure forwarder and all content DSP happens at
+  # the edge (SNIF/WASM). These backend kernels are receive-side/local
+  # utilities, not SFU-path features; the delegations just complete the
+  # behaviour and silence the missing-callback warnings.
+  @impl true
+  def audio_agc(pcm, target_rms_db, attack_ms, release_ms, state),
+    do: ElixirBackend.audio_agc(pcm, target_rms_db, attack_ms, release_ms, state)
+
+  @impl true
+  def audio_comfort_noise(frame_length, level_db, noise_profile),
+    do: ElixirBackend.audio_comfort_noise(frame_length, level_db, noise_profile)
+
+  @impl true
+  def audio_spectral_vad(pcm, sample_rate, state),
+    do: ElixirBackend.audio_spectral_vad(pcm, sample_rate, state)
+
+  @impl true
+  def audio_perceptual_weight(magnitudes, sample_rate),
+    do: ElixirBackend.audio_perceptual_weight(magnitudes, sample_rate)
+
+  @impl true
+  def compress_audio_archive(frames, sample_rate, channels),
+    do: ElixirBackend.compress_audio_archive(frames, sample_rate, channels)
+
+  @impl true
+  def decompress_audio_frame(archive, frame_index),
+    do: ElixirBackend.decompress_audio_frame(archive, frame_index)
+
   # ---------------------------------------------------------------------------
   # Crypto kernel — always Elixir (Erlang :crypto is native C already)
   # ---------------------------------------------------------------------------
