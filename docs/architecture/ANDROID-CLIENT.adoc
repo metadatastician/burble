@@ -14,7 +14,7 @@
 
 == TL;DR
 
-Burble's first native Android client lives in `client/android/`, parallel to `client/web/` and `client/desktop/`. It exercises Gabeldorsche-era Bluetooth surfaces (LE Audio BAP/PBP, LE COC, Channel Sounding, extended advertising) that web and desktop can't reach. The neurosymbolic AI sibling repo `neurophone` consumes Burble's BLE advertisements as a *presence sensor only* (no mic, no voice), feeding its existing sensor → LSM → ESN → bridge pipeline.
+Burble's first native Android client lives in `client/android/`, parallel to `client/web/` and `client/desktop/`. It exercises Gabeldorsche-era Bluetooth surfaces (LE Audio BAP/PBP, LE COC, Channel Sounding, extended advertising) that web and desktop can't reach. The neurosymbolic AI sibling repo `neurophone` consumes Burble presence as a *sensor only* (no mic, no voice), feeding its existing sensor → LSM → ESN → bridge pipeline. Per the three presence states (see <<ble-spa>> and ADR-0010), that input is *knock/rendezvous events* in the *Silent* (Public) zone and a contact-scoped *presence field* in the *Presence* (trusted) zones — both are legitimate reservoir inputs; there is no continuous plaintext advertisement to read.
 
 Two repos, no third. Burble owns the wire protocol, the Android voice client, and the server bridge. Neurophone owns one extra Rust crate and one Kotlin package — purely sensor-class.
 
@@ -74,8 +74,8 @@ Rationale: nothing to share beyond a schema, and burble already has the schema-o
 | WebRTC APM disabled. Soft-fallback exists but named-and-shamed — see <<audio-pipeline>>.
 
 | BLE advertising
-| *BLE-SPA only*
-| No legacy continuous-advertise mode. See <<ble-spa>>.
+| *Three states (Off / Silent / Presence)*
+| Off default; Silent = BLE-SPA knock-only (Public zone); Presence = rotating contact-resolvable beacon (trusted zones). No plaintext always-advertise mode. See <<ble-spa>> + ADR-0010.
 
 | In-car HMI floor
 | MAP 1.4 + AVRCP 1.6 (+ LE Audio MCP/MCS/TMAP equivalents)
@@ -292,7 +292,16 @@ RENDER PATH
 
 === Decision
 
-BLE-SPA is *the* design. There is no legacy continuous-advertise mode in Burble Android. Same intent-structure rigor as the Zig DSP call: don't ship inferior option as peer choice.
+BLE-SPA (silent, knock-to-rendezvous) is the *default* and the behaviour of
+the *Public* trust zone. It is not, however, the *only* mode: per
+`docs/decisions/0010-presence-discovery-and-trust-zones.adoc` (ADR-0010),
+presence is governed by trust *zones*, and Burble Android ships **three
+explicit states** — *Off*, *Silent*, and *Presence*. What is deliberately
+NOT shipped is a *plaintext* always-advertise mode or any *quietly-available*
+fallback; the *Presence* state (below) is a rotating, contact-*resolvable*
+beacon — continuous, but readable only by your contacts, never a plaintext
+"I'm here" to bystanders. Same intent-structure rigor as the Zig DSP call:
+no inferior option smuggled in as a silent default.
 
 === Rationale
 
@@ -351,12 +360,28 @@ When user opens app or accepts an invite:
 | Near-zero (~3 mA passive scan)
 |===
 
-=== Toggle states (two-position)
+=== Presence states (three, per ADR-0010 zones)
 
-* *Off* (default): no BLE activity when app closed.
-* *Discoverable*: BLE-SPA mode. Foreground service with `FOREGROUND_SERVICE_CONNECTED_DEVICE`, persistent notification.
+* *Off* (default): no BLE activity when the app is closed. An unaware user is
+  public-safe by default.
+* *Silent* (the *Public* zone): BLE-SPA — broadcast nothing, rendezvous only
+  on an authenticated knock. Invisible to bystanders, ~3 mA idle. Foreground
+  service with `FOREGROUND_SERVICE_CONNECTED_DEVICE`, persistent notification.
+* *Presence* (the *Private* / trusted zones): continuously advertise a
+  *rotating, contact-resolvable* beacon (Find-My pattern: address rotated
+  from a shared secret so your contacts resolve "that's Alice" while
+  bystanders see unlinkable random bytes). Continuous but contact-scoped —
+  for trusted contexts (home, office, among friends).
 
-No third "always-advertise" option ships. If a legitimate interop need surfaces, that's a feature request to evaluate, not a quietly-available fallback.
+What does NOT ship is a *plaintext* always-advertise mode, nor any
+*quietly-available* fallback: every state is explicit and visible (persistent
+notification shows which), the default is *Off*/public-safe, and *Presence*
+is a deliberate, contact-scoped opt-in — not the footgun this section
+originally guarded against. An instant *ghost* override (invisible to
+everyone, overriding even the allow-list) is always one gesture away. Which
+contacts may resolve you in each state is decided by the block > allow > zone
+precedence in ADR-0010; a blocked contact can never resolve you (revocation
+rotates the beacon secret — cryptographic, not cosmetic).
 
 === Room secret derivation
 
@@ -392,8 +417,8 @@ Pre-render room icon bitmaps at *200×200* to fit AVRCP 1.6's thumbnail constrai
 
 | *2 — Presence sensor* (~1–2 weeks)
 | —
-| `crates/bt-presence/` + scanner + JNI + consent gate. *Reads* burble's adv payload.
-| Neurophone gains "nearby Burble peers" as a sensor input. No burble-side coupling.
+| `crates/bt-presence/` + scanner + JNI + consent gate. Observes *knock/rendezvous events* (Silent zone) and, where the user has opted into a *Presence* zone, resolves contact beacons — not a continuous plaintext adv read.
+| Neurophone gains "nearby Burble peers" as an event/field sensor input (per ADR-0010 zones). No burble-side coupling.
 
 | *3 — CoC peer-to-peer + BLE-SPA* (~2–3 weeks)
 | LE CoC signaling, BLE-SPA knock/respond, internet-less room

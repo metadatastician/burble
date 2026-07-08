@@ -135,6 +135,14 @@ RTP reaches the server Peer — today's `p2p-voice.html` is pure peer-to-peer.
 Shipped as a preview so the community can experience the mountpoint, give
 feedback, and drive the client-side broadcast increment.
 
+*Privacy posture:* a broadcast/stage room is inherently one-to-many and
+public-facing — RTSP viewers (VLC/ffmpeg/OBS) are anonymous and receive the
+raw RTP. This is deliberately a *different* posture from Burble's E2EE-opaque
+1:1 calls: end-to-end encryption to anonymous stage viewers is not meaningful,
+so broadcast rooms are not E2EE. This is not a contradiction with the
+E2EE-opaque SFU — a public stage and a private call are different products —
+but it must be surfaced in the UI so no one expects E2EE on a broadcast.
+
 == What is NOT ready
 
 === PTP Hardware Validation

@@ -68,6 +68,18 @@ Key Exchange) and **SAS** (Short Authentication String).
 * **PAKE** — `SPAKE2-EE` (Elligator-Edition) or `OPAQUE` for passphrase-to-session-key derivation. The passphrase is communicated out-of-band (voice, SMS, in-person, sticky note). PAKE proves both parties know the passphrase without revealing it to any relay. The relay observes only the protocol messages; the passphrase is never transmitted.
 * **SAS** — A 4-to-6 word phrase (or numeric code) derived deterministically from the DTLS/Noise session exporter. Both sides display the same SAS. Post-connect, one party reads it aloud and the other confirms. Detects MITM by direct human comparison.
 * **Identity keys (Tier 1)** — X25519 (Curve25519) for ECDHE; Ed25519 for identity signatures. Aligns with WireGuard and Noise Protocol conventions.
++
+NOTE: Identity keys are **crypto-agile**. **Ed25519/X25519 are the current
+defaults** (mature, WireGuard/Noise conventions, and the only realistic choice
+where the key is published *as* a DNSSEC signing algorithm — Ed448 is DNSSEC
+algorithm 16 but not ecosystem-supported). The **forward option** is
+**Ed448 + Kyber1024 (ML-KEM) hybrid**: because a key published *inside* a DNS
+record (e.g. `OPENPGPKEY`) is opaque to DNS, an Ed448/PQ identity key can be
+carried as the record *payload* while the record itself is DNSSEC-signed with
+Ed25519/P-256 — so the strong/PQ key is not blocked by DNSSEC's algorithm
+support. Kyber-in-OpenPGP rides a draft standard, so a PQ-hybrid identity is a
+Burble-native format until PQ-OpenPGP standardises. See ADR-0010 §6 for the
+full identity-verification ladder and crypto notes.
 
 === Tiebreakers (proposed defaults — open during prototype)
 
