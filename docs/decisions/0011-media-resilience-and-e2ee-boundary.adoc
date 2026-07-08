@@ -1,0 +1,133 @@
+= Architecture Decision Record: 0011-media-resilience-and-e2ee-boundary
+
+// SPDX-License-Identifier: CC-BY-SA-4.0
+// Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+
+# 11. Media resilience & the E2EE content/metadata boundary
+
+Date: 2026-07-08
+
+## Status
+
+Proposed
+
+## Context
+
+Burble has a P2P media path (default) and an SFU for scale, plus DSP kernels
+(echo-cancel, comfort-noise, Wiener, spectral PLC, de-reverb, per-user VAD,
+REMB) and a "never drop the call" resilience goal (relates to AWOL, ADR-scope
+Q6). Two questions needed a firm, permanent answer: **what may the server ever
+see**, and **how is call quality/resilience achieved without ever weakening
+E2EE?** This ADR sets both, and states the guiding principle for the media
+layer.
+
+## Decision
+
+### 1. The principle
+
+> **Voice-first, E2EE-always, a clear call by cleverness at the edge — never
+> by opening the server's eyes. The seal is never broken to rescue a call.**
+
+You talk normally; if conditions degrade we use every *edge* trick to keep a
+working call degrading gracefully rather than dropping — but never by letting
+the server see content.
+
+### 2. The server is a pure forwarder — for every room type
+
+The server **never decodes or processes audio content**, for private *or*
+broadcast rooms. It only forwards (opaque RTP / opaque encrypted bytes) and
+does metadata rate-control. Forwarding a dumb pipe is not processing content
+(the RTSP broadcast egress forwards opaque RTP and is therefore fine).
+
+There is **no opt-out of security**. The guarantee is *absence of capability*
+— the server has no ability to see content — not a promise not to look. There
+is no toggle that trades E2EE for a feature.
+
+### 3. All content DSP runs at the edge
+
+Echo-cancellation, noise-suppression, Wiener filter, PLC, de-reverb, VAD run
+**client-side** via the SNIF/WASM path (`burble_fft.wasm` et al.), before
+encode and at receive — for private and broadcast alike (a broadcaster cleans
+its own audio before sending). This is also *higher quality*: AEC needs the
+local acoustic loop; noise-suppression is best before lossy encode; PLC is a
+receiver function. Server-side content-DSP backends are **off the live path**
+(dormant/receive-side utilities, not SFU features).
+
+### 4. The metadata boundary (what an SFU may ever see)
+
+[cols="1,4,2",options="header"]
+|===
+| # | Metadata | Disposition
+
+| 1 | Transport mechanics (sequence numbers, packet timing, loss stats) | **Exposed** — needed for rate-control (REMB); reveals nothing about people.
+| 2 | Routing topology (who is in the call) | **P2P by default** (server not in the media at all). When the SFU is used for scale: **opaque, rotating stream handles with identities E2EE** — the server sees "N streams routed to each other," never *who*.
+| 3 | Speech timing / duration (traffic-analysis) | **Refused.** Never exposed.
+| 4 | Active-speaker (RTP audio-level, content-derived) | **Refused.** Never exposed. Active-speaker UI is done at the **edge**: each client announces "I'm speaking" to peers over the E2EE data channel; the server stays blind.
+|===
+
+Rate-control (REMB) works entirely on row 1, so it survives fully with no E2EE
+cost. The one genuinely-central function is exactly the safe one.
+
+### 5. Graceful-degradation ladder ("never drop the call")
+
+  full Opus  →  adaptive low-bitrate Opus  →  text-as-speech  →  text-only
+
+The **text-as-speech** rung: when the Opus floor is hit and loss stays high for
+a sustained window (auto), or via a manual "low-bandwidth mode" toggle, the
+call downgrades to text — orders of magnitude smaller, so it gets through when
+audio cannot:
+
+* **STT and TTS run on-device (edge) only.** Server-side STT would expose the
+  transcript — a worse breach than audio. So speech→text and text→speech are
+  both local.
+* **The text is E2EE**, over the same encrypted channel; the server forwards
+  opaque bytes and never sees a word. It is *just another edge codec*.
+* Reversible when the network recovers; clear, unobtrusive UX indicator.
+* Mitigate STT errors by **showing the text alongside** the synthesized speech.
+
+### 6. Ages well by construction
+
+Because all intelligence is at the edge and the server is a dumb forwarder,
+**future on-device improvements drop in at the edge with no server change and
+no privacy cost** — better STT/TTS, sender voice-timbre reconstruction (hear
+*their* voice), sharper DSP, post-Opus codecs. The degradation floor is a
+*living* floor that rises as the tech does. This is the opposite of the usual
+"add AI → move to the server → grow the surveillance surface" pattern: Burble
+gets smarter while staying blind. That property is a moat.
+
+### 7. Bonus: one mechanism, three wins
+
+The on-device STT text stream doubles as **live captions / accessibility**
+(deaf/HoH users, noisy rooms) and — *consent-gated* per ADR-0002's transcript
+rules — an optional transcript. Resilience, accessibility, and opt-in notes
+from a single edge capability.
+
+## Relationship to other decisions
+
+* **AWOL / "never drop a call"** (Q6) — the degradation ladder is the media-
+  codec complement to AWOL's multipath transport resilience.
+* **ADR-0002** — transcript persistence stays consent-gated.
+* **ADR-0010** — the media path sits *under* the presence layer; a zone's
+  route-policy seam governs *how* packets are routed, this ADR governs *what
+  the router may see*.
+
+## Consequences
+
+### Positive
+* A permanent, absence-of-capability E2EE guarantee (nothing to trust us not
+  to do) that still delivers clear calls and improves over time.
+* Higher audio quality (edge DSP) and a genuine "never drop the call" floor.
+* Accessibility (captions) and opt-in transcripts for free.
+
+### Negative / caveats
+* STT errors can produce confident-wrong words (mitigated by showing text).
+* Text-as-speech loses tone/emotion; on-device STT/TTS costs CPU/battery and
+  latency — acceptable for a fallback.
+* Opaque-handle SFU routing and E2EE identity mapping are more work than a
+  naive SFU.
+
+### Deferred / open
+* Sender voice-timbre reconstruction (the stretch goal that makes the fallback
+  feel like a real call).
+* Exact degradation triggers/hysteresis; on-device model selection per
+  platform.
