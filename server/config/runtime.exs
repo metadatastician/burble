@@ -23,6 +23,12 @@ snif_path =
 
 config :burble, :snif_path, snif_path
 
+# EXPERIMENTAL RTSP broadcast egress — runtime switch (see config.exs).
+# BURBLE_RTSP_BROADCAST=true turns it on without recompiling.
+if System.get_env("BURBLE_RTSP_BROADCAST") in ["1", "true", "TRUE", "yes"] do
+  config :burble, :rtsp_broadcast, true
+end
+
 if config_env() == :prod do
   verisimdb_url =
     System.get_env("VERISIMDB_URL") ||

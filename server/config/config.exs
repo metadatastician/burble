@@ -56,4 +56,14 @@ config :burble, Burble.Mailer,
 config :hammer,
   backend: {Hammer.Backend.ETS, [expiry_ms: 60_000 * 60, cleanup_interval_ms: 60_000 * 10]}
 
+# EXPERIMENTAL — server-mediated RTSP broadcast egress.
+#
+# When enabled, stage/broadcast rooms revive the Media.Engine SFU session and
+# fan their single RTP stream out to RTSP viewers (VLC/ffmpeg/OBS play the
+# `rtsp://host:8554/live/room-<id>/speaker` mountpoint) alongside WebRTC peers.
+# Default OFF: no effect on the standard peer-to-peer path. This is a
+# switchable, community-preview feature — flip it on to try it and give
+# feedback, or set BURBLE_RTSP_BROADCAST=true at runtime (see runtime.exs).
+config :burble, :rtsp_broadcast, false
+
 import_config "#{config_env()}.exs"
