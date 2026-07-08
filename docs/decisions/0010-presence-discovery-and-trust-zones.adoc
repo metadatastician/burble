@@ -1,0 +1,224 @@
+= Architecture Decision Record: 0010-presence-discovery-and-trust-zones
+:toc:
+:toclevels: 3
+
+// SPDX-License-Identifier: CC-BY-SA-4.0
+// Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+
+# 10. Presence, discovery & trust zones (unified identity-assurance model)
+
+Date: 2026-07-08
+
+## Status
+
+Proposed
+
+## Context
+
+Burble has, in pieces, most of what a rich presence system needs — but no
+document ties them into one coherent model:
+
+* **ADR-0002** — optional IndieWeb-native identity (IndieAuth, `rel=me`,
+  h-card discovery). Your domain *is* your identity; the `rel=me` graph is
+  effectively a social identity graph.
+* **ADR-0003** — tiered caller authentication (PAKE/SAS) with a Tier-1
+  identity key published via NAPTR/DNSSEC.
+* **`Burble.Bolt.Spa`** — HMAC Single-Packet-Authorisation on the Bolt poke
+  (authenticate-before-reachable at the IP layer).
+* **`Burble.Security.SDP`** — a Zero-Trust Software-Defined Perimeter that
+  *also* uses SPA + dynamic firewalling (authenticate-before-visible at the
+  network layer).
+* **BLE-SPA** (design, `docs/architecture/ANDROID-CLIENT.adoc`) — the same
+  knock, at the Bluetooth advertising layer.
+
+Two gaps remain. First, **discovery is described per-transport** (BLE in the
+Android doc, relay/rooms in the web client) with no shared notion of
+"who may find me, here." Second, **identity-verification strength and
+who-can-reach-me are never connected** — ADR-0003 tiers auth, ADR-0002 links
+identity, but nothing says "a stronger-verified contact may occupy a more
+trusted position."
+
+This ADR unifies them: **presence is a transport-agnostic policy layer;
+trust zones decide who may discover/reach you; and the strength of a
+contact's identity verification decides which zone they may occupy.** It does
+not replace ADR-0002/0003 — it is the umbrella over them.
+
+## Decision
+
+### 1. Presence is transport-agnostic; it is rendezvous, not the call
+
+"Who is around and may I reach them" is one concept regardless of the pipe:
+
+[cols="1,2,2"]
+|===
+| Transport | "Around" means | Shines for
+
+| BLE (proximity) | in physical radio range | in-person: party, street
+| Local network (mDNS/DNS-SD) | on the same wifi/subnet | lecture theatre, office, café
+| Internet (relay / rooms) | anyone you've connected with | remote friends, corporate
+|===
+
+The presence layer answers discovery + *may-I-reach-you*, then **hands off to
+the existing transports** (WebRTC per ADR-0003, Bolt per ADR-0004) for the
+actual session. Presence never becomes a second media transport.
+
+### 2. Trust zones are the policy layer (IE/Windows-zones model)
+
+Borrowed from the Internet Explorer / Windows security-zones idea, applied to
+presence:
+
+[cols="1,2,2"]
+|===
+| Zone | Default posture | Feel
+
+| **Public** (untrusted by nature) | Silent — broadcast nothing; rendezvous only on an authenticated knock | a bar, a stranger's party
+| **Private** (known context) | Continuous contact-resolvable beacon | home wifi, your desk
+| **Trusted-by-nature** | Presence to a verified group | a venue/event that attests its attendees; a family group
+| **Trusted-by-you** ("make-me-trusted") | Explicit grant to named people/devices | "these people can always find me"
+|===
+
+Membership criteria for each zone MUST be explicit and auditable. In
+particular *Trusted-by-nature* is the fuzzy one — learn from IE's "Local
+Intranet" zone (a persistent security hole because "what counts" was vague):
+its membership must be a concrete, forgery-resistant attestation (a signed
+venue/event key, a verified group), never an implicit heuristic.
+
+### 3. Modes are a cadence of the same crypto (not two systems)
+
+* **Silent** = broadcast nothing; a one-shot HMAC **knock** to rendezvous
+  (BLE-SPA / `Bolt.Spa`).
+* **Presence** = continuously advertise a **rotating, contact-resolvable
+  beacon** (the Find-My pattern: address rotated from a shared key so
+  contacts resolve "that's Alice" while bystanders see unlinkable random
+  bytes every ~15 min).
+* **Off** = no activity. **This is the default**, so an unaware user is
+  public-safe.
+
+"Home presence" therefore is *not* a plaintext "I'm here" to the whole
+street — it is continuous *contact-scoped* visibility. Same secret, two duty
+cycles.
+
+### 4. Resolution precedence: block > allow > zone (block is cryptographic)
+
+Per contact, resolve in this order:
+
+  block-list  →  allow-list  →  zone default
+
+* **Block is absolute and zone-independent.** A blocked party can never
+  resolve or reach you — not in a "trusted" venue, not at any claimed trust
+  level. **Block is enforced cryptographically, not cosmetically:** revoking
+  a contact = **rotate the presence secret and re-share to everyone except
+  them**. Hiding them in the UI while they still hold the key is not blocking.
+  This is the invariant that makes the safety case (below) real.
+* **Allow overrides zone-down.** In Public/Silent, an allow-listed contact
+  can still find you (the "invisible to the room except my friend" case).
+
+### 5. Identity-verification ladder → assurance → zone eligibility
+
+The verification *method* yields an *assurance level*, and assurance is the
+input to which zone a contact may occupy. The system **grows with you**:
+start where it's easiest, and each anchor you add raises your assurance and
+widens your verified graph.
+
+[cols="1,2,2,2"]
+|===
+| Rung | Method | Trust anchor | Notes
+
+| In-person | QR scan (WeChat-style) | physical presence | strongest, zero infrastructure
+| Web (easy) | `.well-known/burble` proof / `rel=me` / **IndieAuth** (ADR-0002) | your TLS cert (the MTA-STS pattern — HTTPS/WebPKI, *no DNSSEC*) | the accessible tier; **this is the IndieWeb social graph, elevated**
+| Crypto | **IPNS / IPFS** | self-certifying public key | strong, decentralised, no DNSSEC or CA
+| DNS | DANE (`OPENPGPKEY` / `TLSA`) | DNSSEC | for the DNS-savvy; DNSSEC is the real barrier
+| Org | **NAPTR/DNSSEC** (ADR-0003 Tier 1) | corporate DNS | the corporate/enterprise top rung
+|===
+
+**Burble elevates the IndieWeb `rel=me` graph.** IndieWeb already *has* the
+cute social graph; what it lacks is cryptographic meaning. Burble supplies the
+signed identity proof on top, turning "fun social linking" into *verified
+social identity*. A tiny bridge plugin (or a static file) emits the proof;
+no WordPress theme, plugin swarm, or dangerous settings — see ADR-0002.
+
+### 6. Cryptographic notes (so nobody re-treads these)
+
+* **DNSSEC *signing* algorithm** (protecting the record) must be
+  ecosystem-supported: **Ed25519 (algo 15)** or **ECDSA P-256/P-384 (13/14)**.
+  **Ed448 (algo 16) is specified but not practically usable** — thin
+  registrar/resolver support — so it must NOT be the zone-signing algorithm.
+* **The identity key *inside* a record is opaque to DNS.** It may therefore be
+  **Ed448, or an Ed448 + Kyber1024 (ML-KEM) hybrid**, published as the payload
+  of a record that is DNSSEC-signed with Ed25519/P-256. Ed448/PQ was never off
+  the table for the *identity* key — only as the *DNSSEC* algorithm. Note:
+  Kyber in OpenPGP is still draft, so a PQ-hybrid identity is a Burble-native
+  format until PQ-OpenPGP standardises.
+* **Two anchor families, two rungs:** WebPKI/`.well-known` (MTA-STS pattern —
+  accessible, trusts CAs) and DNSSEC/DANE (stronger anchor, needs DNSSEC).
+* `SMIMEA` needs an (often paid) S/MIME cert; `SSHFP` is for SSH host keys
+  (wrong use); **`APL` is experimental and effectively dead — do not use it.**
+* **"Basic protection" is checked via device-lock, not SIM-PIN.** A SIM is a
+  low-assurance possession factor (SIM-swap), and SIM-PIN status is not
+  reliably queryable via public phone APIs. `KeyguardManager.isDeviceSecure()`
+  (device has a PIN/pattern/biometric) *is* queryable and is the better
+  signal; gate the basic tier on that.
+
+### 7. Safety, duress & duty of care
+
+The system must serve the person who needs to reach a trusted friend from an
+unsafe situation without anyone noticing — *and* must not become a stalking
+vector:
+
+* **Covert must be genuinely covert.** A duress knock produces no screen
+  flash, sound, notification, or BLE pattern a bystander could detect as
+  signalling. If it has a tell, it is worse than nothing.
+* **"Ghost — appear offline to everyone, now" overrides even the allow-list**,
+  and is always one gesture away. It is both a privacy control and a safety
+  control (escaping someone who is on, or was coerced onto, your allow-list).
+* **It complements, never replaces, emergency services.** BLE/local range and
+  "friend must be attending" mean this is "discreetly reach a nearby friend,"
+  never a panic button. Over-promising a safety feature is dangerous; frame it
+  honestly.
+* Block-list (§4, cryptographic) is the backbone of all of the above.
+
+## Relationship to existing decisions
+
+* **ADR-0002** — the IndieWeb integration *is* the "Web (easy)" identity rung
+  and the social-graph substrate this ADR elevates. Unchanged; referenced.
+* **ADR-0003** — PAKE/SAS is the *pairing* mechanism; its NAPTR/DNSSEC Tier 1
+  is the "Org" rung here. This ADR should be captured as, or alongside, the
+  ADR-0003 identity-layer extension.
+* **ADR-0004 / `Bolt.Spa` / `Security.SDP`** — the "authenticate-before-
+  visible" SPA primitive appears at three layers (network SDP, IP Bolt, BLE);
+  a future note may unify them as one primitive.
+
+## Deferred / open questions
+
+* **Route-privacy layer** (proxy, jump servers, oblivious DNS, VPN egress, and
+  `Burble.Security.SDP`) is a *separate* layer beneath presence. It is **not
+  designed here** — but the seam is reserved: each zone carries a (currently
+  unpopulated) **route-policy** field `direct | relay | jump | odns |
+  vpn-egress`. `Security.SDP` is the network-layer twin of the knock and the
+  natural first inhabitant. Its own ADR when built.
+* **Key bootstrap details** — the precise QR / `.well-known` / IndieAuth proof
+  format and the secret-exchange handshake.
+* **Coerced consent** — mitigations beyond the ghost override.
+* **PQ-OpenPGP dependency** — Kyber-in-record rides a draft standard.
+
+## Consequences
+
+### Positive
+* One coherent model spanning BLE, local-network, and internet presence.
+* Verification strength gates trust position — principled, and it *grows with
+  the user* (adoptability engine).
+* Elevates the IndieWeb graph into verified social identity; honours the P2P
+  and IndieWeb ethos; corporate NAPTR path keeps it enterprise-adoptable.
+* A genuinely protective (and honestly-scoped) duress capability.
+
+### Negative
+* Large design surface; must be built incrementally behind flags.
+* Cryptographic block (key rotation on revoke) is more work than a UI hide —
+  but it is the safety-critical correct behaviour.
+* Zone membership (esp. Trusted-by-nature) needs careful, forgery-resistant
+  definition or it becomes the soft underbelly.
+
+### Neutral
+* Additive; existing auth, rooms, and transports are unchanged.
+* Nothing here is built yet — this ADR pins the design before code so the
+  simple default and the deferred seams are both explicit.
