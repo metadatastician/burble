@@ -19,10 +19,10 @@ Deno.test("BurbleSignaling.make creates initial state", () => {
     onError: () => {},
   };
 
-  const state = Signaling.make("ws://localhost:4020/voice", callbacks);
+  const state = Signaling.make("ws://localhost:6473/voice", callbacks);
   assert.ok(state !== null, "make() should return a non-null state");
   assert.strictEqual(state.connected, false, "initial state should be disconnected");
-  assert.strictEqual(state.serverUrl, "ws://localhost:4020/voice");
+  assert.strictEqual(state.serverUrl, "ws://localhost:6473/voice");
   assert.strictEqual(state.socket, undefined, "socket should be None (undefined)");
   assert.strictEqual(state.channel, undefined, "channel should be None (undefined)");
   assert.strictEqual(state.roomId, undefined, "roomId should be None (undefined)");
@@ -36,7 +36,7 @@ Deno.test("BurbleSignaling.make preserves callbacks", () => {
     onError: () => {},
   };
 
-  const state = Signaling.make("ws://localhost:4020/voice", callbacks);
+  const state = Signaling.make("ws://localhost:6473/voice", callbacks);
   assert.ok(state.callbacks !== undefined, "callbacks should be preserved");
   assert.strictEqual(typeof state.callbacks.onEvent, "function");
   assert.strictEqual(typeof state.callbacks.onJoined, "function");
@@ -46,11 +46,11 @@ Deno.test("BurbleSignaling.make preserves callbacks", () => {
 Deno.test("BurbleSignaling.make with different URLs", () => {
   const callbacks = { onEvent: () => {}, onJoined: () => {}, onError: () => {} };
 
-  const state1 = Signaling.make("ws://server1:4020/voice", callbacks);
-  const state2 = Signaling.make("ws://server2:4020/voice", callbacks);
+  const state1 = Signaling.make("ws://server1:6473/voice", callbacks);
+  const state2 = Signaling.make("ws://server2:6473/voice", callbacks);
 
-  assert.strictEqual(state1.serverUrl, "ws://server1:4020/voice");
-  assert.strictEqual(state2.serverUrl, "ws://server2:4020/voice");
+  assert.strictEqual(state1.serverUrl, "ws://server1:6473/voice");
+  assert.strictEqual(state2.serverUrl, "ws://server2:6473/voice");
   assert.notStrictEqual(state1.serverUrl, state2.serverUrl);
 });
 
@@ -60,7 +60,7 @@ Deno.test("BurbleSignaling.make with different URLs", () => {
 
 Deno.test("BurbleSignaling.disconnect on fresh state does not throw", () => {
   const callbacks = { onEvent: () => {}, onJoined: () => {}, onError: () => {} };
-  const state = Signaling.make("ws://localhost:4020/voice", callbacks);
+  const state = Signaling.make("ws://localhost:6473/voice", callbacks);
 
   // Should not throw even when socket and channel are None.
   assert.doesNotThrow(() => Signaling.disconnect(state));
@@ -73,7 +73,7 @@ Deno.test("BurbleSignaling.disconnect on fresh state does not throw", () => {
 
 Deno.test("BurbleSignaling.leaveRoom on fresh state does not throw", () => {
   const callbacks = { onEvent: () => {}, onJoined: () => {}, onError: () => {} };
-  const state = Signaling.make("ws://localhost:4020/voice", callbacks);
+  const state = Signaling.make("ws://localhost:6473/voice", callbacks);
 
   assert.doesNotThrow(() => Signaling.leaveRoom(state));
   assert.strictEqual(state.roomId, undefined);
@@ -85,14 +85,14 @@ Deno.test("BurbleSignaling.leaveRoom on fresh state does not throw", () => {
 
 Deno.test("BurbleSignaling.sendVoiceState without connection does not throw", () => {
   const callbacks = { onEvent: () => {}, onJoined: () => {}, onError: () => {} };
-  const state = Signaling.make("ws://localhost:4020/voice", callbacks);
+  const state = Signaling.make("ws://localhost:6473/voice", callbacks);
 
   assert.doesNotThrow(() => Signaling.sendVoiceState(state, "muted"));
 });
 
 Deno.test("BurbleSignaling.sendSignal without connection does not throw", () => {
   const callbacks = { onEvent: () => {}, onJoined: () => {}, onError: () => {} };
-  const state = Signaling.make("ws://localhost:4020/voice", callbacks);
+  const state = Signaling.make("ws://localhost:6473/voice", callbacks);
 
   assert.doesNotThrow(() =>
     Signaling.sendSignal(state, "peer_b", "offer", { sdp: "test" })
@@ -101,14 +101,14 @@ Deno.test("BurbleSignaling.sendSignal without connection does not throw", () => 
 
 Deno.test("BurbleSignaling.sendText without connection does not throw", () => {
   const callbacks = { onEvent: () => {}, onJoined: () => {}, onError: () => {} };
-  const state = Signaling.make("ws://localhost:4020/voice", callbacks);
+  const state = Signaling.make("ws://localhost:6473/voice", callbacks);
 
   assert.doesNotThrow(() => Signaling.sendText(state, "hello"));
 });
 
 Deno.test("BurbleSignaling.sendWhisper without connection does not throw", () => {
   const callbacks = { onEvent: () => {}, onJoined: () => {}, onError: () => {} };
-  const state = Signaling.make("ws://localhost:4020/voice", callbacks);
+  const state = Signaling.make("ws://localhost:6473/voice", callbacks);
 
   assert.doesNotThrow(() => Signaling.sendWhisper(state, "target_user"));
 });
@@ -125,7 +125,7 @@ Deno.test("BurbleSignaling.joinRoom without connect calls onError", () => {
     onError: (msg) => { errorMsg = msg; },
   };
 
-  const state = Signaling.make("ws://localhost:4020/voice", callbacks);
+  const state = Signaling.make("ws://localhost:6473/voice", callbacks);
   Signaling.joinRoom(state, "test-room", "TestUser");
 
   assert.strictEqual(errorMsg, "Not connected",

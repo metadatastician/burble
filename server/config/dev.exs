@@ -12,7 +12,7 @@ config :burble, Burble.Store,
   timeout: 30_000
 
 config :burble, BurbleWeb.Endpoint,
-  http: [ip: {127, 0, 0, 1}, port: 4020],
+  http: [ip: {127, 0, 0, 1}, port: 6473],
   check_origin: false,
   code_reloader: true,
   debug_errors: true,

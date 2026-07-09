@@ -64,7 +64,7 @@ copy-from = [
 ]
 entrypoint = ["/app/bin/burble", "start"]
 user = "nonroot"
-expose = [4020, 7373]
+expose = [6473, 7373]
 env = { MIX_ENV = "prod" }
 
 # ── Security ───────────────────────────────────────────────────

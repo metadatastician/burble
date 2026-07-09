@@ -11,8 +11,8 @@
 #   verisimdb      — VeriSimDB database (Rust core)
 #
 # Ports:
-#   4020 — Burble web client (public)
-#   Internal: server on 4020, VeriSimDB on 8080
+#   6473 — Burble web client (public)
+#   Internal: server on 6473, VeriSimDB on 8080
 
 [project]
 name = "burble"
@@ -42,7 +42,7 @@ restart = "unless-stopped"
 networks = ["burble-net"]
 environment = [
   "PHX_SERVER=true",
-  "PORT=4020",
+  "PORT=6473",
   # Uses the podman --name (burble_verisimdb), NOT the service name
   # (verisimdb). selur-compose v0.1 does not emit `--network-alias
   # <service>` the way Docker Compose does, so only the project-prefixed
@@ -60,7 +60,7 @@ environment = [
 
 [services.web]
 build = { context = "..", dockerfile = "containers/Containerfile.web" }
-ports = ["4020:8080"]
+ports = ["6473:8080"]
 depends_on = ["server"]
 restart = "unless-stopped"
 networks = ["burble-net"]
