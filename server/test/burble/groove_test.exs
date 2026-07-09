@@ -250,6 +250,28 @@ defmodule Burble.GrooveTest do
       assert [record] = expiries
       assert record.residue == 0
     end
+
+    test "heartbeat refresh is refused and never extends the lease" do
+      # SPEC v0.3 §4.6: a soft lease MUST be allowed to expire; the
+      # provider MUST NOT extend it on heartbeat (the HTTP plug maps this
+      # refusal to 409 Conflict).
+      peer = %{
+        "service_id" => "soft-refresh-peer",
+        "consumes" => ["voice"],
+        "lease" => %{"mode" => "soft", "ttl_ms" => 60}
+      }
+
+      {:ok, session_id, _lease} = Groove.connect(peer)
+
+      assert {:error, :soft_lease} = Groove.heartbeat(session_id)
+
+      # The refused refresh must not have moved the expiry: past the
+      # original TTL the connection is reaped regardless of heartbeats.
+      Process.sleep(90)
+      assert {:error, :soft_lease} = Groove.heartbeat(session_id)
+      status = sweep()
+      refute Map.has_key?(status, session_id)
+    end
   end
 
   describe "hard lease" do
@@ -274,19 +296,22 @@ defmodule Burble.GrooveTest do
     end
 
     test "degrades through the soft-expiry path after 3 missed TTL windows" do
+      # Degradation is measured in whole missed TTL windows of WALL TIME
+      # since the last refresh (SPEC v0.3 §4.6) — sweep cadence must not
+      # stretch or shrink the clock, so sweeping twice in one window must
+      # not count two windows.
       peer = %{
         "service_id" => "hard-degrade-peer",
         "consumes" => ["voice"],
-        "lease" => %{"mode" => "hard", "ttl_ms" => 5}
+        "lease" => %{"mode" => "hard", "ttl_ms" => 100}
       }
 
       {:ok, session_id, _lease} = Groove.connect(peer)
       Groove.push_message(%{"session_id" => session_id, "type" => "chat"})
 
-      # Let the first TTL window lapse without any heartbeat.
-      Process.sleep(50)
-
-      # Windows 1 and 2: degraded but never reaped.
+      # ~1 window past expiry: degraded but never reaped — even across two
+      # consecutive sweeps inside the same window.
+      Process.sleep(120)
       status = sweep()
       assert Map.has_key?(status, session_id)
       assert status[session_id].missed_windows == 1
@@ -294,7 +319,9 @@ defmodule Burble.GrooveTest do
       assert Map.has_key?(status, session_id)
       assert status[session_id].state == :degraded
 
-      # Window 3: degrades through the soft-expiry path (wipe + attest).
+      # ≥3 whole windows past expiry: degrades through the soft-expiry
+      # path (wipe + attest) on the next sweep.
+      Process.sleep(250)
       status = sweep()
       refute Map.has_key?(status, session_id)
 

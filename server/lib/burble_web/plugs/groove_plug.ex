@@ -240,6 +240,17 @@ defmodule BurbleWeb.Plugs.GroovePlug do
             |> send_resp(204, "")
             |> halt()
 
+          {:error, :soft_lease} ->
+            # SPEC v0.3 §4.6: a soft lease MUST be allowed to expire; its
+            # refresh is refused (liveness bookkeeping still updated).
+            conn
+            |> put_resp_content_type("application/json")
+            |> send_resp(
+              409,
+              ~s({"ok":false,"error":"soft lease must be allowed to expire; refresh refused"})
+            )
+            |> halt()
+
           {:error, :not_found} ->
             conn
             |> put_resp_content_type("application/json")

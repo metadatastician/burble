@@ -248,7 +248,7 @@ defmodule Burble.Groove do
   count — an actively refreshed connection is never reaped.
   Returns `:ok` if the session exists.
   """
-  @spec heartbeat(String.t()) :: :ok | {:error, :not_found}
+  @spec heartbeat(String.t()) :: :ok | {:error, :not_found | :soft_lease}
   def heartbeat(session_id) when is_binary(session_id) do
     GenServer.call(__MODULE__, {:heartbeat, session_id})
   end
@@ -430,7 +430,13 @@ defmodule Burble.Groove do
           |> refresh_lease(now)
 
         new_connections = Map.put(state.connections, session_id, updated)
-        {:reply, :ok, %{state | connections: new_connections}}
+        reply =
+          case conn_info.lease do
+            %{mode: "soft"} -> {:error, :soft_lease}
+            _ -> :ok
+          end
+
+        {:reply, reply, %{state | connections: new_connections}}
     end
   end
 
@@ -496,24 +502,32 @@ defmodule Burble.Groove do
   # windows degrade through the same soft-expiry path. A connection being
   # actively refreshed is never reaped.
   defp sweep_connection(state, session_id, %{lease: %{mode: "hard"}} = info, now) do
+    # Whole missed TTL windows since the lease last expired, measured from
+    # wall time (SPEC §4.6): sweep cadence must not stretch or shrink the
+    # degradation clock (a 5s sweep over a 1s TTL previously counted one
+    # window per sweep pass instead of five).
+    missed =
+      if now <= info.lease_expires_at,
+        do: 0,
+        else: div(now - info.lease_expires_at, info.lease.ttl_ms) + 1
+
     cond do
-      now <= info.lease_expires_at ->
+      missed == 0 ->
         state
 
-      info.missed_windows + 1 >= @lease_max_missed_windows ->
+      missed >= @lease_max_missed_windows ->
         expire_lease(state, session_id, info)
 
       true ->
         Logger.warning(
           "[Groove] Peer #{info.peer_id} (session=#{session_id}) missed hard-lease window " <>
-            "#{info.missed_windows + 1}/#{@lease_max_missed_windows}"
+            "#{missed}/#{@lease_max_missed_windows}"
         )
 
         updated = %{
           info
           | state: :degraded,
-            missed_windows: info.missed_windows + 1,
-            lease_expires_at: info.lease_expires_at + info.lease.ttl_ms
+            missed_windows: missed
         }
 
         %{state | connections: Map.put(state.connections, session_id, updated)}
@@ -594,6 +608,10 @@ defmodule Burble.Groove do
   # missed-window count returns to zero, so an actively refreshed connection
   # is never reaped by the sweep.
   defp refresh_lease(%{lease: nil} = conn_info, _now), do: conn_info
+
+  # A soft lease MUST be allowed to expire (SPEC §4.6): a heartbeat updates
+  # liveness bookkeeping but never extends the lease.
+  defp refresh_lease(%{lease: %{mode: "soft"}} = conn_info, _now), do: conn_info
 
   defp refresh_lease(%{lease: lease} = conn_info, now) do
     %{conn_info | lease_expires_at: now + lease.ttl_ms, missed_windows: 0}
