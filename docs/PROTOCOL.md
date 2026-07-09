@@ -23,10 +23,11 @@ Burble exposes three integration surfaces:
 | Realtime      | Phoenix Channels | Signaling, room events, presence | `server/lib/burble_web/channels/`               |
 | Wire schemas  | Bebop binary     | Voice signal + room event frames | `server/lib/burble/protocol/`                   |
 | Media plane   | WebRTC SRTP      | E2EE audio frames (SFU-blind)    | `server/lib/burble/media/`                      |
+| BLE presence  | BLE advertising  | Knock/rendezvous + presence beacon (v1 FROZEN) | `server/lib/burble/presence/ble_spa.ex` |
 
 The SFU **does not decrypt** media: voice frames pass through the media
-plane uninterpreted. Control-plane bridges (SIP, Mumble) transcode at
-the control plane only.
+plane uninterpreted. The Mumble control-plane bridge (experimental) transcodes
+at the control plane only.
 
 ## HTTP REST (`/api/v1`)
 
@@ -111,6 +112,30 @@ Binary schemas live in `server/lib/burble/protocol/` (generated from
 Tests: `server/test/burble/protocol/protocol_test.exs`.
 (A duplicate hand-maintained `Burble.Bebop.*` namespace was removed in the
 Phase 0 cleanup; the generated `Burble.Protocol.*` namespace is canonical.)
+
+## BLE presence & knock (v1 — FROZEN)
+
+Burble's Bluetooth-LE presence layer (for proximity rendezvous without the
+internet, and as a sensor input for estate siblings like neurophone). Three
+legacy-advertising frames, one 24-byte Manufacturer Specific Data payload each,
+one primitive (HMAC-SHA256): a Single-Packet-Authorisation **knock**, a
+connectable **response**, and a rotating contact-resolvable **presence beacon**.
+
+- Authority / decisions: `docs/decisions/0015-ble-presence-wire-format-v1.adoc`
+- Pinnable specs: `.machine_readable/descriptiles/ble-spa-knock.a2ml`,
+  `.machine_readable/descriptiles/nearby-presence.a2ml`
+- Reference impl: `server/lib/burble/presence/ble_spa.ex`
+  (Zig verifier: `ffi/zig/src/coprocessor/firewall.zig#ble_spa_verify`;
+  Idris types: `src/Burble/ABI/{BleSpa,NearbyPresence}.idr`)
+- **Committed test vectors (the freeze):**
+  `.machine_readable/test-vectors/ble-spa-v1.json`, recomputed in CI by
+  `server/test/burble/presence/ble_spa_vectors_test.exs`. Consumers pin against
+  these bytes.
+
+**Freeze covenant:** any change to the on-air bytes requires a superseding ADR,
+a **major** bump of `@version` (below), and a `CHANGELOG.md` "Protocol" entry.
+The Android emitter, CoC establishment, and key bootstrap are deferred — this
+freezes the contract, not the radio.
 
 ## Auth model
 

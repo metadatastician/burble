@@ -11,6 +11,7 @@ defmodule Burble.Presence.BleSpaTest do
   alias Burble.Presence.BleSpa
 
   @rs BleSpa.derive_room_secret("room-invite-token")
+  @ps :crypto.strong_rand_bytes(32)
   @nowbase 1_800_000_000
 
   defp fresh_nonce, do: :crypto.strong_rand_bytes(6)
@@ -101,8 +102,6 @@ defmodule Burble.Presence.BleSpaTest do
   end
 
   describe "presence beacon" do
-    @ps :crypto.strong_rand_bytes(32)
-
     test "resolves only for the holding contact" do
       ep = BleSpa.epoch(@nowbase)
       beacon = BleSpa.encode_presence(@ps, ep)
