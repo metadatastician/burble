@@ -1,0 +1,132 @@
+// SPDX-License-Identifier: MPL-2.0
+//
+// NeurophonePresence.affine — Burble extension: neurophone presence sensor.
+//
+// Consumer-side signatures for the BLE presence layer frozen in ADR-0015.
+// neurophone is SENSOR-CLASS: it observes Burble's presence frames (no mic, no
+// voice). Detection is knock-triggered rendezvous (Silent zones) plus a
+// contact-resolved presence field (Private/Trusted zones) — never continuous
+// plaintext scanning (ADR-0010, ADR-0015 D6). The wire format itself lives in
+// server/lib/burble/presence/ble_spa.ex; this is the app-facing event surface.
+
+/// Presence emission mode observed for a peer (ADR-0010). Off is the default.
+type presenceMode =
+  | Off       // emits nothing
+  | Silent    // knock-triggered rendezvous only
+  | Presence  // rotating contact-resolvable beacon
+
+/// Trust zone a resolved contact occupies (ADR-0010).
+type zone =
+  | Public
+  | Private
+  | TrustedByNature
+  | TrustedByYou
+
+/// A decoded knock/response rendezvous event (Silent zone).
+type knockEvent = {
+  tsSeconds: int,
+  nonceHex: string,
+  rssi: int,
+}
+
+/// A resolved standing-presence observation (Presence zones).
+type contactPresence = {
+  contactId: string,
+  epoch: int,
+  zone: zone,
+  rssi: int,
+}
+
+/// Sensor state. `ghostActive` honours the ADR-0010 ghost override: when set,
+/// all callbacks are suppressed and nothing is surfaced upward.
+type presenceState = {
+  mutable mode: presenceMode,
+  mutable ghostActive: bool,
+  mutable onKnockObserved: option<knockEvent => unit>,
+  mutable onResponseMatched: option<knockEvent => unit>,
+  mutable onContactResolved: option<contactPresence => unit>,
+  mutable onContactLost: option<string => unit>,
+}
+
+let state: presenceState = {
+  mode: Off,
+  ghostActive: false,
+  onKnockObserved: None,
+  onResponseMatched: None,
+  onContactResolved: None,
+  onContactLost: None,
+}
+
+// ---------------------------------------------------------------------------
+// Configuration
+// ---------------------------------------------------------------------------
+
+/// Set the emission mode the sensor should expect (drives scan duty cycle).
+let setMode = (mode: presenceMode): unit => {
+  state.mode = mode
+}
+
+/// Enable/disable the ghost override. When active, no event is surfaced.
+let setGhost = (active: bool): unit => {
+  state.ghostActive = active
+}
+
+let onKnockObserved = (handler: knockEvent => unit): unit => {
+  state.onKnockObserved = Some(handler)
+}
+
+let onResponseMatched = (handler: knockEvent => unit): unit => {
+  state.onResponseMatched = Some(handler)
+}
+
+let onContactResolved = (handler: contactPresence => unit): unit => {
+  state.onContactResolved = Some(handler)
+}
+
+let onContactLost = (handler: string => unit): unit => {
+  state.onContactLost = Some(handler)
+}
+
+// ---------------------------------------------------------------------------
+// Ingest (driven by the platform BLE scanner via JNI: bt_scan_event / bt_lost)
+// ---------------------------------------------------------------------------
+
+/// A verified knock was observed (Silent-zone rendezvous).
+let ingestKnock = (event: knockEvent): unit => {
+  if !state.ghostActive {
+    switch state.onKnockObserved {
+    | Some(h) => h(event)
+    | None => ()
+    }
+  }
+}
+
+/// A response token matched an outstanding knock.
+let ingestResponse = (event: knockEvent): unit => {
+  if !state.ghostActive {
+    switch state.onResponseMatched {
+    | Some(h) => h(event)
+    | None => ()
+    }
+  }
+}
+
+/// A presence beacon resolved to a known contact.
+let ingestContact = (contact: contactPresence): unit => {
+  if !state.ghostActive {
+    switch state.onContactResolved {
+    | Some(h) => h(contact)
+    | None => ()
+    }
+  }
+}
+
+/// A previously-resolved contact went silent (RSSI decay / scan timeout).
+let ingestLost = (contactId: string): unit => {
+  if !state.ghostActive {
+    switch state.onContactLost {
+    | Some(h) => h(contactId)
+    | None => ()
+    }
+  }
+}
