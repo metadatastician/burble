@@ -1,71 +1,81 @@
 {
-  "groove_version": "1",
-  "service_id": "burble",
-  "service_version": "1.0.0",
+  "applicability": [
+    "individual",
+    "team",
+    "massive-open"
+  ],
   "capabilities": {
-    "voice": {
-      "type": "voice",
-      "description": "Real-time voice communication with spatial audio",
-      "protocol": "webrtc",
-      "endpoint": "/voice",
-      "requires_auth": true,
-      "panel_compatible": true
-    },
-    "text": {
-      "type": "text",
-      "description": "Text messaging with presence awareness",
-      "protocol": "websocket",
-      "endpoint": "/text",
-      "requires_auth": true,
-      "panel_compatible": true
-    },
     "presence": {
-      "type": "presence",
-      "description": "User presence and availability tracking",
+      "description": "User presence and speaking indicators via Phoenix Presence",
+      "endpoint": "/socket/websocket",
+      "panel_compatible": true,
       "protocol": "websocket",
-      "endpoint": "/presence",
-      "requires_auth": true,
-      "panel_compatible": true
-    },
-    "spatial-audio": {
-      "type": "spatial-audio",
-      "description": "3D spatial audio positioning",
-      "protocol": "webrtc",
-      "endpoint": "/voice/spatial",
-      "requires_auth": true,
-      "panel_compatible": true
+      "requires_auth": false,
+      "type": "presence"
     },
     "recording": {
-      "type": "recording",
-      "description": "Session recording and playback",
+      "description": "Server-side voice recording with consent tracking via Avow",
+      "endpoint": "/api/v1/recordings",
+      "panel_compatible": true,
       "protocol": "http",
-      "endpoint": "/api/recordings",
       "requires_auth": true,
-      "panel_compatible": false
+      "type": "recording"
     },
-    "tts": {
-      "type": "tts",
-      "description": "Text-to-speech synthesis",
-      "protocol": "http",
-      "endpoint": "/api/tts",
-      "requires_auth": false,
-      "panel_compatible": true
+    "spatial_audio": {
+      "description": "Positional audio for game integration (x, y, z coordinates)",
+      "endpoint": "/voice",
+      "panel_compatible": false,
+      "protocol": "webrtc",
+      "requires_auth": true,
+      "type": "spatial-audio"
     },
     "stt": {
-      "type": "stt",
-      "description": "Speech-to-text transcription",
+      "description": "Speech-to-text transcription for voice commands and VoiceTag",
+      "endpoint": "/api/v1/stt",
+      "panel_compatible": false,
+      "protocol": "http",
+      "requires_auth": false,
+      "type": "stt"
+    },
+    "text": {
+      "description": "Real-time text messaging in rooms via Phoenix Channels",
+      "endpoint": "/socket/websocket",
+      "panel_compatible": true,
       "protocol": "websocket",
-      "endpoint": "/api/stt",
-      "requires_auth": true,
-      "panel_compatible": true
+      "requires_auth": false,
+      "type": "text"
+    },
+    "tts": {
+      "description": "Text-to-speech synthesis for voice alerts and notifications",
+      "endpoint": "/api/v1/tts",
+      "panel_compatible": false,
+      "protocol": "http",
+      "requires_auth": false,
+      "type": "tts"
+    },
+    "voice": {
+      "description": "WebRTC voice channels with Opus codec, noise suppression, echo cancellation",
+      "endpoint": "/voice",
+      "panel_compatible": true,
+      "protocol": "webrtc",
+      "requires_auth": false,
+      "type": "voice"
     }
   },
-  "consumes": ["integrity", "octad-storage", "scanning"],
+  "consumes": [
+    "integrity",
+    "octad-storage",
+    "scanning"
+  ],
   "endpoints": {
-    "health": "/health",
-    "groove": "/.well-known/groove",
-    "mesh": "/.well-known/groove/mesh"
+    "api": "http://localhost:6473/api/v1",
+    "channel_ws": "ws://localhost:6473/socket/websocket",
+    "health": "http://localhost:6473/api/v1/health",
+    "voice_ws": "ws://localhost:6473/voice"
   },
-  "health": "/health",
-  "applicability": ["individual", "team", "massive-open"]
+  "groove_version": "1",
+  "health": "/api/v1/health",
+  "mode": "active",
+  "service_id": "burble",
+  "service_version": "1.0.0"
 }

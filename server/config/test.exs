@@ -23,6 +23,11 @@ config :logger, level: :warning
 config :phoenix, :plug_init_mode, :runtime
 config :bcrypt_elixir, :log_rounds, 1
 
+# Groove: stretch the periodic :check_heartbeats sweep so lease tests can
+# send the sweep message directly and observe deterministic transitions
+# (production default is 5s — see Burble.Groove).
+config :burble, :groove_sweep_interval_ms, 3_600_000
+
 # Swoosh: disable real email in test
 config :swoosh, :api_client, false
 config :burble, Burble.Mailer, adapter: Swoosh.Adapters.Test
