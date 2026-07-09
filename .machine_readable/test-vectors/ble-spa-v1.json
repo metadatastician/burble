@@ -1,0 +1,199 @@
+{
+  "spec": "burble-ble-spa",
+  "wire_version": 1,
+  "spec_version": "1.0.0",
+  "adr": "docs/decisions/0015-ble-presence-wire-format-v1.adoc",
+  "reference_impl": "server/lib/burble/presence/ble_spa.ex",
+  "generated_by": "mix burble.gen_ble_vectors (bytes independently reproduced by an HMAC-SHA256 oracle)",
+  "note": "Fixed non-production secrets. Any drift in these bytes is a v2 wire break (ADR-0015 D7).",
+  "room_secret_derivation": [
+    {
+      "name": "alpha",
+      "invite_token": "test-invite-room-alpha",
+      "room_secret_hex": "b73d0f8b2aefa65ac5c64d526f0e97399810f533971f732030c32c5224eff090"
+    },
+    {
+      "name": "bravo",
+      "invite_token": "test-invite-room-bravo",
+      "room_secret_hex": "d1c73bce7f5251cdc559cb2063ca6e424917a29faccf1ca27c89daae0ec64233"
+    }
+  ],
+  "knock": [
+    {
+      "name": "alpha_basic",
+      "room_secret_hex": "b73d0f8b2aefa65ac5c64d526f0e97399810f533971f732030c32c5224eff090",
+      "ts": 1767225600,
+      "nonce_hex": "0102030405ff",
+      "payload_hex": "42116955b9000102030405ff1ac37b97bc871849d09fe042",
+      "verify": {
+        "now": 1767225605,
+        "result": "ok"
+      }
+    },
+    {
+      "name": "alpha_offset",
+      "room_secret_hex": "b73d0f8b2aefa65ac5c64d526f0e97399810f533971f732030c32c5224eff090",
+      "ts": 1767226500,
+      "nonce_hex": "aabbccddeeff",
+      "payload_hex": "42116955bc84aabbccddeeff6efd5f7aeda6301df653a32e",
+      "verify": {
+        "now": 1767226505,
+        "result": "ok"
+      }
+    },
+    {
+      "name": "bravo_basic",
+      "room_secret_hex": "d1c73bce7f5251cdc559cb2063ca6e424917a29faccf1ca27c89daae0ec64233",
+      "ts": 1767232800,
+      "nonce_hex": "101112131415",
+      "payload_hex": "42116955d5201011121314153eeaed0aa2d88b4f95435500",
+      "verify": {
+        "now": 1767232805,
+        "result": "ok"
+      }
+    }
+  ],
+  "knock_negative": [
+    {
+      "name": "tampered_mac",
+      "payload_hex": "42116955b9000102030405ff1ac37b97bc871849d09fe043",
+      "room_secret_hex": "b73d0f8b2aefa65ac5c64d526f0e97399810f533971f732030c32c5224eff090",
+      "now": 1767225605,
+      "result": "bad_mac"
+    },
+    {
+      "name": "wrong_secret",
+      "payload_hex": "42116955b9000102030405ff1ac37b97bc871849d09fe042",
+      "room_secret_hex": "d1c73bce7f5251cdc559cb2063ca6e424917a29faccf1ca27c89daae0ec64233",
+      "now": 1767225605,
+      "result": "bad_mac"
+    },
+    {
+      "name": "bad_magic",
+      "payload_hex": "43116955b9000102030405ff1ac37b97bc871849d09fe042",
+      "room_secret_hex": "b73d0f8b2aefa65ac5c64d526f0e97399810f533971f732030c32c5224eff090",
+      "now": 1767225605,
+      "result": "bad_magic"
+    },
+    {
+      "name": "bad_version",
+      "payload_hex": "42216955b9000102030405ff1ac37b97bc871849d09fe042",
+      "room_secret_hex": "b73d0f8b2aefa65ac5c64d526f0e97399810f533971f732030c32c5224eff090",
+      "now": 1767225605,
+      "result": "bad_version"
+    },
+    {
+      "name": "bad_frame_type",
+      "payload_hex": "42126955b9000102030405ff1ac37b97bc871849d09fe042",
+      "room_secret_hex": "b73d0f8b2aefa65ac5c64d526f0e97399810f533971f732030c32c5224eff090",
+      "now": 1767225605,
+      "result": "bad_frame_type"
+    },
+    {
+      "name": "stale_plus_31s",
+      "payload_hex": "42116955b9000102030405ff1ac37b97bc871849d09fe042",
+      "room_secret_hex": "b73d0f8b2aefa65ac5c64d526f0e97399810f533971f732030c32c5224eff090",
+      "now": 1767225631,
+      "result": "stale_timestamp"
+    },
+    {
+      "name": "stale_minus_31s",
+      "payload_hex": "42116955b9000102030405ff1ac37b97bc871849d09fe042",
+      "room_secret_hex": "b73d0f8b2aefa65ac5c64d526f0e97399810f533971f732030c32c5224eff090",
+      "now": 1767225569,
+      "result": "stale_timestamp"
+    },
+    {
+      "name": "truncated",
+      "payload_hex": "42116955b9000102030405ff1ac37b97bc871849d09fe0",
+      "room_secret_hex": "b73d0f8b2aefa65ac5c64d526f0e97399810f533971f732030c32c5224eff090",
+      "now": 1767225605,
+      "result": "bad_length"
+    }
+  ],
+  "response": [
+    {
+      "name": "alpha_psm0",
+      "room_secret_hex": "b73d0f8b2aefa65ac5c64d526f0e97399810f533971f732030c32c5224eff090",
+      "knock_ts": 1767225600,
+      "knock_nonce_hex": "0102030405ff",
+      "resp_ts": 1767225602,
+      "psm": 0,
+      "token_hex": "9d948106cd6166204dfe72296b03caa1",
+      "payload_hex": "42136955b9029d948106cd6166204dfe72296b03caa10000",
+      "match": {
+        "now": 1767225603,
+        "result_psm": 0
+      }
+    },
+    {
+      "name": "alpha_psm129",
+      "room_secret_hex": "b73d0f8b2aefa65ac5c64d526f0e97399810f533971f732030c32c5224eff090",
+      "knock_ts": 1767225600,
+      "knock_nonce_hex": "0102030405ff",
+      "resp_ts": 1767225602,
+      "psm": 129,
+      "token_hex": "9d948106cd6166204dfe72296b03caa1",
+      "payload_hex": "42136955b9029d948106cd6166204dfe72296b03caa10081",
+      "match": {
+        "now": 1767225603,
+        "result_psm": 129
+      }
+    },
+    {
+      "name": "bravo_psm4097",
+      "room_secret_hex": "d1c73bce7f5251cdc559cb2063ca6e424917a29faccf1ca27c89daae0ec64233",
+      "knock_ts": 1767232800,
+      "knock_nonce_hex": "101112131415",
+      "resp_ts": 1767232803,
+      "psm": 4097,
+      "token_hex": "612b2828d522816ab4fc20e14f427bd1",
+      "payload_hex": "42136955d523612b2828d522816ab4fc20e14f427bd11001",
+      "match": {
+        "now": 1767232804,
+        "result_psm": 4097
+      }
+    }
+  ],
+  "presence": [
+    {
+      "name": "contact_c_epoch0",
+      "presence_secret_hex": "00112233445566778899aabbccddeeff0102030405060708090a0b0c0d0e0f10",
+      "unix_s": 1767225600,
+      "epoch": 1963584,
+      "beacon_id_hex": "92d634a38fa4f2f459464b01f441dedd7c7d",
+      "payload_hex": "4212001df64092d634a38fa4f2f459464b01f441dedd7c7d",
+      "resolve": {
+        "now": 1767225600,
+        "contact_id": "contact-c",
+        "result": "ok"
+      }
+    },
+    {
+      "name": "contact_c_next",
+      "presence_secret_hex": "00112233445566778899aabbccddeeff0102030405060708090a0b0c0d0e0f10",
+      "unix_s": 1767226500,
+      "epoch": 1963585,
+      "beacon_id_hex": "d37399b1ec9af814b0daa85ca6591b1cfc7d",
+      "payload_hex": "4212001df641d37399b1ec9af814b0daa85ca6591b1cfc7d",
+      "resolve": {
+        "now": 1767226500,
+        "contact_id": "contact-c",
+        "result": "ok"
+      }
+    },
+    {
+      "name": "contact_c_later",
+      "presence_secret_hex": "00112233445566778899aabbccddeeff0102030405060708090a0b0c0d0e0f10",
+      "unix_s": 1767349056,
+      "epoch": 1963721,
+      "beacon_id_hex": "0f7eb625ab851315b6d972592b6f137f6df7",
+      "payload_hex": "4212001df6c90f7eb625ab851315b6d972592b6f137f6df7",
+      "resolve": {
+        "now": 1767349056,
+        "contact_id": "contact-c",
+        "result": "ok"
+      }
+    }
+  ]
+}

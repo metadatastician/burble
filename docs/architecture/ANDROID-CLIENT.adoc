@@ -7,7 +7,7 @@
 
 [NOTE]
 ====
-*Status:* Design only — no code yet. Phase 0 is ready to start (four files in this repo, mergeable as a single PR). This document is the authoritative plan; if it disagrees with a memory pointer or chat scrollback, this file wins.
+*Status:* Phase 0 (the BLE wire format / ABI / emitter *contract*) is FROZEN and merged — see ADR-0015 and `.machine_readable/descriptiles/{ble-spa-knock,nearby-presence}.a2ml`. The Android emitter itself (`client/android/`) and everything from Phase 1 on remains design-only. This document is the authoritative plan; if it disagrees with a memory pointer or chat scrollback, this file wins.
 
 *Authored:* 2026-05-13.
 ====
@@ -38,7 +38,7 @@ Two repos, no third. Burble owns the wire protocol, the Android voice client, an
 
 | Server-side bridge (presence event forwarding)
 | *burble*
-| `server/lib/burble/bridges/neurophone.ex` — pattern matches `mumble.ex`/`discord.ex`/`matrix.ex`
+| `server/lib/burble/experimental/neurophone_bridge.ex` — mirrors `experimental/mumble_bridge.ex` (the `bridges/` dir was removed in the Phase 0 cleanup, ADR-0009)
 |===
 
 Rationale: nothing to share beyond a schema, and burble already has the schema-owning machinery. IDApTIK/PanLL precedent — `client/lib/src/extensions/IDApTIKVoice.affine` — is the exact pattern. A third repo would just be an unbuilt house.
@@ -162,23 +162,34 @@ burble/client/android/
 ----
 burble/
 ├── .machine_readable/descriptiles/
-│   ├── nearby-presence.a2ml               # NEW — wire format for BLE adv payload
-│   ├── ble-spa-knock.a2ml                 # NEW — SPA knock packet format
-│   └── audio-pipeline.a2ml                # NEW — Zig=intended, soft-fallback=deprecated
+│   ├── nearby-presence.a2ml               # DONE — presence beacon + detection model
+│   ├── ble-spa-knock.a2ml                 # DONE — knock + response packet format
+│   └── audio-pipeline.a2ml                # TODO (separate PR) — Zig=intended, soft-fallback=deprecated
+├── .machine_readable/test-vectors/
+│   └── ble-spa-v1.json                    # DONE — committed vectors (the freeze)
 ├── src/Burble/ABI/
-│   ├── NearbyPresence.idr                 # NEW — Idris2 type for adv payload
-│   ├── BleSpa.idr                         # NEW — knock payload + state machine proof
-│   └── AudioPipeline.idr                  # NEW — Native vs Fallback type-level distinction
+│   ├── NearbyPresence.idr                 # DONE — zones + resolution proofs
+│   ├── BleSpa.idr                         # DONE — knock layout + state-machine proofs
+│   └── AudioPipeline.idr                  # TODO (separate PR) — Native vs Fallback distinction
 ├── client/lib/src/extensions/
-│   ├── NeurophonePresence.affine          # NEW — AffineScript consumer signatures
-│   └── NeurophonePresence.res             # NEW — ReScript shim (transitional)
-├── server/lib/burble/bridges/
-│   └── neurophone.ex                      # NEW — GenServer per-room, opt-in
+│   └── NeurophonePresence.affine          # DONE — AffineScript consumer signatures
+│                                          #        (no .res shim — NEUROSYM no-new-rescript)
+├── server/lib/burble/presence/
+│   └── ble_spa.ex                         # DONE — canonical reference implementation
+├── server/lib/burble/experimental/
+│   └── neurophone_bridge.ex               # DONE — stub GenServer, opt-in, EXPERIMENTAL
 └── ffi/zig/src/coprocessor/
-    ├── audio.zig                          # EXTEND — add aec_48k_10ms, ns_48k_10ms,
+    ├── audio.zig                          # TODO (separate PR) — add aec_48k_10ms, ns_48k_10ms,
     │                                      # agc_48k_10ms, adaptive_delay_estimator
-    └── firewall.zig                       # EXTEND — add ble_spa_verify(hmac, nonce, secret)
+    └── firewall.zig                       # DONE — added ble_spa_verify (HMAC knock)
 ----
+
+NOTE: the BLE wire format / ABI / emitter *contract* is frozen (ADR-0015);
+the items still marked TODO above (`audio-pipeline.*`, the `client/android/`
+emitter, CoC establishment) are deliberately out of that PR — it freezes the
+contract, not the radio. The bridge stub lives under `experimental/`, not a
+`bridges/` directory (removed in the Phase 0 cleanup, ADR-0009), per the
+CONTRIBUTING liveness invariant.
 
 === Neurophone: presence sensor (Phase 2 work, scaffolded in Phase 0 as stubs)
 
@@ -319,15 +330,35 @@ BLE-SPA:
   →  A sees nothing. B sees nothing. Neither is discoverable.
 
 When user opens app or accepts an invite:
-  App emits a one-shot SPA "knock" advertisement:
-    [magic "BRBL"] [hmac_sha256(timestamp ‖ room_secret ‖ nonce)[0..12]] [pub_short]
-  Knock broadcast for ~2 seconds, then stops.
+  App emits a one-shot SPA "knock" advertisement — a 24-byte Manufacturer
+  Specific Data payload (legacy ADV_NONCONN_IND, company 0xFFFF). FROZEN in
+  ADR-0015; canonical spec: .machine_readable/descriptiles/ble-spa-knock.a2ml
+    off 0     magic     0x42
+    off 1     ver_type  0x11   (wire v1 | frame = knock)
+    off 2-5   ts        u32 BE  sender unix seconds   (in clear)
+    off 6-11  nonce     6 bytes one-shot              (in clear)
+    off 12-23 mac       HMAC-SHA256(room_secret, "BRBL-KNOCK-v1" ‖ payload[0..12])[0..12]
+  ts + nonce ride in clear so a verifier recomputes the 96-bit MAC from the
+  packet itself. Knock broadcast for ~2 seconds, then stops.
 
-  Any peer in range with matching room_secret:
-    - verifies HMAC in Zig firewall.zig (single-use nonce, ±30s clock skew)
-    - if valid, responds with directed advertisement (only to knocker's MAC)
-    - both sides now know each other; opens L2CAP CoC
+  Any peer in range with the matching room_secret:
+    - verifies the MAC in Zig firewall.zig (ble_spa_verify) or Elixir
+      Burble.Presence.BleSpa (single-use nonce, ±30s clock skew)
+    - if valid, replies with a SECOND filtered *connectable* broadcast
+      (ADV_IND) carrying resp_token =
+      HMAC(room_secret, "BRBL-RESP-v1" ‖ knock_ts ‖ knock_nonce)[0..16] +
+      a 2-byte L2CAP PSM. This is NOT a directed advertisement — true
+      directed adv is impossible under Resolvable Private Addresses without a
+      prior bond. The knocker ScanFilters on the token and connects from the
+      ScanResult.
+    - both sides now know each other; opens L2CAP CoC (Phase 3)
 ----
+
+NOTE: the `[magic "BRBL"] … [pub_short]` sketch in earlier drafts is
+superseded by the frozen layout above (ADR-0015): the 4-byte magic did not
+fit the legacy advertising budget and survives as the HMAC domain-separation
+label prefix; `pub_short` was dropped as a linkability leak (the response
+token already addresses the knocker).
 
 === Properties
 
@@ -367,11 +398,38 @@ When user opens app or accepts an invite:
 * *Silent* (the *Public* zone): BLE-SPA — broadcast nothing, rendezvous only
   on an authenticated knock. Invisible to bystanders, ~3 mA idle. Foreground
   service with `FOREGROUND_SERVICE_CONNECTED_DEVICE`, persistent notification.
-* *Presence* (the *Private* / trusted zones): continuously advertise a
-  *rotating, contact-resolvable* beacon (Find-My pattern: address rotated
-  from a shared secret so your contacts resolve "that's Alice" while
-  bystanders see unlinkable random bytes). Continuous but contact-scoped —
-  for trusted contexts (home, office, among friends).
+* *Presence* (the *Private* / trusted zones): advertise a *rotating,
+  contact-resolvable* beacon (Find-My pattern: an 18-byte beacon_id derived
+  from a shared `presence_secret` and the 15-minute epoch, rotated together
+  with the Resolvable Private Address, so contacts resolve "that's Alice"
+  while bystanders see unlinkable random bytes every epoch). Contact-scoped —
+  for trusted contexts (home, office, among friends). Frozen layout:
+  `.machine_readable/descriptiles/nearby-presence.a2ml`.
+
+=== Detection model (normative, ADR-0015)
+
+Detection is *knock-triggered rendezvous*, not continuous presence sensing —
+you cannot continuously detect something that is silent by design. What
+neurophone's sensor observes, per zone:
+
+[cols="1,2,2,2",options="header"]
+|===
+| Zone / state | Burble emits | Sensor observes | Power regime
+
+| *Off* (default) | nothing | nothing | zero
+| *Silent* (Public) | nothing at idle; one-shot ~2 s knock on user action; a connectable response only after a verified knock | discrete knock/response rendezvous *events* (decodable only with the room secret) | *A* idle: passive scan + hardware ScanFilter offload (the ~3 mA figure holds *here only*); *B* armed: `SCAN_MODE_BALANCED`+ during ≤30 s expected-knock windows — real battery cost
+| *Presence* (Private/Trusted) | rotating contact-resolvable beacon each epoch; still knock-responsive | a standing contact-resolved presence *field*; unlinkable bytes to everyone else | *A* (the beacon repeats all epoch, so a low-duty batched scan catches it)
+|===
+
+Three Gabeldorsche realities bake into the design: (1) the near-zero ~3 mA
+number is the *idle* passive-scan regime only — reliably catching a 2 s knock
+needs regime B during the expected window; (2) MAC-directed advertising to
+the knocker is impractical under Resolvable Private Addresses with no prior
+bond, so the responder emits a second *filtered non-connectable/connectable
+broadcast* the knocker matches on a token (see <<ble-spa>>), not
+hardware-directed adv; (3) hardware ScanFilter slots are few — budget 1–2 per
+role (`[0x42,0x11]` responder, `[0x42,0x13]`+token knocker, `[0x42,0x12]`
+neurophone).
 
 What does NOT ship is a *plaintext* always-advertise mode, nor any
 *quietly-available* fallback: every state is explicit and visible (persistent
@@ -405,10 +463,10 @@ Pre-render room icon bitmaps at *200×200* to fit AVRCP 1.6's thumbnail constrai
 |===
 | Phase | Burble | Neurophone | Visible outcome
 
-| *0 — Spec* (~1 week)
-| A2ML manifests + Idris2 types + `.affine` signatures + stub `bridges/neurophone.ex`
+| *0 — Spec* (~1 week) — *DONE (ADR-0015)*
+| descriptiles + committed vectors + Idris2 types + `.affine` signatures + `Burble.Presence.BleSpa` reference impl + Zig `ble_spa_verify` + stub `experimental/neurophone_bridge.ex`
 | —
-| Protocol exists. PR mergeable in burble alone.
+| Protocol frozen + machine-enforced (vector guard). PR merged in burble alone.
 
 | *1 — Android MVP* (~3–4 weeks)
 | `client/android/` skeleton: Compose UI, WebRTC, foreground service, LEA routing, `BurbleAudioDspNative`, MediaSession + MessagingStyle. No CoC yet.
@@ -426,7 +484,7 @@ Pre-render room icon bitmaps at *200×200* to fit AVRCP 1.6's thumbnail constrai
 | Two phones, no wifi → working voice call. Headline demo.
 
 | *4 — Bridge* (~1 week)
-| `bridges/neurophone.ex` round-trip + tests; opt-in by room admin.
+| `experimental/neurophone_bridge.ex` round-trip + tests; opt-in by room admin.
 | —
 | Burble servers can expose presence events to neurophone instances.
 
@@ -449,7 +507,7 @@ Pre-render room icon bitmaps at *200×200* to fit AVRCP 1.6's thumbnail constrai
 * link:ARCHITECTURE.adoc[ARCHITECTURE.adoc] — overall control + media plane, supervision tree.
 * link:THREAT-MODEL.adoc[THREAT-MODEL.adoc] — security model; BLE-SPA extends the SDP perimeter to the radio layer.
 * link:../developer/ABI-FFI-README.adoc[ABI/FFI README] — Idris2 + Zig pattern this plan follows.
-* `../../server/lib/burble/bridges/mumble.ex` — bridge pattern that `neurophone.ex` mirrors.
+* `../../server/lib/burble/experimental/mumble_bridge.ex` — bridge pattern that `experimental/neurophone_bridge.ex` mirrors.
 * `../../client/lib/src/extensions/IDApTIKVoice.affine` — extension pattern that `NeurophonePresence.affine` mirrors.
 * `../../src/Burble/ABI/MediaPipeline.idr` — Idris2 pattern that `AudioPipeline.idr` follows.
 

@@ -10,6 +10,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Protocol
+- **BLE presence wire format v1 — FROZEN (ADR-0015).** Three legacy-advertising
+  frames (knock `0x11`, presence `0x12`, response `0x13`), one 24-byte payload,
+  one primitive (HMAC-SHA256) with domain labels `BRBL-{KNOCK,RESP,PRES,ROOM}-v1`;
+  96-bit knock MAC, ±30 s window, one-shot nonce; company id `0xFFFF`. Reference
+  impl `Burble.Presence.BleSpa`, Zig `ble_spa_verify`, Idris `BleSpa`/
+  `NearbyPresence`, pinnable descriptiles `ble-spa-knock.a2ml` /
+  `nearby-presence.a2ml`, and committed vectors
+  `.machine_readable/test-vectors/ble-spa-v1.json` (CI-guarded — the freeze).
+  Consumer: neurophone (unblocks its presence sensor). Breaking the bytes
+  requires a superseding ADR + major `@version` bump + a new Protocol entry.
+
 ### Added
 - Real install→activate→stop→uninstall round-trip tests for all three
   service managers (complements the lint-only tests):

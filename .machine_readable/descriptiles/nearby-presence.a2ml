@@ -1,0 +1,69 @@
+# SPDX-License-Identifier: MPL-2.0
+# Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+#
+# nearby-presence.a2ml — FROZEN BLE presence beacon + detection model (v1).
+# Pinnable spec for the neurophone presence sensor. Authority: ADR-0015 + ADR-0010.
+
+[metadata]
+descriptile = "nearby-presence"
+spec-version = "1.0.0"
+wire-version = 1
+status = "frozen"
+adr = "docs/decisions/0015-ble-presence-wire-format-v1.adoc"
+reference-impl = "server/lib/burble/presence/ble_spa.ex"
+abi-proof = "src/Burble/ABI/NearbyPresence.idr"
+test-vectors = ".machine_readable/test-vectors/ble-spa-v1.json"
+sibling = ".machine_readable/descriptiles/ble-spa-knock.a2ml"
+
+[presence-frame]
+# 24 bytes: envelope(6) ++ beacon_id(18). Find-My pattern: contact-resolvable,
+# never plaintext. Legacy ADV_NONCONN_IND, MSD AD 0xFF, company 0xFFFF.
+ver_type = 0x12
+magic-offset = 0
+magic = 0x42
+ver_type-offset = 1
+epoch-offset = 2
+epoch-bytes = 4               # u32 BE = floor(unix_seconds / 900)
+beacon_id-offset = 6
+beacon_id-bytes = 18
+beacon_id-input = "label 'BRBL-PRES-v1' ++ magic ++ ver_type ++ epoch(u32 BE)"   # payload[0..6]
+primitive = "HMAC-SHA256(presence_secret, ...)[0..18]"
+
+[rotation]
+period-seconds = 900          # 15 minutes (ADR-0010)
+must = "tear down and restart the advertising set at each epoch boundary so the payload and the Resolvable Private Address rotate together"
+epoch-carried-in-clear = true # derivable from time, leaks nothing; makes vectors self-contained
+
+[resolution]
+# How a consumer (neurophone) resolves a beacon to a known contact.
+accept-epoch-window = 1       # |carried_epoch - epoch(now)| <= 1
+per-secret-cost = "exactly one HMAC per held contact secret"
+no-key-id = true
+no-key-id-rationale = "a key-id would let bystanders observe rotation events ('someone got blocked') — covert-must-be-covert (ADR-0010)"
+
+[zones]
+# Presence mode <-> ADR-0010 trust zones. Off is the default (public-safe).
+modes = ["Off", "Silent", "Presence"]
+off = "emit nothing, ever (default)"
+silent = "Public zone: no standing beacon; knock-triggered rendezvous only"
+presence = "Private / Trusted-by-* zones: rotating contact-resolvable beacon each epoch"
+precedence = "block > allow > zone"
+block-mechanism = "rotate presence_secret + re-share to all contacts EXCEPT the blocked party; from the next epoch their retained secret never matches (cryptographic, not cosmetic)"
+secret-distribution = "deferred (QR / .well-known handshake) — ADR-0010"
+
+[detection-model]
+# Resolves the PRODUCTION-BLOCKER-HANDOFF §1.2 contradiction: detection is
+# knock-triggered rendezvous, NOT continuous presence sensing.
+off = { sensor-observes = "nothing", power = "zero" }
+silent = { sensor-observes = "discrete knock/response rendezvous events (decodable only with the room secret)", power-idle = "passive scan + hardware filter (~3mA holds only here)", power-armed = "SCAN_MODE_BALANCED+ during <=30s expected-knock windows (real battery cost)" }
+presence = { sensor-observes = "standing presence field for contacts whose secret it holds; unlinkable bytes to everyone else", power = "idle passive scan (beacon repeats all epoch)" }
+
+[consumer]
+# What neurophone matches on (the presence sensor).
+filter = "manufacturer data, company 0xFFFF, prefix [0x42, 0x12]"
+consumes = "client/lib/src/extensions/NeurophonePresence.affine"
+bridge = "server/lib/burble/experimental/neurophone_bridge.ex (opt-in, EXPERIMENTAL, no radio)"
+role = "sensor only — no mic, no voice (ADR-0010)"
+
+[freeze]
+covenant = "See ble-spa-knock.a2ml [freeze]. Same covenant: bytes above are frozen; changes require a superseding ADR + major @version bump + CHANGELOG 'Protocol' entry + regenerated vectors."

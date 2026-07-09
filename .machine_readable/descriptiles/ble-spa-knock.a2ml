@@ -1,0 +1,87 @@
+# SPDX-License-Identifier: MPL-2.0
+# Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+#
+# ble-spa-knock.a2ml — FROZEN BLE-SPA knock + response wire format (v1).
+# Pinnable spec for estate consumers (neurophone). Authority: ADR-0015.
+
+[metadata]
+descriptile = "ble-spa-knock"
+spec-version = "1.0.0"
+wire-version = 1
+status = "frozen"
+adr = "docs/decisions/0015-ble-presence-wire-format-v1.adoc"
+reference-impl = "server/lib/burble/presence/ble_spa.ex"
+zig-verifier = "ffi/zig/src/coprocessor/firewall.zig#ble_spa_verify"
+abi-proof = "src/Burble/ABI/BleSpa.idr"
+test-vectors = ".machine_readable/test-vectors/ble-spa-v1.json"
+
+[envelope]
+# All v1 frames: legacy advertising, Manufacturer Specific Data AD (type 0xFF).
+ad-type = 0xFF
+company-id = 0xFFFF          # SIG "internal use"; a real SIG id is the v2 trigger
+payload-bytes = 24
+pdu-knock = "ADV_NONCONN_IND"   # non-connectable (nothing to connect to)
+pdu-response = "ADV_IND"        # connectable — the knocker connects from ScanResult
+
+[header]
+# Common 6-byte prefix on every frame.
+magic-offset = 0
+magic = 0x42                  # 'B'
+ver_type-offset = 1
+ver_type-high-nibble = 0x1    # wire version
+ver_type-knock = 0x11         # (wire<<4)|frame_type ; frame_type knock=0x1
+ver_type-presence = 0x12
+ver_type-response = 0x13
+time-offset = 2
+time-bytes = 4
+time-endian = "big"           # u32
+
+[knock-frame]
+# 24 bytes: envelope(6) ++ nonce(6) ++ mac(12).
+ver_type = 0x11
+time = "sender unix seconds"
+nonce-offset = 6
+nonce-bytes = 6               # random, one-shot
+mac-offset = 12
+mac-bytes = 12                # 96-bit truncation (see [crypto])
+mac-input = "label 'BRBL-KNOCK-v1' ++ payload[0..12]"   # covers magic|ver_type|ts|nonce
+broadcast-seconds = 2         # recommended (non-wire, tunable)
+
+[response-frame]
+# 24 bytes: envelope(6) ++ resp_token(16) ++ psm(2). A second FILTERED
+# connectable broadcast the knocker ScanFilters on (RPA makes true directed
+# advertising impossible without a prior bond — ADR-0015 D4).
+ver_type = 0x13
+time = "responder unix seconds (stale-rebroadcast cutoff; NOT MAC'd)"
+resp_token-offset = 6
+resp_token-bytes = 16
+resp_token-input = "label 'BRBL-RESP-v1' ++ knock_ts(u32 BE) ++ knock_nonce(6)"
+psm-offset = 22
+psm-bytes = 2                 # u16 BE; L2CAP CoC PSM, 0 = none (Phase 3 fills)
+psm-note = "outside the MAC; channel is authenticated by PAKE at connect (ADR-0003)"
+
+[crypto]
+primitive = "HMAC-SHA256"
+labels = ["BRBL-KNOCK-v1", "BRBL-RESP-v1", "BRBL-PRES-v1", "BRBL-ROOM-v1"]
+room-secret = "HMAC-SHA256(key = invite_token_utf8, msg = 'BRBL-ROOM-v1')"  # 32 bytes
+room-secret-note = "one extract step, no HKDF; 'having the room invite = having BLE discoverability'"
+knock-mac-truncation-bytes = 12
+resp-token-truncation-bytes = 16
+truncation-rationale = "96-bit knock MAC: BLE advertising physically caps a forger at ~1e2-1e3 PDU/s, so within the +/-30s window ~2^15 attempts vs 2^96 (residual ~2^-81), and the one-shot nonce voids replay. See ADR-0015 D3."
+
+[replay]
+window-seconds = 30           # +/-30s acceptance (mirrors Bolt.Spa)
+nonce = "one-shot"
+nonce-min-retention-seconds = 60   # >= 2x window
+ledger-owner = "verifier side (Elixir :ble_spa_nonces ETS / Kotlin NonceLog)"
+
+[scan-filter]
+# Hardware ScanFilter offload prefixes (company id + these payload bytes).
+knock-prefix = [0x42, 0x11]
+presence-prefix = [0x42, 0x12]
+response-prefix = [0x42, 0x13]
+response-match = "bytes 6..21 (resp_token), ts masked"
+slot-budget = "1-2 hardware offload slots per role (knocker, responder, sensor)"
+
+[freeze]
+covenant = "Any change to the bytes above is a wire break: it REQUIRES a superseding ADR + a major bump of server/mix.exs @version + a CHANGELOG 'Protocol' entry + regenerated test vectors. Enforced by server/test/burble/presence/ble_spa_vectors_test.exs (CI-gated)."

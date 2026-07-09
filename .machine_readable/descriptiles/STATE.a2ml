@@ -35,7 +35,8 @@ experimental = [
   "PAKE-authenticated P2P page (HKDF+AES-GCM prototype, NOT SPAKE2)",
   "PTP timing (source detection real; all timestamps software; hardware unvalidated)",
   "Idris2 ABI proofs (7/7 compile; design assurance only, no runtime enforcement — ADR-0008)",
-  "VeriSimDB store (real integration; no CI round-trip coverage)"
+  "VeriSimDB store (real integration; no CI round-trip coverage)",
+  "BLE presence wire format v1 (ADR-0015): format FROZEN — Elixir encode/verify + Zig verify + CI-guarded vectors + descriptiles; NO emitter yet (no client/android, no CoC, no key bootstrap). Freezes the contract, not the radio; unblocks neurophone."
 ]
 absent = [
   "Opus transcoding (opus_transcode returns :not_implemented on all backends)",

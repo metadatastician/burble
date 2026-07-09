@@ -1,0 +1,224 @@
+= Architecture Decision Record: 0015-ble-presence-wire-format-v1
+<!-- SPDX-License-Identifier: CC-BY-SA-4.0 -->
+<!-- Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk> -->
+
+# 15. BLE presence wire format v1 (frozen)
+
+Date: 2026-07-09
+
+## Status
+
+Proposed
+
+Freezes the on-air byte layout, crypto construction, and versioning of
+Burble's BLE presence layer so a sister application (neurophone) can pin
+against it. Implements the "Phase 0 — Spec" deliverable of
+`docs/architecture/ANDROID-CLIENT.adoc` and resolves the detection
+contradiction in `docs/PRODUCTION-BLOCKER-HANDOFF.adoc` §1.2. Builds on
+ADR-0010 (presence/discovery/trust zones), ADR-0011 (E2EE content/metadata
+boundary), ADR-0006 (single-datagram records get structural safety, not
+stream-framing), and ADR-0008 (Idris2 proofs are design assurance).
+
+## Context
+
+neurophone's presence sensor is blocked: it needs a *frozen*, versioned BLE
+wire format + ABI to pin against, and none exists on `origin/main` (no
+descriptiles, no `BleSpa.idr`, no `ble_spa_verify`). The prose format in
+ANDROID-CLIENT.adoc —
+`[magic "BRBL"] [hmac_sha256(timestamp ‖ room_secret ‖ nonce)[0..12]] [pub_short]`
+— is underspecified for a freeze: the verifier must recompute the HMAC, so
+the timestamp and nonce must be recoverable from the packet, yet the prose
+carries neither on the wire; the 4-byte magic + 13-byte MAC + identifier do
+not fit a legacy BLE advertising budget; and the detection model contradicts
+itself (Phase 2 has neurophone *continuously read* an advertisement while
+Phase 3's BLE-SPA is *silent by design*).
+
+## Decision
+
+### D1 — One primitive, three frames, one 24-byte payload
+
+All v1 frames are **legacy advertising PDUs** carrying a Manufacturer
+Specific Data AD (type `0xFF`), company ID `0xFFFF`, with a fixed **24-byte
+payload**. Extended advertising is excluded from v1. Rationale: hardware
+`ScanFilter` offload — what makes Silent-zone idle reception cheap — is
+universally supported for legacy PDUs and patchy for extended adv on
+Gabeldorsche (which also exposes only a few offload slots); legacy reaches
+every scanner; 24 bytes suffices. Budget (31-byte legacy AD limit): knock
+and presence ride `ADV_NONCONN_IND` (MSD AD = 4 header + 24 = 28 ≤ 31); the
+response rides connectable `ADV_IND` with a 3-byte Flags AD (3 + 4 + 24 =
+31, exact fit).
+
+Company ID `0xFFFF` is the SIG "internal use" value, pinned as an explicit
+constant. Obtaining a real SIG company ID is the one anticipated **v2
+(wire-breaking)** trigger.
+
+The sole cryptographic primitive is **HMAC-SHA256** with four frozen
+domain-separation labels: `BRBL-KNOCK-v1`, `BRBL-RESP-v1`, `BRBL-PRES-v1`,
+`BRBL-ROOM-v1`. Room-secret derivation is frozen as one extract step (no
+HKDF dependency in any implementation):
+
+    room_secret = HMAC-SHA256(key = invite_token_utf8, msg = "BRBL-ROOM-v1")   (32 bytes)
+
+The `"BRBL"` magic of the frozen prose survives as the *label* prefix
+(cost-free domain separation), not as 4 on-air bytes — it does not fit, and
+the real disambiguator on the wire is the MAC.
+
+### D2 — Common 6-byte envelope
+
+|===
+| Offset | Size | Field | Meaning
+| 0 | 1 | magic | `0x42` ('B')
+| 1 | 1 | ver_type | high nibble = wire version `0x1`; low nibble = frame type (knock `0x1`, presence `0x2`, response `0x3`) → knock `0x11`, presence `0x12`, response `0x13`
+| 2–5 | 4 | time | u32 big-endian
+|===
+
+Filter selectivity = company(16 bits) + magic(8) + ver_type(8) = 32 bits.
+
+### D3 — Knock frame (`0x11`), 24 bytes
+
+|===
+| Offset | Size | Field | Definition
+| 0–5 | 6 | envelope | `time` = sender unix seconds
+| 6–11 | 6 | nonce | random, one-shot
+| 12–23 | 12 | mac | `HMAC-SHA256(room_secret, "BRBL-KNOCK-v1" ‖ payload[0..12])[0..12]`
+|===
+
+`ts` and `nonce` ride in cleartext so the verifier recomputes the MAC from
+the packet itself — no cross-implementation derivation to keep in sync. The
+MAC covers the whole 12-byte cleartext prefix (binds magic + version + frame
+type, preventing cross-frame confusion).
+
+**MAC truncation = 12 bytes (96-bit).** `[0..12]` is the half-open range of
+the frozen prose, i.e. 12 bytes — this *is* consistency with the spec. The
+divergence from `Burble.Bolt.Spa`'s 16-byte truncation is justified by
+transport physics: Bolt rides UDP where an attacker sprays millions of
+forgeries/sec, whereas BLE legacy advertising physically caps a forger at
+~10²–10³ PDUs/sec. Within the ±30 s acceptance window that is ≈2¹⁵ attempts
+against a 2⁹⁶ space (residual ≈ 2⁻⁸¹ per window), and the one-shot nonce
+ledger voids replay.
+
+`pub_short` is **dropped from v1** (deliberate deviation from the prose): the
+response token is derived from the knock's own `(ts, nonce)`, which already
+uniquely addresses the knocker; a cleartext knocker identifier is a
+linkability leak that buys nothing and is what forces the layout over budget.
+Key exchange happens inside the subsequent connection (ADR-0003), not on air.
+
+### D4 — Response frame (`0x13`), 24 bytes
+
+|===
+| Offset | Size | Field | Definition
+| 0–5 | 6 | envelope | `time` = responder unix seconds (stale-rebroadcast cutoff; not MAC'd)
+| 6–21 | 16 | resp_token | `HMAC-SHA256(room_secret, "BRBL-RESP-v1" ‖ knock_ts_be32 ‖ knock_nonce)[0..16]`
+| 22–23 | 2 | psm | u16 BE — responder's L2CAP CoC PSM; `0x0000` = none (Phase 3 fills)
+|===
+
+Resolves handoff reality #2 (no true directed advertising under Resolvable
+Private Addresses without a prior bond): the response is a **second filtered
+connectable broadcast** (`ADV_IND`), not directed adv. Only holders of
+`room_secret` who observed the specific `(ts, nonce)` can compute the token;
+the knocker installs a `ScanFilter` on bytes 6–21 and connects to the
+advertiser's address straight from the `ScanResult`. `psm` is intentionally
+outside any MAC — token forgery requires the room secret, and `psm` tampering
+is caught by PAKE (ADR-0003) at connect. The rendezvous layer authenticates
+*room-membership knowledge*, never the channel.
+
+### D5 — Presence beacon (`0x12`), 24 bytes
+
+|===
+| Offset | Size | Field | Definition
+| 0–5 | 6 | envelope | `time` = epoch = floor(unix_seconds / 900) (15-min rotation, ADR-0010)
+| 6–23 | 18 | beacon_id | `HMAC-SHA256(presence_secret, "BRBL-PRES-v1" ‖ payload[0..6])[0..18]`
+|===
+
+Find-My pattern: contact-*resolvable*, not plaintext. Implementations MUST
+tear down and restart the advertising set at each epoch boundary so the
+payload and the Resolvable Private Address rotate together. A resolver checks
+`|carried_epoch − epoch(now)| ≤ 1` then computes exactly one HMAC per held
+contact secret. The epoch is carried in clear (derivable from time, leaks
+nothing) so vectors are self-contained.
+
+**No key-id on the wire.** A resolver simply tries every secret it holds; a
+key-id would let bystanders observe rotation events ("someone got blocked")
+— covert-must-be-covert (ADR-0010).
+
+**Block = rotate.** Revocation generates a fresh `presence_secret` and
+re-shares it to every contact except the blocked party; from the next epoch
+the blocked party's retained secret derives beacon_ids that never match again
+— cryptographic, not cosmetic (ADR-0010 resolution precedence block > allow >
+zone). Secret distribution (QR / `.well-known`) is deferred per ADR-0010.
+
+### D6 — Detection model (resolves the contradiction; ratifies the Phase-2 rescope)
+
+Detection is **knock-triggered rendezvous**, not continuous presence sensing.
+Neurophone's sensor observes:
+
+|===
+| Zone / state | Burble emits | Sensor observes | Power regime
+| Off (default) | nothing | nothing | zero
+| Silent (Public) | nothing at idle; one-shot ~2 s knock on user action; response only after a verified knock | discrete knock/response rendezvous events (decodable only with the room secret) | A idle: passive scan + hardware filter (~3 mA holds *here only*); B armed: `SCAN_MODE_BALANCED`+ during ≤30 s expected-knock windows (real battery cost)
+| Presence (Private / Trusted-by-*) | rotating contact-resolvable beacon each epoch; still knock-responsive | standing presence field for contacts whose secret it holds; unlinkable bytes to everyone else | A (beacon repeats all epoch)
+|===
+
+Phase 2 is rescoped from "continuous presence sensor" to "knock-observed
+events (Silent) + contact-resolved presence field (Presence zones)." The
+three Gabeldorsche realities are folded into ANDROID-CLIENT.adoc: two power
+regimes; response = second filtered connectable broadcast (D4); filter-slot
+budget (1–2 offload slots per role).
+
+Honest bystander note: while emitting, a bystander can infer "a Burble device
+is present" from company + magic (unavoidable given the filterability
+requirement); *who / which room / which contacts* is never inferable, and
+Off / Silent-idle emit nothing (ADR-0011 metadata boundary).
+
+### D7 — Freeze mechanics
+
+The freeze is enforced by **committed test vectors**
+(`.machine_readable/test-vectors/ble-spa-v1.json`) plus an ExUnit guard
+(`ble_spa_vectors_test.exs`) that recomputes every row from the Elixir
+reference implementation and fails CI (the test gate is armed since #135) on
+any byte drift, naming this covenant. Any change to the wire bytes requires a
+**superseding ADR + major bump of `server/mix.exs` `@version` + a
+`CHANGELOG.md` "Protocol" entry + a new vectors file**. The two descriptiles
+carry `wire-version = 1` and `spec-version = "1.0.0"`; PROTOCOL.md registers
+the surface so neurophone/idaptik/gossamer can discover it via
+groove-protocol.
+
+### D8 — Module placement
+
+The Elixir reference lives at `Burble.Presence.BleSpa`
+(`server/lib/burble/presence/ble_spa.ex`) — a sibling of `Burble.Bolt.Spa`,
+**not** a refactor of it. `Bolt.Spa` is a shipped, tested security module
+whose construction is string-encoded over JSON; the BLE format is raw binary,
+so sharing code would churn a live module under the armed gate for zero wire
+benefit. The new module reuses the *discipline* (constant-time compare, a
+separate `:ble_spa_nonces` one-shot ETS ledger, ±30 s window); both moduledocs
+cross-reference "one SPA primitive, three layers" (ADR-0010). Unifying the
+three SPA layers is future work, not this PR. The neurophone bridge stub is
+`experimental/` (CONTRIBUTING liveness invariant): not started by the
+supervision tree, no radio.
+
+The Idris2 types `Burble.ABI.BleSpa` / `Burble.ABI.NearbyPresence` are design
+assurance only (ADR-0008) — they compile via `just build-proofs`; idris2 is
+not in CI.
+
+## Consequences
+
+### Positive
+- neurophone unblocks: it pins the two descriptiles + the vectors file and
+  resumes, with an independent oracle to test its Rust decoder against.
+- One primitive, one payload size, three labels — one parser, one filter shape.
+- The freeze is machine-enforced (vector guard), not a promise.
+- Cross-implementation agreement is proven three ways: Elixir (reference),
+  Zig (`ble_spa_verify`), and the vector generator, all over one spec.
+
+### Negative
+- Company ID `0xFFFF` is a placeholder; a real SIG ID is a v2 wire break.
+- 24 bytes is a hard ceiling; anything richer needs extended adv = v2.
+- Idris proofs are not CI-gated (idris2 absent from CI) — design assurance,
+  consistent with ADR-0008.
+
+### Neutral
+- No emitter ships in this PR (Android code, CoC establishment, key bootstrap
+  are all deferred). This freezes the *contract*, not the radio.
+- `pub_short` and the 4-byte on-air magic of the original prose are dropped;
+  recorded here so the divergence is intentional and auditable (ADR-0007).

@@ -150,6 +150,7 @@ pub fn build(b: *std.Build) void {
             .{ .name = "audio", .module = audio_mod },
             .{ .name = "dsp", .module = dsp_mod },
             .{ .name = "neural", .module = neural_mod },
+            .{ .name = "firewall", .module = firewall_mod },
         },
     });
 

@@ -22,4 +22,6 @@ modules = Burble.ABI.Types
         , Burble.ABI.Vext
         , Burble.ABI.MediaPipeline
         , Burble.ABI.WebRTCSignaling
+        , Burble.ABI.BleSpa
+        , Burble.ABI.NearbyPresence
         , Burble.ABI.Foreign

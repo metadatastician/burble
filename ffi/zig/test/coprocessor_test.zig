@@ -9,12 +9,14 @@ const std = @import("std");
 const audio = @import("audio");
 const dsp = @import("dsp");
 const neural = @import("neural");
+const firewall = @import("firewall");
 
 // Re-export module-level tests.
 test {
     _ = audio;
     _ = dsp;
     _ = neural;
+    _ = firewall;
 }
 
 // ---------------------------------------------------------------------------

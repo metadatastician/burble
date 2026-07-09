@@ -1,0 +1,53 @@
+# Gitleaks false positives — committed BLE-SPA test vectors (ADR-0015).
+#
+# Every hex string below is a DETERMINISTIC HMAC-SHA256 output of FIXED, PUBLISHED,
+# obviously-non-production test inputs (e.g. invite token "test-invite-room-alpha").
+# They are public wire-format vectors that neurophone and other consumers pin against
+# — not credentials, nothing to rotate. See docs/decisions/0015-ble-presence-wire-format-v1.adoc
+# and .machine_readable/test-vectors/0.2-AI-MANIFEST.a2ml.
+#
+# Purely additive: these fingerprints suppress only these specific findings and change
+# no gitleaks rules (hence .gitleaksignore, not a repo .gitleaks.toml that could override
+# the org scan config).
+c67c76e08a96a9552b81ae5b8a14d5edd29f4884:.machine_readable/test-vectors/ble-spa-v1.json:generic-api-key:13
+c67c76e08a96a9552b81ae5b8a14d5edd29f4884:.machine_readable/test-vectors/ble-spa-v1.json:generic-api-key:18
+c67c76e08a96a9552b81ae5b8a14d5edd29f4884:.machine_readable/test-vectors/ble-spa-v1.json:generic-api-key:24
+c67c76e08a96a9552b81ae5b8a14d5edd29f4884:.machine_readable/test-vectors/ble-spa-v1.json:generic-api-key:27
+c67c76e08a96a9552b81ae5b8a14d5edd29f4884:.machine_readable/test-vectors/ble-spa-v1.json:generic-api-key:35
+c67c76e08a96a9552b81ae5b8a14d5edd29f4884:.machine_readable/test-vectors/ble-spa-v1.json:generic-api-key:38
+c67c76e08a96a9552b81ae5b8a14d5edd29f4884:.machine_readable/test-vectors/ble-spa-v1.json:generic-api-key:46
+c67c76e08a96a9552b81ae5b8a14d5edd29f4884:.machine_readable/test-vectors/ble-spa-v1.json:generic-api-key:49
+c67c76e08a96a9552b81ae5b8a14d5edd29f4884:.machine_readable/test-vectors/ble-spa-v1.json:generic-api-key:59
+c67c76e08a96a9552b81ae5b8a14d5edd29f4884:.machine_readable/test-vectors/ble-spa-v1.json:generic-api-key:60
+c67c76e08a96a9552b81ae5b8a14d5edd29f4884:.machine_readable/test-vectors/ble-spa-v1.json:generic-api-key:66
+c67c76e08a96a9552b81ae5b8a14d5edd29f4884:.machine_readable/test-vectors/ble-spa-v1.json:generic-api-key:67
+c67c76e08a96a9552b81ae5b8a14d5edd29f4884:.machine_readable/test-vectors/ble-spa-v1.json:generic-api-key:73
+c67c76e08a96a9552b81ae5b8a14d5edd29f4884:.machine_readable/test-vectors/ble-spa-v1.json:generic-api-key:74
+c67c76e08a96a9552b81ae5b8a14d5edd29f4884:.machine_readable/test-vectors/ble-spa-v1.json:generic-api-key:80
+c67c76e08a96a9552b81ae5b8a14d5edd29f4884:.machine_readable/test-vectors/ble-spa-v1.json:generic-api-key:81
+c67c76e08a96a9552b81ae5b8a14d5edd29f4884:.machine_readable/test-vectors/ble-spa-v1.json:generic-api-key:87
+c67c76e08a96a9552b81ae5b8a14d5edd29f4884:.machine_readable/test-vectors/ble-spa-v1.json:generic-api-key:88
+c67c76e08a96a9552b81ae5b8a14d5edd29f4884:.machine_readable/test-vectors/ble-spa-v1.json:generic-api-key:94
+c67c76e08a96a9552b81ae5b8a14d5edd29f4884:.machine_readable/test-vectors/ble-spa-v1.json:generic-api-key:95
+c67c76e08a96a9552b81ae5b8a14d5edd29f4884:.machine_readable/test-vectors/ble-spa-v1.json:generic-api-key:101
+c67c76e08a96a9552b81ae5b8a14d5edd29f4884:.machine_readable/test-vectors/ble-spa-v1.json:generic-api-key:102
+c67c76e08a96a9552b81ae5b8a14d5edd29f4884:.machine_readable/test-vectors/ble-spa-v1.json:generic-api-key:108
+c67c76e08a96a9552b81ae5b8a14d5edd29f4884:.machine_readable/test-vectors/ble-spa-v1.json:generic-api-key:109
+c67c76e08a96a9552b81ae5b8a14d5edd29f4884:.machine_readable/test-vectors/ble-spa-v1.json:generic-api-key:117
+c67c76e08a96a9552b81ae5b8a14d5edd29f4884:.machine_readable/test-vectors/ble-spa-v1.json:generic-api-key:122
+c67c76e08a96a9552b81ae5b8a14d5edd29f4884:.machine_readable/test-vectors/ble-spa-v1.json:generic-api-key:123
+c67c76e08a96a9552b81ae5b8a14d5edd29f4884:.machine_readable/test-vectors/ble-spa-v1.json:generic-api-key:131
+c67c76e08a96a9552b81ae5b8a14d5edd29f4884:.machine_readable/test-vectors/ble-spa-v1.json:generic-api-key:136
+c67c76e08a96a9552b81ae5b8a14d5edd29f4884:.machine_readable/test-vectors/ble-spa-v1.json:generic-api-key:137
+c67c76e08a96a9552b81ae5b8a14d5edd29f4884:.machine_readable/test-vectors/ble-spa-v1.json:generic-api-key:145
+c67c76e08a96a9552b81ae5b8a14d5edd29f4884:.machine_readable/test-vectors/ble-spa-v1.json:generic-api-key:150
+c67c76e08a96a9552b81ae5b8a14d5edd29f4884:.machine_readable/test-vectors/ble-spa-v1.json:generic-api-key:151
+c67c76e08a96a9552b81ae5b8a14d5edd29f4884:.machine_readable/test-vectors/ble-spa-v1.json:generic-api-key:161
+c67c76e08a96a9552b81ae5b8a14d5edd29f4884:.machine_readable/test-vectors/ble-spa-v1.json:generic-api-key:164
+c67c76e08a96a9552b81ae5b8a14d5edd29f4884:.machine_readable/test-vectors/ble-spa-v1.json:generic-api-key:165
+c67c76e08a96a9552b81ae5b8a14d5edd29f4884:.machine_readable/test-vectors/ble-spa-v1.json:generic-api-key:174
+c67c76e08a96a9552b81ae5b8a14d5edd29f4884:.machine_readable/test-vectors/ble-spa-v1.json:generic-api-key:177
+c67c76e08a96a9552b81ae5b8a14d5edd29f4884:.machine_readable/test-vectors/ble-spa-v1.json:generic-api-key:178
+c67c76e08a96a9552b81ae5b8a14d5edd29f4884:.machine_readable/test-vectors/ble-spa-v1.json:generic-api-key:187
+c67c76e08a96a9552b81ae5b8a14d5edd29f4884:.machine_readable/test-vectors/ble-spa-v1.json:generic-api-key:190
+c67c76e08a96a9552b81ae5b8a14d5edd29f4884:.machine_readable/test-vectors/ble-spa-v1.json:generic-api-key:191

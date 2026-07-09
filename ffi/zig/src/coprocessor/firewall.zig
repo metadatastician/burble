@@ -11,6 +11,7 @@
 const std = @import("std");
 const posix = std.posix;
 const linux = std.os.linux;
+const HmacSha256 = std.crypto.auth.hmac.sha2.HmacSha256;
 
 pub const FirewallError = error{
     NetlinkSocketError,
@@ -92,7 +93,12 @@ pub fn revoke_peer(ip: [4]u8) FirewallError!void {
     return;
 }
 
-/// Verify an SPA (Single Packet Authorisation) signature at the NIF level.
+/// Verify an SPA (Single Packet Authorisation) *signature* at the NIF level.
+///
+/// NOTE: this is the Ed25519 *signature*-based SDP-gateway stub (network layer,
+/// `security/sdp.ex`). It is UNRELATED to `ble_spa_verify` below, which is the
+/// real HMAC-SHA256 *shared-secret* BLE knock verifier (ADR-0015). Do not
+/// conflate the two SPA constructions.
 pub fn verify_spa_sig(packet: []const u8, signature: []const u8, public_key: []const u8) bool {
     // Uses the same Ed25519 logic as the Elixir side, but in Zig for speed.
     // This allows the SDP gateway to reject forged SPA packets in microseconds
@@ -101,4 +107,86 @@ pub fn verify_spa_sig(packet: []const u8, signature: []const u8, public_key: []c
     _ = signature;
     _ = public_key;
     return true;
+}
+
+// ---------------------------------------------------------------------------
+// BLE presence SPA — HMAC-SHA256 knock verification (ADR-0015, wire v1).
+// ---------------------------------------------------------------------------
+
+pub const BleSpaError = error{
+    BadLength,
+    BadMagic,
+    BadVersion,
+    BadFrameType,
+    StaleTimestamp,
+    BadMac,
+};
+
+/// Verify a 24-byte BLE-SPA knock frame against a room secret.
+///
+/// Pure and stateless: the caller supplies `now_s` (unix seconds) and owns the
+/// one-shot nonce ledger (replay is a state concern kept on the Elixir/Kotlin
+/// side). This agrees byte-for-byte with `Burble.Presence.BleSpa.verify_knock`
+/// and the committed vectors in
+/// `.machine_readable/test-vectors/ble-spa-v1.json`.
+///
+/// Layout: magic(0x42) | ver_type(0x11) | ts(u32 BE) | nonce(6) | mac(12),
+/// mac = HMAC-SHA256(secret, "BRBL-KNOCK-v1" ++ payload[0..12])[0..12].
+pub fn ble_spa_verify(payload: []const u8, secret: []const u8, now_s: u32) BleSpaError!void {
+    if (payload.len != 24) return error.BadLength;
+    if (payload[0] != 0x42) return error.BadMagic;
+    if ((payload[1] >> 4) != 0x1) return error.BadVersion;
+    if ((payload[1] & 0x0F) != 0x1) return error.BadFrameType;
+
+    const ts: u32 = (@as(u32, payload[2]) << 24) | (@as(u32, payload[3]) << 16) |
+        (@as(u32, payload[4]) << 8) | @as(u32, payload[5]);
+    const diff = if (now_s >= ts) now_s - ts else ts - now_s;
+    if (diff > 30) return error.StaleTimestamp;
+
+    var msg: [25]u8 = undefined; // "BRBL-KNOCK-v1" (13) ++ payload[0..12] (12)
+    @memcpy(msg[0..13], "BRBL-KNOCK-v1");
+    @memcpy(msg[13..25], payload[0..12]);
+
+    var full: [HmacSha256.mac_length]u8 = undefined;
+    HmacSha256.create(&full, msg[0..], secret);
+
+    var expected: [12]u8 = undefined;
+    @memcpy(&expected, full[0..12]);
+    var got: [12]u8 = undefined;
+    @memcpy(&got, payload[12..24]);
+
+    if (!std.crypto.timing_safe.eql([12]u8, got, expected)) return error.BadMac;
+}
+
+test "ble_spa_verify agrees with the committed knock vector (alpha_basic)" {
+    // .machine_readable/test-vectors/ble-spa-v1.json → knock[0] "alpha_basic".
+    // room_secret alpha = HMAC-SHA256("test-invite-room-alpha", "BRBL-ROOM-v1").
+    const secret = [_]u8{
+        0xb7, 0x3d, 0x0f, 0x8b, 0x2a, 0xef, 0xa6, 0x5a, 0xc5, 0xc6, 0x4d, 0x52, 0x6f, 0x0e, 0x97, 0x39,
+        0x98, 0x10, 0xf5, 0x33, 0x97, 0x1f, 0x73, 0x20, 0x30, 0xc3, 0x2c, 0x52, 0x24, 0xef, 0xf0, 0x90,
+    };
+    var payload = [_]u8{
+        0x42, 0x11, 0x69, 0x55, 0xb9, 0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0xff,
+        0x1a, 0xc3, 0x7b, 0x97, 0xbc, 0x87, 0x18, 0x49, 0xd0, 0x9f, 0xe0, 0x42,
+    };
+    const ts: u32 = 0x6955b900;
+
+    try ble_spa_verify(&payload, &secret, ts + 5);
+
+    payload[23] ^= 0x01; // tamper the MAC
+    try std.testing.expectError(error.BadMac, ble_spa_verify(&payload, &secret, ts + 5));
+    payload[23] ^= 0x01;
+
+    payload[0] = 0x43; // bad magic
+    try std.testing.expectError(error.BadMagic, ble_spa_verify(&payload, &secret, ts + 5));
+    payload[0] = 0x42;
+
+    payload[1] = 0x21; // wire version 2
+    try std.testing.expectError(error.BadVersion, ble_spa_verify(&payload, &secret, ts + 5));
+    payload[1] = 0x12; // presence frame type
+    try std.testing.expectError(error.BadFrameType, ble_spa_verify(&payload, &secret, ts + 5));
+    payload[1] = 0x11;
+
+    try std.testing.expectError(error.StaleTimestamp, ble_spa_verify(&payload, &secret, ts + 31));
+    try std.testing.expectError(error.BadLength, ble_spa_verify(payload[0..23], &secret, ts + 5));
 }
