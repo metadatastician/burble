@@ -4,7 +4,7 @@
 # Containerfile for Burble — P2P voice chat + AI data channel
 #
 # Build: podman build -t burble:latest -f Containerfile .
-# Run:   podman run --rm -it -p 4020:4020 burble:latest
+# Run:   podman run --rm -it -p 6473:6473 burble:latest
 #
 # Multi-stage build:
 #   1. Elixir build stage — compile OTP release
@@ -98,8 +98,8 @@ ENV AFFINESCRIPT_STDLIB=/usr/local/lib/affinescript/stdlib
 # Non-root user (Chainguard default).
 USER nonroot
 
-# Expose the Phoenix server port (matches PORT env in runtime.exs, default 4020).
-EXPOSE 4020
+# Expose the Phoenix server port (matches PORT env in runtime.exs, default 6473).
+EXPOSE 6473
 
 # Health check.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \

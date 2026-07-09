@@ -124,7 +124,7 @@ defmodule Burble.Security.SDPTest do
     end
 
     test "ZigBackend.sdp_firewall_authorize/2 returns :ok regardless of NIF state" do
-      assert :ok = Burble.Coprocessor.ZigBackend.sdp_firewall_authorize({127, 0, 0, 1}, 4020)
+      assert :ok = Burble.Coprocessor.ZigBackend.sdp_firewall_authorize({127, 0, 0, 1}, 6473)
     end
   end
 

@@ -5,7 +5,7 @@
 #
 # Services:
 #   burble-server  — Elixir OTP control plane + Zig coprocessor NIFs
-#   burble-web     — ReScript SPA served by nginx (exposed on port 4020)
+#   burble-web     — ReScript SPA served by nginx (exposed on port 6473)
 #   verisimdb      — VeriSimDB persistent store (internal only)
 #
 # Usage:
@@ -55,7 +55,7 @@ restart = "unless-stopped"
 networks = ["burble-internal"]
 environment = [
   "PHX_SERVER=true",
-  "PORT=4020",
+  "PORT=6473",
   "PHX_HOST=localhost",
   # podman --name (burble_verisimdb), not service name — selur-compose v0.1
   # omits `--network-alias <service>`. Revert once selur-compose v0.2 lands.
@@ -78,16 +78,16 @@ environment = [
 #   SMTP_PORT=587
 #   SMTP_USER=noreply@example.com
 #   SMTP_PASS=<smtp password>
-healthcheck = { test = "wget -q --spider http://localhost:4020/api/v1/auth/guest || exit 1", interval = "30s", timeout = "5s", retries = 3 }
+healthcheck = { test = "wget -q --spider http://localhost:6473/api/v1/auth/guest || exit 1", interval = "30s", timeout = "5s", retries = 3 }
 
 # =============================================================================
-# Burble Web — ReScript SPA via nginx (publicly exposed on port 4020)
+# Burble Web — ReScript SPA via nginx (publicly exposed on port 6473)
 # =============================================================================
 [services.web]
 build = { context = "..", dockerfile = "containers/Containerfile.web" }
 depends_on = ["server"]
 restart = "unless-stopped"
-ports = ["4020:8080"]
+ports = ["6473:8080"]
 networks = ["burble-internal"]
 
 # =============================================================================

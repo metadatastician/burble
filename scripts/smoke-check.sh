@@ -28,7 +28,7 @@ if [ "$st" != "running" ] || [ "$rc" -gt 2 ]; then
 fi
 
 code=$(curl -s -o /dev/null -w '%{http_code}' \
-  -X POST http://localhost:4020/api/v1/auth/guest \
+  -X POST http://localhost:6473/api/v1/auth/guest \
   -H 'Content-Type: application/json' -d '{}' 2>/dev/null || echo 000)
 echo "POST /api/v1/auth/guest -> HTTP $code"
 if [ "$code" != "200" ]; then

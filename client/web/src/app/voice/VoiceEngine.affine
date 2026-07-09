@@ -540,7 +540,7 @@ let setupChannelListeners = (engine: t, ch: PhoenixSocket.channel): unit => {
 /// Connect to the Burble SFU for a specific room.
 ///
 /// Flow:
-///   1. Connect Phoenix socket to ws://localhost:4020/voice
+///   1. Connect Phoenix socket to ws://localhost:6473/voice
 ///   2. Join the room:ROOM_ID channel
 ///   3. getUserMedia for microphone access
 ///   4. Create RTCPeerConnection with appropriate ICE config
@@ -557,7 +557,7 @@ let connect = async (engine: t, ~roomId: string, ~token: string): result<unit, s
   notifyState(engine)
 
   // 1. Connect Phoenix socket to the Burble voice endpoint.
-  let wsUrl = "ws://localhost:4020/voice"
+  let wsUrl = "ws://localhost:6473/voice"
   let sock = PhoenixSocket.connectToServer(~url=wsUrl, ~token)
   engine.socket = Some(sock)
 

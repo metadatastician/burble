@@ -7,13 +7,14 @@
 # groove-aware systems) probe to discover Burble's capabilities.
 #
 # Routes:
-#   GET  /.well-known/groove            → JSON manifest (static)
-#   POST /.well-known/groove/message    → Receive message from consumer
-#   GET  /.well-known/groove/recv       → Drain pending messages for consumer
-#   POST /.well-known/groove/connect    → Establish groove connection (spec 4.2)
-#   POST /.well-known/groove/disconnect → Tear down groove connection (spec 4.5)
-#   GET  /.well-known/groove/heartbeat  → Heartbeat keepalive (spec 4.3)
-#   GET  /.well-known/groove/status     → Current connection states
+#   GET  /.well-known/groove              → JSON manifest (generated from Burble.Groove)
+#   POST /.well-known/groove/message      → Receive message from consumer
+#   GET  /.well-known/groove/recv         → Drain pending messages for consumer
+#   POST /.well-known/groove/connect      → Establish groove connection (spec 4.2; optional lease, SPEC v0.3)
+#   POST /.well-known/groove/disconnect   → Tear down groove connection (spec 4.5)
+#   GET  /.well-known/groove/heartbeat    → Heartbeat keepalive (spec 4.3; ?handle= refreshes leases)
+#   GET  /.well-known/groove/status       → Current connection states
+#   GET  /.well-known/groove/attestations → Attestation hash chain, newest-last (SPEC v0.3)
 #
 # This plug is designed to be inserted early in the pipeline (before
 # the router) so that groove discovery works regardless of other
@@ -117,6 +118,10 @@ defmodule BurbleWeb.Plugs.GroovePlug do
   # The consumer sends its manifest. Burble checks structural compatibility
   # (does the consumer consume something we offer?) and returns a session ID.
   # Per spec section 4.2: DISCOVERED -> NEGOTIATING -> CONNECTED.
+  #
+  # The body MAY include "lease": {"mode": "soft"|"hard", "ttl_ms": N}
+  # (SPEC v0.3); the accepted lease is echoed beside the session id.
+  # Absent lease keeps the legacy response shape unchanged.
   def call(
         %Plug.Conn{method: "POST", path_info: [".well-known", "groove", "connect"]} = conn,
         _opts
@@ -136,6 +141,21 @@ defmodule BurbleWeb.Plugs.GroovePlug do
                 session_id: session_id,
                 provider: "burble",
                 state: "connected"
+              })
+            )
+            |> halt()
+
+          {:ok, session_id, lease} ->
+            conn
+            |> put_resp_content_type("application/json")
+            |> send_resp(
+              200,
+              Jason.encode!(%{
+                ok: true,
+                session_id: session_id,
+                provider: "burble",
+                state: "connected",
+                lease: lease
               })
             )
             |> halt()
@@ -196,13 +216,15 @@ defmodule BurbleWeb.Plugs.GroovePlug do
   # GET /.well-known/groove/heartbeat — Heartbeat from connected peer.
   #
   # Per spec section 4.3. Returns 204 No Content on success.
-  # Expects ?session_id= query parameter.
+  # SPEC v0.3: ?handle=SESSION_ID refreshes the connection's lease window
+  # (unknown handle → 404). Without a handle param, today's behaviour is
+  # kept: ?session_id= is honoured, and a request with neither returns 400.
   def call(
         %Plug.Conn{method: "GET", path_info: [".well-known", "groove", "heartbeat"]} = conn,
         _opts
       ) do
     conn = Plug.Conn.fetch_query_params(conn)
-    session_id = conn.query_params["session_id"]
+    session_id = conn.query_params["handle"] || conn.query_params["session_id"]
 
     case session_id do
       nil ->
@@ -216,6 +238,17 @@ defmodule BurbleWeb.Plugs.GroovePlug do
           :ok ->
             conn
             |> send_resp(204, "")
+            |> halt()
+
+          {:error, :soft_lease} ->
+            # SPEC v0.3 §4.6: a soft lease MUST be allowed to expire; its
+            # refresh is refused (liveness bookkeeping still updated).
+            conn
+            |> put_resp_content_type("application/json")
+            |> send_resp(
+              409,
+              ~s({"ok":false,"error":"soft lease must be allowed to expire; refresh refused"})
+            )
             |> halt()
 
           {:error, :not_found} ->
@@ -244,6 +277,28 @@ defmodule BurbleWeb.Plugs.GroovePlug do
     conn
     |> put_resp_content_type("application/json")
     |> send_resp(200, Jason.encode!(status))
+    |> halt()
+  end
+
+  # GET /.well-known/groove/attestations — Attestation chain, newest-last.
+  #
+  # Records are emitted on connect, disconnect, and lease expiry; each record
+  # links to its predecessor via prev_hash (SPEC v0.3). Handles gracefully
+  # if the Groove GenServer hasn't started yet.
+  def call(
+        %Plug.Conn{method: "GET", path_info: [".well-known", "groove", "attestations"]} = conn,
+        _opts
+      ) do
+    attestations =
+      try do
+        Burble.Groove.attestations()
+      catch
+        :exit, _ -> []
+      end
+
+    conn
+    |> put_resp_content_type("application/json")
+    |> send_resp(200, Jason.encode!(%{attestations: attestations}))
     |> halt()
   end
 

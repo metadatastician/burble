@@ -48,7 +48,7 @@ defmodule Burble.Email do
     - `token` — The magic link token (URL-safe base64).
     - `base_url` — The base URL for the Burble instance (default: localhost).
   """
-  def magic_link(to_email, token, base_url \\ "http://localhost:4020") do
+  def magic_link(to_email, token, base_url \\ "http://localhost:6473") do
     link = "#{base_url}/auth/magic?token=#{token}"
 
     new()
@@ -140,7 +140,7 @@ defmodule Burble.Email do
 
   Sent when a user is invited to a specific server/community.
   """
-  def invite(to_email, invite_token, server_name, base_url \\ "http://localhost:4020") do
+  def invite(to_email, invite_token, server_name, base_url \\ "http://localhost:6473") do
     link = "#{base_url}/invite/#{invite_token}"
 
     new()
