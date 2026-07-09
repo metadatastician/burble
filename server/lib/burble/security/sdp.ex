@@ -115,7 +115,7 @@ defmodule Burble.Security.SDP do
   defp verify_spa_packet(binary) do
     # Simplified verification for scaffold.
     if byte_size(binary) > 0 do
-      {:ok, %{sender_id: "user_123", requested_port: 4020, timestamp: DateTime.utc_now()}}
+      {:ok, %{sender_id: "user_123", requested_port: 6473, timestamp: DateTime.utc_now()}}
     else
       {:error, :empty_packet}
     end

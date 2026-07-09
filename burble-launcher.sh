@@ -10,7 +10,7 @@
 #   version              = "0.1.0"
 #   app-name             = "burble"
 #   app-display          = "Burble"
-#   app-url              = "http://localhost:4020"
+#   app-url              = "http://localhost:6473"
 #   runtime-kind         = "server-url"
 #   standards-compliance = [
 #     "launcher-standard.adoc"
@@ -53,8 +53,8 @@ ICON_SOURCE="/var/mnt/eclipse/repos/developer-ecosystem/burble/assets/icon-256.p
 # the Rust implementation instead of running the shell fallback.
 CONFIG_FILE="/var/mnt/eclipse/repos/developer-ecosystem/burble/burble.launcher.a2ml"
 
-URL="http://localhost:4020"
-APP_PORT="4020"
+URL="http://localhost:6473"
+APP_PORT="6473"
 WAIT_SECONDS="20"
 
 PID_FILE="/tmp/burble-server.pid"

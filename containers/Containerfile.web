@@ -73,5 +73,5 @@ EXPOSE 8080
 # Chainguard nginx image already sets ENTRYPOINT ["nginx"]; CMD provides args only.
 # Passing "nginx" again would cause nginx to parse its own name as an invalid option.
 # Note: nginx binds 8080 inside the container because Chainguard runs rootless
-# and cannot bind ports < 1024. compose.toml maps 4020:8080 on the host.
+# and cannot bind ports < 1024. compose.toml maps 6473:8080 on the host.
 CMD ["-g", "daemon off;"]

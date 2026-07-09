@@ -13,7 +13,7 @@ set -euo pipefail
 
 APP_NAME="burble"
 APP_DISPLAY="Burble"
-APP_PORT="4020"
+APP_PORT="6473"
 APP_DESC="Voice Communications Platform"
 
 REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"

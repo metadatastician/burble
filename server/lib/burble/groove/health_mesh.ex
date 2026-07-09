@@ -27,7 +27,7 @@ defmodule Burble.Groove.HealthMesh do
 
   require Logger
 
-  # Ports to probe for groove peers (excluding our own port 4020).
+  # Ports to probe for groove peers (excluding our own port 6473).
   @default_probe_ports [8000, 8080, 8081, 8091, 8092, 8093]
 
   # Probe interval in milliseconds.

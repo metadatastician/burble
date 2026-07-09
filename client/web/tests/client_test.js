@@ -8,8 +8,8 @@ Deno.test("BurbleSignaling default state", () => {
     onError: () => {}
   };
   
-  const state = Signaling.make("ws://localhost:4020/voice", callbacks);
+  const state = Signaling.make("ws://localhost:6473/voice", callbacks);
   assert.ok(state !== null);
   assert.strictEqual(state.connected, false);
-  assert.strictEqual(state.serverUrl, "ws://localhost:4020/voice");
+  assert.strictEqual(state.serverUrl, "ws://localhost:6473/voice");
 });

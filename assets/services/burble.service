@@ -15,7 +15,7 @@
 # Logs: journalctl -u burble -f
 
 [Unit]
-Description=Burble voice/media control plane (Elixir, Bolt udp/7373+9, http :4020)
+Description=Burble voice/media control plane (Elixir, Bolt udp/7373+9, http :6473)
 Documentation=https://github.com/hyperpolymath/burble
 After=network-online.target
 Wants=network-online.target

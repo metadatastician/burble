@@ -8,13 +8,13 @@
 #   Stage 2 (runtime): Minimal wolfi-base with Erlang runtime only.
 #
 # Build:  podman build -t burble-server:latest -f containers/Containerfile.server .
-# Run:    podman run --rm -p 4020:4020 -e SECRET_KEY_BASE=... -e VERISIMDB_URL=... burble-server:latest
+# Run:    podman run --rm -p 6473:6473 -e SECRET_KEY_BASE=... -e VERISIMDB_URL=... burble-server:latest
 # Seal:   selur seal burble-server:latest
 #
 # Environment variables (required in prod):
 #   SECRET_KEY_BASE   — Phoenix secret (generate with: mix phx.gen.secret)
 #   VERISIMDB_URL     — VeriSimDB endpoint (e.g. http://verisimdb:8080)
-#   PORT              — Listen port (default: 4020)
+#   PORT              — Listen port (default: 6473)
 #   PHX_HOST          — Public hostname
 #   PHX_SERVER        — Must be "true" to start the HTTP server
 #
@@ -147,14 +147,14 @@ ENV PROVEN_LIB_DIR=/app/lib/burble-1.0.0/priv
 
 # Default environment.
 ENV PHX_SERVER=true
-ENV PORT=4020
+ENV PORT=6473
 
-# Burble listens on port 4020 (voice platform default).
-EXPOSE 4020
+# Burble listens on port 6473 (voice platform default).
+EXPOSE 6473
 
 # Health check: hit the guest auth endpoint as a smoke test.
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
-  CMD wget -q --spider http://localhost:4020/api/v1/auth/guest || exit 1
+  CMD wget -q --spider http://localhost:6473/api/v1/auth/guest || exit 1
 
 # OTP release entry point.
 ENTRYPOINT ["/app/bin/burble"]

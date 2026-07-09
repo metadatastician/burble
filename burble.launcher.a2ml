@@ -16,8 +16,8 @@ path = "/var/mnt/eclipse/repos/developer-ecosystem/burble"
 
 [runtime]
 kind    = "server-url"
-port    = 4020
-url     = "http://localhost:4020"
+port    = 6473
+url     = "http://localhost:6473"
 command = ["env", "MIX_ENV=dev", "mix", "phx.server"]
 pid-file = "/tmp/burble-server.pid"
 log-file = "/tmp/burble-server.log"

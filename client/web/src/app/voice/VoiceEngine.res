@@ -6,7 +6,7 @@
 // Handles the client side of the voice pipeline:
 //   1. getUserMedia for microphone access
 //   2. RTCPeerConnection to the Burble SFU
-//   3. Phoenix WebSocket channel for signaling (ws://localhost:4020/voice)
+//   3. Phoenix WebSocket channel for signaling (ws://localhost:6473/voice)
 //   4. Server sends sdp_offer, client sends sdp_answer
 //   5. ICE candidate exchange (TURN-only in privacy mode)
 //   6. Opus audio encoding/decoding (browser-native)
@@ -551,7 +551,7 @@ let setupChannelListeners = (engine: t, ch: PhoenixSocket.channel): unit => {
 /// Connect to the Burble SFU for a specific room.
 ///
 /// Flow:
-///   1. Connect Phoenix socket to ws://localhost:4020/voice
+///   1. Connect Phoenix socket to ws://localhost:6473/voice
 ///   2. Join the room:ROOM_ID channel
 ///   3. getUserMedia for microphone access
 ///   4. Create RTCPeerConnection with appropriate ICE config
@@ -568,7 +568,7 @@ let rec connect = async (engine: t, ~roomId: string, ~token: string): result<uni
   notifyState(engine)
 
   // 1. Connect Phoenix socket to the Burble voice endpoint.
-  let wsUrl = "ws://localhost:4020/voice"
+  let wsUrl = "ws://localhost:6473/voice"
   let sock = PhoenixSocket.connectToServer(~url=wsUrl, ~token)
   engine.socket = Some(sock)
 

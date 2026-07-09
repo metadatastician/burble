@@ -100,7 +100,7 @@ defmodule Burble.Rooms.InstantConnect do
   Base URL is configurable via BURBLE_BASE_URL env var.
   """
   def token_to_url(%{code: code}) do
-    base = System.get_env("BURBLE_BASE_URL", "http://localhost:4020")
+    base = System.get_env("BURBLE_BASE_URL", "http://localhost:6473")
     "#{base}/join/#{code}"
   end
 
