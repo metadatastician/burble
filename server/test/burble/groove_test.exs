@@ -88,12 +88,15 @@ defmodule Burble.GrooveTest do
   # ---------------------------------------------------------------------------
 
   describe "generated static manifest file" do
-    test "is byte-identical to the live manifest rendering" do
+    test "carries the same manifest as the live module rendering" do
       # mix test runs from server/; the generated file lives at the repo root.
+      # Semantic (decoded-term) equality rather than byte equality: content
+      # drift always fails; Jason formatting nuances never do. Canonical
+      # bytes come from `mix burble.groove.manifest`.
       path = Path.expand("../.well-known/groove/manifest.json", File.cwd!())
-      expected = Jason.encode!(Groove.manifest(), pretty: true) <> "\n"
+      expected = Groove.manifest() |> Jason.encode!() |> Jason.decode!()
 
-      assert File.read!(path) == expected,
+      assert Jason.decode!(File.read!(path)) == expected,
              "#{path} has drifted from Burble.Groove.@manifest — " <>
                "regenerate it with `mix burble.groove.manifest`"
     end
