@@ -83,6 +83,11 @@ jobs:
           echo "erl_nif.h include dir: $ERL_INCLUDE"
           test -f "$ERL_INCLUDE/erl_nif.h" || { echo "::error::erl_nif.h not found at $ERL_INCLUDE"; exit 1; }
           ( cd ffi/zig && zig build -Doptimize=ReleaseFast -Derl-include="$ERL_INCLUDE" )
+          # Run the Zig unit tests too, so kernel/verifier regressions (e.g. the
+          # BLE-SPA ble_spa_verify agreement with the committed vectors) turn CI
+          # red rather than only surfacing at NIF load. Tests don't link the NIF
+          # headers, so no -Derl-include is needed.
+          ( cd ffi/zig && zig build test )
           cp ffi/zig/zig-out/lib/libburble_coprocessor.so server/priv/ 2>/dev/null || true
       - name: Run server tests
         working-directory: ${{ github.workspace }}
