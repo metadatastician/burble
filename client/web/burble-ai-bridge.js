@@ -31,6 +31,50 @@ const MAX_MESSAGE_QUEUE_SIZE = 1000;
 // to prevent memory pressure and WebSocket frame issues.
 const MAX_SEND_PAYLOAD_BYTES = 65536;
 
+// SECURITY: optional shared-secret auth. When BURBLE_AI_BRIDGE_TOKEN is set,
+// every HTTP request (except /health) and the WebSocket upgrade must present
+// it — as `Authorization: Bearer <token>` or `?token=<token>`. Unset (the
+// default) keeps the zero-config localhost behaviour for the single-user case.
+const AUTH_TOKEN = Deno.env.get("BURBLE_AI_BRIDGE_TOKEN") || "";
+
+// SECURITY: the WebSocket relay (PORT+1) is the control channel that lets the
+// page drive Claude's data channel. WebSocket upgrades are NOT subject to the
+// same-origin policy or CORS, so any web page the user happens to visit could
+// otherwise open ws://127.0.0.1:6475 and hijack the channel. Accept an upgrade
+// only when its Origin is a local page (file://, "null", or a localhost /
+// 127.0.0.1 / [::1] http(s) origin) or absent (native clients and tests send
+// no Origin header).
+function isLocalOrigin(origin) {
+  if (!origin) return true;              // native clients / tests
+  if (origin === "null") return true;    // file:// pages report Origin: null
+  if (origin.startsWith("file://")) return true;
+  try {
+    const h = new URL(origin).hostname;
+    return h === "localhost" || h === "127.0.0.1" || h === "::1" || h === "[::1]";
+  } catch (_) {
+    return false;
+  }
+}
+
+// Length-independent-of-content comparison so a wrong token can't be recovered
+// byte-by-byte from response timing.
+function tokenOk(provided) {
+  if (!AUTH_TOKEN) return true;          // auth disabled (default)
+  if (!provided || provided.length !== AUTH_TOKEN.length) return false;
+  let diff = 0;
+  for (let i = 0; i < AUTH_TOKEN.length; i++) {
+    diff |= AUTH_TOKEN.charCodeAt(i) ^ provided.charCodeAt(i);
+  }
+  return diff === 0;
+}
+
+// Pull a token from Authorization: Bearer <t> or a ?token= query param.
+function tokenFrom(req, url) {
+  const auth = req.headers.get("authorization") || "";
+  const bearer = auth.toLowerCase().startsWith("bearer ") ? auth.slice(7).trim() : "";
+  return bearer || url.searchParams.get("token") || "";
+}
+
 // JSON response helper.
 const jsonResponse = (data, status = 200) =>
   new Response(JSON.stringify(data), {
@@ -41,6 +85,12 @@ const jsonResponse = (data, status = 200) =>
 // HTTP server for Claude to interact with
 Deno.serve({ port: PORT, hostname: "127.0.0.1" }, async (req) => {
   const url = new URL(req.url);
+
+  // Auth gate (no-op unless BURBLE_AI_BRIDGE_TOKEN is set). /health stays open
+  // so liveness probes don't need the secret.
+  if (url.pathname !== "/health" && !tokenOk(tokenFrom(req, url))) {
+    return jsonResponse({ ok: false, error: "unauthorized" }, 401);
+  }
 
   // Send a message to the remote peer
   if (req.method === "POST" && url.pathname === "/send") {
@@ -130,6 +180,28 @@ Deno.serve({ port: PORT + 1, hostname: "127.0.0.1" }, (req) => {
   if (req.headers.get("upgrade") !== "websocket") {
     return new Response("WebSocket only", { status: 400 });
   }
+
+  // SECURITY: reject cross-origin upgrades (drive-by hijack from a visited web
+  // page) before doing anything else.
+  if (!isLocalOrigin(req.headers.get("origin"))) {
+    console.warn("[Burble AI Bridge] Rejected WS upgrade from non-local origin:", req.headers.get("origin"));
+    return new Response("forbidden origin", { status: 403 });
+  }
+
+  // SECURITY: enforce the shared secret if one is configured.
+  if (!tokenOk(tokenFrom(req, new URL(req.url)))) {
+    return new Response("unauthorized", { status: 401 });
+  }
+
+  // SECURITY: one active page per bridge. Refuse a second live upgrade rather
+  // than silently letting the newest connection overwrite (hijack) the session.
+  // A dropped page's socket leaves readyState 1 only until onclose or the
+  // heartbeat closes it, after which reconnection is accepted normally.
+  if (wsClient && wsClient.readyState === 1) {
+    console.warn("[Burble AI Bridge] Rejected second WS upgrade — a client is already connected");
+    return new Response("bridge already has an active client", { status: 409 });
+  }
+
   const { socket, response } = Deno.upgradeWebSocket(req);
 
   // Assign wsClient IMMEDIATELY after upgrade rather than inside onopen.
@@ -205,6 +277,7 @@ Deno.serve({ port: PORT + 1, hostname: "127.0.0.1" }, (req) => {
 
 console.log(`[Burble AI Bridge] HTTP API on http://localhost:${PORT}`);
 console.log(`[Burble AI Bridge] WebSocket relay on ws://localhost:${PORT + 1}`);
+console.log(`[Burble AI Bridge] WS upgrades: local origins only; token auth ${AUTH_TOKEN ? "ON" : "off (set BURBLE_AI_BRIDGE_TOKEN to require a secret)"}`);
 console.log("");
 console.log("Claude can now:");
 console.log(`  curl -X POST http://localhost:${PORT}/send -d '{"type":"hello","from":"claude"}'`);

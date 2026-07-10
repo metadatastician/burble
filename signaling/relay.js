@@ -18,7 +18,19 @@
 //   GET  /health              — health check
 
 const PORT = parseInt(Deno.env.get("RELAY_PORT") || "6476");
+// Bind address. Defaults to all interfaces so LAN peers can rendezvous; set
+// RELAY_HOST=127.0.0.1 to keep it loopback-only.
+const HOST = Deno.env.get("RELAY_HOST") || "0.0.0.0";
 const TTL_MS = 60_000; // Rooms expire after 60 seconds
+
+// Cap a single stored blob. An SDP offer/answer is a few KiB; 64 KiB is a
+// generous ceiling that stops one PUT from ballooning memory on this
+// unauthenticated, all-interfaces-bound endpoint. Override with RELAY_MAX_BODY.
+const MAX_BODY_BYTES = parseInt(Deno.env.get("RELAY_MAX_BODY") || "65536");
+
+// Cap the number of concurrent rooms so a flood of distinct names can't grow
+// the map without bound between the 30 s sweeps. Override with RELAY_MAX_ROOMS.
+const MAX_ROOMS = parseInt(Deno.env.get("RELAY_MAX_ROOMS") || "1000");
 
 // CORS origin policy.
 // This is a PUBLIC WebRTC signaling relay — browsers from any origin need to
@@ -44,7 +56,7 @@ setInterval(() => {
   }
 }, 30_000);
 
-Deno.serve({ port: PORT, hostname: "0.0.0.0" }, async (req) => {
+Deno.serve({ port: PORT, hostname: HOST }, async (req) => {
   const url = new URL(req.url);
   const origin = req.headers.get("Origin") || "";
   const allowedOrigin = ALLOWED_ORIGINS === "*"
@@ -75,7 +87,17 @@ Deno.serve({ port: PORT, hostname: "0.0.0.0" }, async (req) => {
   // PUT — store offer or answer
   if (req.method === "PUT") {
     const body = await req.text();
-    if (!rooms.has(name)) rooms.set(name, { created: Date.now() });
+    if (body.length > MAX_BODY_BYTES) {
+      return new Response(JSON.stringify({ error: "payload too large", max: MAX_BODY_BYTES }), { status: 413, headers: cors });
+    }
+    // Reject a brand-new room once we're at the concurrent-room ceiling.
+    // Updating an existing room (e.g. posting the answer) is always allowed.
+    if (!rooms.has(name)) {
+      if (rooms.size >= MAX_ROOMS) {
+        return new Response(JSON.stringify({ error: "too many rooms", max: MAX_ROOMS }), { status: 503, headers: cors });
+      }
+      rooms.set(name, { created: Date.now() });
+    }
     const room = rooms.get(name);
     room[type] = body;
     console.log(`[Relay] ${type} stored for room "${name}" (${body.length} bytes, expires in 60s)`);
@@ -101,7 +123,7 @@ Deno.serve({ port: PORT, hostname: "0.0.0.0" }, async (req) => {
   return new Response(JSON.stringify({ error: "method not allowed" }), { status: 405, headers: cors });
 });
 
-console.log(`[Burble Relay] Signaling server on http://0.0.0.0:${PORT}`);
+console.log(`[Burble Relay] Signaling server on http://${HOST}:${PORT}`);
 console.log(`[Burble Relay] Rooms expire after 60 seconds. No data persisted.`);
 console.log("");
 console.log("Usage:");
