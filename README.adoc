@@ -19,8 +19,9 @@ modern browser-based joining — no downloads, no accounts, no friction.
 
 == Status
 
-Burble is **pre-production** (targeting CRG grade C). The core — self-hosted
-WebRTC voice, browser join, OTP fault isolation — is operational and tested.
+Burble is **pre-production** (self-assessed CRG grade C, targeting B). The
+core — self-hosted WebRTC voice, browser join, OTP fault isolation — is
+operational and tested.
 Per link:docs/decisions/0007-claims-to-evidence-discipline.adoc[ADR-0007],
 every claim below maps to code + a test, or is flagged here:
 
@@ -36,11 +37,13 @@ every claim below maps to code + a test, or is flagged here:
   Option C; PoC tracked in issue #55).
 * *Not yet benchmarked:* end-to-end mic-to-speaker latency and 500+
   concurrent scale (issue #52).
-* *Test gate:* the full server suite (~707 tests) carries known failures and
-  the CI pass/fail gate is temporarily disarmed while they are triaged
-  (issue #100). A green *gated* run is the criterion for CRG grade C;
-  until then the self-assessed grade is D
-  (see `.machine_readable/descriptiles/STATE.a2ml`).
+* *Test gate:* the full server suite passes and the CI pass/fail gate is
+  **armed** — a failing test turns CI red (`elixir-ci.yml` "Run server
+  tests", re-armed 2026-07-07). The green *gated* run on `main`
+  (link:https://github.com/metadatastician/burble/actions/runs/29058010569[Elixir
+  CI @2b5914b]) is the receipt for the current self-assessed CRG grade **C**
+  (issue #100 closed; see `.machine_readable/descriptiles/STATE.a2ml`). The
+  Dialyzer lane remains advisory.
 
 Foundational hardening is tracked in the "Earn the Core" epic (issue #53).
 

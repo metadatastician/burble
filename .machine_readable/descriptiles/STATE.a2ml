@@ -6,7 +6,7 @@
 [metadata]
 project = "burble"
 version = "1.3.0-pre"
-last-updated = "2026-07-02"
+last-updated = "2026-07-11"
 status = "active"
 
 [project-context]
@@ -270,15 +270,33 @@ open-failures = 0
 #             Multipath.send call removed from the RTP hot path; run.sh
 #             launcher path, extension /recv rendering, and bridge-test
 #             spawn paths fixed.
+# 2026-07-07: Elixir test gate RE-ARMED — elixir-ci.yml "Run server tests"
+#             step no longer carries continue-on-error, after the 74->0
+#             failure cleanup (PRs #134/#135/#136). Dialyzer lane stays
+#             advisory (continue-on-error) pending per-warning suppression.
+# 2026-07-11: CRG re-graded D -> C. The sole blocker (#100, disarmed test
+#             gate) is resolved: the gate is armed and Elixir CI is green on
+#             main with it armed — run 29058010569 @2b5914b, the receipt the
+#             2026-07-02 note asked for; #100 closed. Repo homed to the
+#             metadatastician org (private archive snapshots kept on
+#             hyperpolymath). Fixed the dead tools/affinescript submodule pin
+#             (b6531ce, force-pushed away upstream -> a3eda45, current
+#             affinescript main) that was failing every Dependabot job
+#             repo-wide with job_repo_not_found. Reconciled stale proof docs
+#             (PROOF-NEEDS.md, PRODUCTION-BLOCKER-HANDOFF.adoc 4.3) with the
+#             authoritative BURBLE-PROOF-STATUS.md: MediaPipeline.idr no
+#             longer carries the Idris1 postulate.
 
 [crg]
-grade = "D"
-target-grade = "C"
-blocked-on = "#100"
-previous-grade = "C (provisional, 2026-04-21; withdrawn 2026-07-02)"
+grade = "C"
+target-grade = "B"
+blocked-on = ""
+previous-grade = "D (2026-07-02, blocked on #100); C provisional (2026-04-21, withdrawn 2026-07-02)"
 demoted-on = "2026-04-18"
+regraded-on = "2026-07-11"
 demotion-reference = "docs/governance/CRG-AUDIT-2026-04-18.adoc"
-notes = "Grade set to D 2026-07-02 per ADR-0007 receipts-first discipline: a disarmed CI test gate (continue-on-error: true, issue #100) cannot support grade C — the provisional C claimed 2026-04-21 predates that standard and is withdrawn until the gate is re-armed and green. Everything else needed for C is in place: web-client test suite wired (PR #104), CI/CD campaigns C001-C005 completed, SECURITY-DEPLOY.md + PROTOCOL.md published, license drift resolved (MPL-2.0 throughout, PR #114), READINESS.adoc + per-directory READMEs + elixir-ci.yml present. Re-grade to C with the green gated run URL as the receipt."
+receipt = "https://github.com/metadatastician/burble/actions/runs/29058010569 — Elixir CI, main @2b5914b, success 2026-07-09; gate armed (elixir-ci.yml 'Run server tests', re-armed 2026-07-07, no continue-on-error)"
+notes = "Re-graded D -> C on 2026-07-11 per ADR-0007 receipts-first discipline: the only thing separating the repo from C was #100 (a disarmed CI test gate cannot support grade C). The gate was re-armed 2026-07-07 and Elixir CI is green on main WITH the gate armed (receipt above) — exactly the criterion recorded on 2026-07-02. Everything else needed for C was already in place: web-client test suite wired (PR #104), CI/CD campaigns C001-C005, SECURITY-DEPLOY.md + PROTOCOL.md, license drift resolved (MPL-2.0, PR #114), READINESS.adoc + per-directory READMEs. Toward B (open, not claimed): runtime proof enforcement PoC (#55), e2e mic-to-speaker latency + 500-concurrent scale benchmarks (#52), and the declared-but-hollow shipping-server features in docs/PRODUCTION-BLOCKER-HANDOFF.adoc (RTSP inject_rtp has zero callers, authenticated Bolt QUIC disabled, multipath returns :multipath_not_wired). Dialyzer lane remains advisory."
 
 [ecosystem]
 part-of = ["Burble Platform"]

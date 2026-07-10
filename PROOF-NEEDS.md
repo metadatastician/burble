@@ -1,7 +1,7 @@
 # Proof Requirements
 
 ## Current state
-- `src/Burble/ABI/MediaPipeline.idr` — Linear buffer consumption proof (**does NOT compile under Idris2 0.8.0** — Idris1 `postulate` keyword; tracked under epic #53)
+- `src/Burble/ABI/MediaPipeline.idr` — Linear buffer consumption proof (**compiles under Idris2 0.8.0 (DONE)** — the Idris1 `postulate resampleFrame` was replaced by a pure-Idris2 linear-interpolation definition, verified 2026-05-20; see `BURBLE-PROOF-STATUS.md`. Remaining proof-layer hygiene, not a compile blocker: the `just build-proofs` recipe has a path-escaping bug and idris2 is not yet in CI — tracked under epic #53)
 - `src/Burble/ABI/WebRTCSignaling.idr` — **JSEP state machine proof (DONE)**
 - `src/Burble/ABI/Permissions.idr` — **Role transition and lattice well-foundedness (DONE)**
 - `src/Burble/ABI/Avow.idr` — **Attestation chain non-circularity (DONE)**
