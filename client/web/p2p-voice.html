@@ -66,6 +66,7 @@
     <button class="btn-green" onclick="autoConnect('create')">Create Room</button>
     <button class="btn-blue" onclick="autoConnect('join')">Join Room</button>
     <p class="instructions" style="margin-top:0.5rem">Both people type the same room name. One clicks Create, the other clicks Join. If no relay is running, falls back to manual code exchange.</p>
+    <p class="instructions" style="margin-top:0.35rem;opacity:0.8">Calls connect directly, peer-to-peer, using STUN. On strict/symmetric NATs (some mobile and corporate networks) a direct link isn't possible without a TURN relay — if it reports it couldn't connect, that's why.</p>
   </div>
 
   <!-- Step 2a: Creator flow -->
@@ -150,6 +151,8 @@
     let remoteData = null;
     let animFrame = null;
     let aiChannel = null;  // WebRTC DataChannel for AI-to-AI comms
+    let everConnected = false;  // did ICE ever reach connected? distinguishes
+                                // "dropped mid-call" from "never punched through NAT"
 
     // ── Microphone ──────────────────────────────────────────────────────
 
@@ -201,10 +204,19 @@
       };
 
       pc.oniceconnectionstatechange = () => {
-        if (pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed') {
+        const st = pc.iceConnectionState;
+        if (st === 'connected' || st === 'completed') {
+          everConnected = true;
           showConnected();
-        } else if (pc.iceConnectionState === 'disconnected' || pc.iceConnectionState === 'failed') {
-          setStatus('error', 'Connection lost');
+        } else if (st === 'failed') {
+          // A `failed` state before we ever connected means ICE could not find
+          // a working path — almost always both peers behind strict/symmetric
+          // NATs with only STUN available. Be honest about the cause and fix.
+          setStatus('error', everConnected
+            ? 'Connection lost — the direct link dropped.'
+            : "Couldn't connect directly. You're likely both on strict/symmetric NATs (common on mobile or corporate networks); STUN alone can't punch through. A TURN relay server is needed for this network pair.");
+        } else if (st === 'disconnected') {
+          setStatus('error', 'Connection interrupted — trying to recover…');
         }
       };
 
@@ -433,8 +445,10 @@
 
         document.getElementById('step-role').classList.add('hidden');
 
-        // Poll for answer
-        while (true) {
+        // Poll for answer. Give up after a bounded number of long-poll windows
+        // so an unanswered room (or a failed connection) doesn't spin forever.
+        const MAX_ANSWER_POLLS = 20; // 20 × ~30s long-poll ≈ 10 min ceiling
+        for (let attempt = 0; attempt < MAX_ANSWER_POLLS; attempt++) {
           try {
             const res = await fetch(`${relay}/room/${room}/answer`, { signal: AbortSignal.timeout(31000) });
             if (res.ok) {
@@ -444,8 +458,14 @@
               return;
             }
           } catch (e) { /* timeout, retry */ }
-          // Check if already connected (ICE succeeded via trickle)
-          if (pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed') return;
+          // Stop polling once ICE has resolved either way (trickle can connect
+          // before the answer is fetched, or fail if NAT traversal is hopeless).
+          const st = pc.iceConnectionState;
+          if (st === 'connected' || st === 'completed') return;
+          if (st === 'failed' || st === 'closed') return; // handler already reported why
+        }
+        if (pc.iceConnectionState !== 'connected' && pc.iceConnectionState !== 'completed') {
+          setStatus('error', `No one joined room "${room}" — try again or share a fresh code.`);
         }
 
       } else {
