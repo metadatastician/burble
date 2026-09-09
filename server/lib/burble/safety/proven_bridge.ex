@@ -38,7 +38,7 @@ defmodule Burble.Safety.ProvenBridge do
   # Module atoms for proven library — resolved at runtime only.
   @proven_nif :"Elixir.Proven.NIF"
   @proven_crypto :"Elixir.Proven.SafeCrypto"
-  @proven_password :"Elixir.Proven.SafePassword"
+  @proven_password Proven.SafePassword
   @proven_email :"Elixir.Proven.SafeEmail"
   @proven_uuid :"Elixir.Proven.SafeUuid"
   @proven_path :"Elixir.Proven.SafePath"
