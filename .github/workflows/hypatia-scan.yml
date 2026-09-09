@@ -14,9 +14,12 @@ on:
 permissions:
   actions: read
   contents: read
-  security-events: write
 
 jobs:
   scan:
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
     uses: hyperpolymath/standards/.github/workflows/hypatia-scan-reusable.yml@fcb566cfb8a86cea2d3666bf65a4f177a49b1313
     secrets: inherit

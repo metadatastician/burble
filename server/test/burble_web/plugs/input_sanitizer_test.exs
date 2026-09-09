@@ -91,7 +91,8 @@ defmodule BurbleWeb.Plugs.InputSanitizerTest do
 
   describe "validate_params/1 — token fields" do
     test "accepts valid base64url token" do
-      assert :ok = InputSanitizer.validate_params(%{"token" => "abc123-_DEF="})
+      # Public alphabet-only parser fixture; never issued by an authenticator.
+      assert :ok = InputSanitizer.validate_params(%{"token" => "aaa111-_AAA="})
     end
 
     test "accepts valid connect code" do
