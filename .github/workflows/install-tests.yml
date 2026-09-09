@@ -31,6 +31,8 @@ on:
       - 'setup.sh'
       - 'setup.ps1'
       - 'scripts/install-service.sh'
+      - 'scripts/vps-bootstrap.sh'
+      - 'scripts/lib/verified-installer.sh'
       - 'scripts/wsl-bolt-udp-forward.ps1'
       - 'assets/services/**'
       - 'tests/install/**'
@@ -41,6 +43,8 @@ on:
       - 'setup.sh'
       - 'setup.ps1'
       - 'scripts/install-service.sh'
+      - 'scripts/vps-bootstrap.sh'
+      - 'scripts/lib/verified-installer.sh'
       - 'scripts/wsl-bolt-udp-forward.ps1'
       - 'assets/services/**'
       - 'tests/install/**'
@@ -73,6 +77,10 @@ jobs:
           echo "systemd-analyze: $(command -v systemd-analyze || echo none)"
           echo "xmllint:   $(command -v xmllint || echo none)"
           echo "shellcheck: $(command -v shellcheck || echo none) $(shellcheck --version | head -2)"
+      - name: Verify installer integrity controls
+        run: |
+          shellcheck -x scripts/vps-bootstrap.sh scripts/lib/verified-installer.sh tests/install/verified-installer.sh
+          bash tests/install/verified-installer.sh
       - name: Run install test suite
         env:
           BURBLE_INSTALL_TESTS_DEBUG: "1"

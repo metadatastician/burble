@@ -18,7 +18,19 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
+      - name: Check dispatch credential
+        id: credential
+        env:
+          FARM_DISPATCH_TOKEN: ${{ secrets.FARM_DISPATCH_TOKEN }}
+        run: |
+          if [ -n "$FARM_DISPATCH_TOKEN" ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::FARM_DISPATCH_TOKEN is unavailable; propagation skipped."
+          fi
       - name: Trigger Propagation
+        if: steps.credential.outputs.present == 'true'
         uses: peter-evans/repository-dispatch@v4.0.1
         with:
           token: ${{ secrets.FARM_DISPATCH_TOKEN }}
@@ -33,4 +45,5 @@ jobs:
             }
 
       - name: Confirm
+        if: steps.credential.outputs.present == 'true'
         run: echo "::notice::Propagation triggered for ${{ github.event.repository.name }}"
