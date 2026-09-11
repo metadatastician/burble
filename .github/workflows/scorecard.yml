@@ -13,7 +13,7 @@ permissions:
 
 jobs:
   scorecard:
-    uses: hyperpolymath/standards/.github/workflows/scorecard-reusable.yml@4d104d325b96c348d685956c6678139640c15c4b
+    uses: hyperpolymath/standards/.github/workflows/scorecard-reusable.yml@8750b94ac1bbe8c51ad13fe106669b13478f0b62
     permissions:
       contents: read
       security-events: write
