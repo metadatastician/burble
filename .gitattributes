@@ -52,5 +52,6 @@ Containerfile  text eol=lf
 *.gz    binary
 
 # Lock files
-Cargo.lock  text eol=lf -diff
+# Dependency changes must remain visible during advisory review.
+Cargo.lock  text eol=lf diff
 flake.lock  text eol=lf -diff

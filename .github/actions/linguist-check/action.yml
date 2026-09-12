@@ -1,0 +1,25 @@
+name: 'Linguist & Banned Languages Gate'
+description: 'Validates that git linguist is updated and no banned languages are present in the repository.'
+runs:
+  using: 'composite'
+  steps:
+    - name: Run Linguist and Banned Languages Check
+      shell: bash
+      run: |
+        echo "Validating Linguist configuration and Banned Languages..."
+        
+        # Banned languages list based on user preference
+        BANNED_LANGS=("python" "ruby" "perl")
+        
+        # Detect extensions
+        if find . -name "*.py" -not -path "*/\.*" | grep -q .; then
+           echo "::error::Banned language detected: Python (.py files found). Use Rust, Julia, or bash/just instead."
+           exit 1
+        fi
+        
+        # Ensure .gitattributes defines linguist overrides if needed
+        if [ ! -f ".gitattributes" ] || ! grep -q "linguist" ".gitattributes"; then
+           echo "::warning::.gitattributes is missing or does not contain linguist configuration. The git linguist list should be up to date."
+        fi
+        
+        echo "Linguist & Banned Languages validation complete."

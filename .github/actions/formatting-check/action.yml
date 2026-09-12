@@ -1,0 +1,82 @@
+name: 'Formatting Validation Gate'
+description: 'Enforces the estate document-format policy: .adoc for docs, .md for wiki content, .txt for licence texts, fixed names where GitHub or convention dictates.'
+runs:
+  using: 'composite'
+  steps:
+    - name: Run Formatting Check
+      shell: bash
+      run: |
+        # Estate document-format policy
+        #
+        #   .adoc   documentation — the default for everything narrative
+        #   .md     wiki content ONLY, plus a TRANSITIONAL allowance for the
+        #           files GitHub renders specially; those are migrating to
+        #           metadatastician/berrywiki format
+        #   .txt    licence texts (LICENSE, LICENSES/*)
+        #   fixed   names GitHub or long convention dictates keep their form:
+        #           CODEOWNERS, MAINTAINERS, NOTICE, AUTHORS (extensionless),
+        #           funding.yml, dependabot.yml, *.yml workflows, dotfiles
+        #
+        # This gate used to only ever warn, while required-files-check HARD
+        # FAILED a repo for lacking GOVERNANCE.md — so a repo following the
+        # .adoc policy was failed by one gate for obeying the other. That
+        # contradiction is gone: required-files-check now accepts either form,
+        # and this gate is where the preference is expressed.
+        #
+        # Split by confidence: formats that are never legal fail; the .md
+        # files awaiting the berrywiki migration warn.
+        set -uo pipefail
+        fail=0
+
+        # Files whose .md form is GitHub-mandated or conventional. Transitional
+        # — when berrywiki lands these move, and this list shrinks.
+        GH_MANDATED='^(README|CONTRIBUTING|SECURITY|CODE_OF_CONDUCT|CHANGELOG|SUPPORT|SUPPORT_POLICY)\.md$'
+        WIKI_DIRS='^(wiki|docs/wiki|docs/wikis)/'
+
+        echo "Checking document formats..."
+
+        # --- hard: a documentation format that is never policy-legal --------
+        illegal=$(git ls-files | grep -E '\.(rst|textile|org|pod|wiki)$' || true)
+        if [ -n "$illegal" ]; then
+          echo "::error::Documentation in a format the estate does not use:"
+          printf '%s\n' "$illegal"
+          echo "::error::Convert to .adoc (or .md if it is wiki content)."
+          fail=1
+        fi
+
+        # --- hard: licence texts must be .txt -------------------------------
+        badlic=$(git ls-files 'LICENSES/*' | grep -vE '\.txt$' || true)
+        if [ -n "$badlic" ]; then
+          echo "::error::Licence texts must be .txt:"
+          printf '%s\n' "$badlic"
+          fail=1
+        fi
+
+        # --- hard: wiki content must be .md ---------------------------------
+        badwiki=$(git ls-files | grep -E "$WIKI_DIRS" | grep -vE '\.md$' | grep -vE '/(_Sidebar|_Footer|\.gitkeep)$' || true)
+        if [ -n "$badwiki" ]; then
+          echo "::error::Wiki content must be .md (wikis are the one .md home):"
+          printf '%s\n' "$badwiki"
+          fail=1
+        fi
+
+        # --- advisory: .md documents awaiting the berrywiki migration -------
+        stray=$(git ls-files '*.md' \
+                  | grep -vE "$WIKI_DIRS" \
+                  | grep -vE '^\.github/' \
+                  | grep -vE '/(README|CONTRIBUTING|SECURITY|CODE_OF_CONDUCT|CHANGELOG)\.md$' \
+                  | grep -vE "$GH_MANDATED" || true)
+        if [ -n "$stray" ]; then
+          count=$(printf '%s\n' "$stray" | wc -l)
+          echo "::warning::$count .md document(s) outside wiki and outside the"
+          echo "::warning::GitHub-mandated set. Policy is .adoc for documentation;"
+          echo "::warning::these are candidates for the berrywiki migration:"
+          printf '%s\n' "$stray" | head -20
+          [ "$count" -gt 20 ] && echo "  … and $((count - 20)) more"
+        fi
+
+        if [ "$fail" -eq 1 ]; then
+          echo "::error::Formatting gate failed."
+          exit 1
+        fi
+        echo "Document formatting is policy-conformant."

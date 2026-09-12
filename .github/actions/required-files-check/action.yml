@@ -1,0 +1,128 @@
+name: 'Required Files Gate'
+description: 'Ensures key structural and governance files are present, in the policy-correct format, and about this repository.'
+runs:
+  using: 'composite'
+  steps:
+    - name: Run Required Files Check
+      shell: bash
+      env:
+        REPO_OWNER: ${{ github.repository_owner }}
+      run: |
+        # Presence-only checking rewards filler. This gate previously demanded
+        # ARCHITECTURE.md / MAINTAINERS.adoc / GOVERNANCE.md and checked only
+        # that the paths existed — so the cheapest way to pass was to commit
+        # template boilerplate. That happened: an estate repo acquired an
+        # ARCHITECTURE.md describing a directory layout it does not have, a
+        # MAINTAINERS naming a different account as owner, and a mise.toml
+        # pinning `zig = "latest"` against that repo's own .tool-versions.
+        # All three would have passed. So: presence, THEN format, THEN substance.
+        #
+        # Format policy (estate):
+        #   .adoc  documentation (default)
+        #   .md    wiki content only — plus a transitional allowance for the
+        #          GitHub-mandated files, which are migrating to berrywiki format
+        #   .txt   licence texts
+        #   fixed  names GitHub or convention dictates (CODEOWNERS, funding.yml,
+        #          NOTICE, AUTHORS, MAINTAINERS) keep their form
+        set -uo pipefail
+        fail=0
+
+        # --- presence, accepting every policy-legal form -------------------
+        # "name:form1,form2,..." — first existing form wins.
+        declare -a required=(
+          ".editorconfig:.editorconfig"
+          ".gitignore:.gitignore"
+          ".gitattributes:.gitattributes"
+          "CODEOWNERS:CODEOWNERS,.github/CODEOWNERS,docs/CODEOWNERS"
+          "GOVERNANCE:GOVERNANCE.adoc,GOVERNANCE.md"
+          "ARCHITECTURE:ARCHITECTURE.adoc,ARCHITECTURE.md,docs/architecture/README.adoc,TOPOLOGY.adoc,TOPOLOGY.md"
+          "MAINTAINERS:MAINTAINERS,MAINTAINERS.adoc,MAINTAINERS.md"
+          "toolchain:.tool-versions,.mise.toml,mise.toml"
+        )
+
+        declare -A found=()
+        for spec in "${required[@]}"; do
+          name="${spec%%:*}"; forms="${spec#*:}"
+          hit=""
+          IFS=',' read -ra cands <<< "$forms"
+          for c in "${cands[@]}"; do [ -f "$c" ] && { hit="$c"; break; }; done
+          if [ -z "$hit" ]; then
+            echo "::error::Missing required file: $name (accepted: $forms)"
+            fail=1
+          else
+            found["$name"]="$hit"
+            echo "  found $name -> $hit"
+          fi
+        done
+
+        # --- substance: a file that exists but says nothing is not a file --
+        PLACEHOLDERS='\{\{|rsr-template-repo|TODO: update|<PROJECT|YOUR_PROJECT|lorem ipsum|example\.com'
+        for name in "${!found[@]}"; do
+          f="${found[$name]}"
+
+          # Config files are judged on whether they configure anything, not
+          # on length. A three-line CODEOWNERS can be complete and correct;
+          # demanding prose from it would be the same presence-theatre in
+          # reverse.
+          case "$name" in
+            .editorconfig|.gitignore|.gitattributes|toolchain) continue ;;
+            CODEOWNERS)
+              # Rule 1: Solo-owned repos may have comment-only CODEOWNERS
+              # Check if file has any functional (non-comment) lines
+              functional_lines=$(grep -vE '^\s*(#|//|;|$)' "$f" | wc -l)
+              if [ "$functional_lines" -eq 0 ]; then
+                # File is all comments - this is valid for solo-maintained repos per CODEOWNERS-POLICY.adoc Rule 1
+                echo "  CODEOWNERS is comment-only (valid for solo-maintained repos per Rule 1)"
+              elif ! grep -qE '^[^#[:space:]]+.*(@[A-Za-z0-9_/-]+|[^[:space:]]+@[^[:space:]]+\.)' "$f"; then
+                echo "::error::$f assigns no owner to any path."
+                fail=1
+              fi
+              continue ;;
+          esac
+
+          # Documents are judged on substance.
+          body=$(grep -vE '^\s*(#|//|;|$)' "$f" | wc -l)
+          if [ "$body" -lt 5 ]; then
+            echo "::error::$f has $body substantive lines — a stub, not a document."
+            fail=1
+          fi
+          if grep -qiE "$PLACEHOLDERS" "$f"; then
+            echo "::error::$f still contains template placeholders:"
+            grep -inE "$PLACEHOLDERS" "$f" | head -3
+            fail=1
+          fi
+        done
+
+        # ARCHITECTURE must describe THIS repository: at least one path it
+        # names has to exist. Catches a layout copied from a template.
+        if [ -n "${found[ARCHITECTURE]:-}" ]; then
+          arch="${found[ARCHITECTURE]}"
+          real=0
+          while IFS= read -r p; do
+            p="${p%/}"
+            [ -e "$p" ] && { real=1; break; }
+          done < <(grep -oE '\b[a-zA-Z0-9_.-]+/' "$arch" | sort -u)
+          if [ "$real" -eq 0 ]; then
+            echo "::error::$arch names no directory that exists in this repository."
+            echo "::error::It appears to describe a different project's layout."
+            fail=1
+          fi
+        fi
+
+        # MAINTAINERS must not hand the repo to somebody else. A template that
+        # ships its author's handle is the commonest form of this.
+        if [ -n "${found[MAINTAINERS]:-}" ] && [ -n "${REPO_OWNER:-}" ]; then
+          m="${found[MAINTAINERS]}"
+          if ! grep -qiF "$REPO_OWNER" "$m"; then
+            echo "::error::$m never mentions the repository owner ($REPO_OWNER)."
+            echo "::error::Handles found: $(grep -oE '@[A-Za-z0-9_-]+' "$m" | sort -u | tr '\n' ' ')"
+            echo "::error::This is the signature of an unedited template."
+            fail=1
+          fi
+        fi
+
+        if [ "$fail" -eq 1 ]; then
+          echo "::error::Required files gate failed."
+          exit 1
+        fi
+        echo "All required files present, correctly formatted, and about this repository."

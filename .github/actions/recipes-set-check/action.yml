@@ -1,0 +1,95 @@
+name: 'Recipes Set Validation Gate'
+description: 'Parse-checks the repository task runner (Justfile / Makefile). Fails on a recipe file that does not parse.'
+runs:
+  using: 'composite'
+  steps:
+    - name: Run Recipes Set Check
+      shell: bash
+      run: |
+        # This gate used to be a stub: it printed "Checking Justfile syntax..."
+        # with the actual command commented out, then delegated "extensiveness"
+        # to a semantic-audit action that is itself unimplemented, then printed
+        # "Recipes Set Validation Passed." It could not fail, and checked nothing.
+        #
+        # It now does the one thing it can do honestly and cheaply: prove the
+        # recipe files parse. `just --summary` parses the whole file and lists
+        # targets WITHOUT executing anything, so it is safe in CI.
+        #
+        # Deliberately NOT checked: whether the recipe set is "extensive" or
+        # "justifiable". Those are judgements, not properties, and a gate that
+        # pretends to measure them is how this action became a stub in the
+        # first place.
+        #
+        # `just --fmt --check` is also deliberately avoided: it enforces
+        # formatting, not validity, and would fail repositories whose Justfiles
+        # are correct but hand-formatted.
+        set -uo pipefail
+        fail=0
+        checked=0
+
+        # --- Justfile -----------------------------------------------------
+        jf=""
+        for c in Justfile justfile .justfile; do [ -f "$c" ] && { jf="$c"; break; }; done
+        if [ -n "$jf" ]; then
+          if ! command -v just >/dev/null 2>&1; then
+            echo "Installing just (not on PATH)..."
+            mkdir -p "$RUNNER_TEMP/just-bin"
+            if curl --proto '=https' --tlsv1.2 -sSf \
+                 https://just.systems/install.sh \
+               | bash -s -- --to "$RUNNER_TEMP/just-bin" >/dev/null 2>&1; then
+              export PATH="$RUNNER_TEMP/just-bin:$PATH"
+            fi
+          fi
+
+          if command -v just >/dev/null 2>&1; then
+            echo "Parsing $jf with $(just --version)..."
+            if out=$(just --summary 2>&1); then
+              echo "  OK — $(printf '%s' "$out" | wc -w) recipes parsed."
+              checked=1
+            else
+              echo "::error::$jf does not parse:"
+              printf '%s\n' "$out"
+              fail=1
+            fi
+          else
+            # A gate whose tool is missing must say so, not pass. Silently
+            # skipping is how a check becomes decorative.
+            echo "::error::$jf present but 'just' is unavailable and could not be"
+            echo "::error::installed, so this gate verified nothing. Add a setup"
+            echo "::error::step (e.g. extractions/setup-just) before this gate."
+            fail=1
+          fi
+        fi
+
+        # --- Makefile -----------------------------------------------------
+        mf=""
+        for c in Makefile makefile GNUmakefile; do [ -f "$c" ] && { mf="$c"; break; }; done
+        if [ -n "$mf" ]; then
+          if command -v make >/dev/null 2>&1; then
+            echo "Parsing $mf..."
+            err=$(make -n -f "$mf" 2>&1 >/dev/null || true)
+            # Only parse-level errors count. A missing or failing target is a
+            # different complaint and not this gate's business.
+            if printf '%s' "$err" | grep -qE 'missing separator|unterminated|Extraneous|recipe commences before first target|multiple target patterns'; then
+              echo "::error::$mf does not parse:"
+              printf '%s\n' "$err" | head -10
+              fail=1
+            else
+              echo "  OK — parses."
+              checked=1
+            fi
+          else
+            echo "::error::$mf present but 'make' is unavailable; gate verified nothing."
+            fail=1
+          fi
+        fi
+
+        if [ "$fail" -eq 1 ]; then
+          echo "::error::Recipes set gate failed."
+          exit 1
+        fi
+        if [ "$checked" -eq 0 ]; then
+          echo "No Justfile or Makefile in this repository — nothing to parse."
+        else
+          echo "Recipe files parse."
+        fi

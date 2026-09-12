@@ -1,0 +1,31 @@
+name: 'Trust & Humans Gate'
+description: 'Validates presence of trust.txt and humans.txt, checking for Keybase associations.'
+runs:
+  using: 'composite'
+  steps:
+    - name: Run Trust and Humans Check
+      shell: bash
+      run: |
+        echo "Validating trust.txt and humans.txt..."
+        
+        WWW_DIR="."
+        [ -d "www" ] && WWW_DIR="www"
+        [ -d "public" ] && WWW_DIR="public"
+        
+        # Validate humans.txt
+        if [ ! -f "$WWW_DIR/humans.txt" ]; then
+          echo "::warning::Missing humans.txt. It must be very clear who is doing what."
+        else
+          if ! grep -qi "keybase" "$WWW_DIR/humans.txt"; then
+             echo "::warning::humans.txt found, but no keybase verification links detected."
+          fi
+        fi
+        
+        # Validate trust.txt
+        if [ ! -f "$WWW_DIR/trust.txt" ] && [ ! -f "$WWW_DIR/.well-known/trust.txt" ]; then
+          echo "::warning::Missing trust.txt."
+        else
+          echo "trust.txt verified."
+        fi
+        
+        echo "Trust & Humans validation complete."

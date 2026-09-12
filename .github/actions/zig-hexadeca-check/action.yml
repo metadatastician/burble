@@ -1,0 +1,19 @@
+name: 'Zig Hexadeca Check'
+description: 'Checks that Zig FFI implementations adhere to the unified-hexadeca-api and are pure.'
+runs:
+  using: 'composite'
+  steps:
+    - name: Run Zig Hexadeca Check
+      shell: bash
+      run: |
+        echo "Validating Zig Hexadeca API..."
+        if find . -name "*.zig" | grep -q .; then
+          # Ensure it doesn't use standard library io or std.fs directly for FFI
+          if git grep -E 'std\.fs|std\.io' -- '*.zig'; then
+            echo "::error::Zig FFI modules contain prohibited side-effects (std.fs/std.io). Must use unified-hexadeca-api."
+            exit 1
+          fi
+          echo "Zig Hexadeca API check passed."
+        else
+          echo "No Zig files found. Skipping check."
+        fi

@@ -1,0 +1,8 @@
+name: 'Code Hygiene Check'
+description: 'Fails on untracked debt markers in source, and on undeclared proof circumventions in proof code.'
+runs:
+  using: 'composite'
+  steps:
+    - name: Run Hygiene Check
+      shell: bash
+      run: bash "$GITHUB_ACTION_PATH/check.sh"

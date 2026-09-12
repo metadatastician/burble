@@ -1,0 +1,36 @@
+name: 'Test & Benchmarks Dashboard Gate'
+description: 'Validates test/bench metrics, README benchmarks, and the presence of a historical dashboard.'
+runs:
+  using: 'composite'
+  steps:
+    - name: Run Test and Benchmarks Check
+      shell: bash
+      run: |
+        echo "Validating Tests and Benchmarks..."
+        
+        README="README.adoc"
+        [ -f "README.md" ] && README="README.md"
+        
+        if [ ! -f "$README" ]; then
+          echo "::warning::No README found to check for core benchmarks."
+        else
+          # Check for core benchmarks in README
+          if ! grep -qi "benchmark" "$README"; then
+            echo "::warning::Core benchmarks should be listed upfront in the README."
+          fi
+        fi
+        
+        # Check for dashboard in tests/benches
+        if [ -d "tests" ] || [ -d "benches" ]; then
+          if [ ! -f "tests/DASHBOARD.md" ] && [ ! -f "benches/DASHBOARD.md" ] && [ ! -f "tests/benches/DASHBOARD.md" ] && [ ! -f "tests/DASHBOARD.adoc" ] && [ ! -f "benches/DASHBOARD.adoc" ]; then
+            echo "::warning::Missing full detail dashboard in tests/benches folder."
+            echo "::warning::Dashboard should be grouped by category with history."
+          fi
+        fi
+        
+        # (Mock Extraction for CI metrics logging)
+        echo "Test Count: N/A (Requires language-specific runner)"
+        echo "Test Passes: N/A"
+        echo "Benches: N/A"
+        
+        echo "Test & Benchmarks Dashboard validation complete."

@@ -1,6 +1,5 @@
+# This workflow is managed by gh actions-lock.
 # SPDX-License-Identifier: MPL-2.0
-# This workflow is managed by gh actions-lock.
-# This workflow is managed by gh actions-lock.
 # Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
 #
 # dogfood-gate.yml — Hyperpolymath Dogfooding Quality Gate
@@ -42,7 +41,7 @@ jobs:
 
       - name: Validate A2ML manifests
         if: steps.detect.outputs.count > 0
-        uses: hyperpolymath/a2ml-ecosystem/validate-action@main
+        uses: hyperpolymath/deed-ecosystem/validate-action@f7a40a4d5cc82b2e73f861119baa6818d77a448d
         with:
           path: '.'
           strict: 'false'
@@ -91,7 +90,8 @@ jobs:
 
       - name: Validate K9 contracts
         if: steps.detect.outputs.k9_count > 0
-        uses: hyperpolymath/k9-ecosystem/validate-action@main
+        # Later K9 archives contain dangling symlinks that GitHub cannot unpack.
+        uses: hyperpolymath/k9-ecosystem/validate-action@89f3c2702f4f650a92aa7411502f38da06abd562
         with:
           path: '.'
           strict: 'false'

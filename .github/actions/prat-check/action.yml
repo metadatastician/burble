@@ -1,0 +1,16 @@
+name: 'PRAT Testing Gate'
+description: 'Validates that code receives PRAT testing.'
+runs:
+  using: 'composite'
+  steps:
+    - name: Run PRAT Testing Check
+      shell: bash
+      run: |
+        echo "Validating PRAT Testing inclusion..."
+        # Check if tests directory or test files mention PRAT/property testing
+        if [ -d "test" ] || [ -d "tests" ] || grep -Ril "prat" . 2>/dev/null | grep -q .; then
+          echo "PRAT testing vectors detected."
+        else
+          echo "::warning::No PRAT testing detected for this codebase. Code should all receive PRAT testing."
+          # Not failing the build immediately, but flagging it.
+        fi

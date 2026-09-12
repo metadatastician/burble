@@ -1,0 +1,15 @@
+name: 'Affirmation Document Gate'
+description: 'Validates an applicable AFFIRMATION snapshot without treating it as a universal or self-proving document.'
+inputs:
+  required:
+    description: 'Set true only when the repository declares the governance-tier capability.'
+    required: false
+    default: 'false'
+runs:
+  using: 'composite'
+  steps:
+    - name: Run Affirmation Check
+      shell: bash
+      env:
+        AFFIRMATION_REQUIRED: ${{ inputs.required }}
+      run: "${{ github.action_path }}/check.sh"

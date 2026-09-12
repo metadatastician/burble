@@ -1,0 +1,15 @@
+name: 'BoJ Cartridge Gate'
+description: 'Checks for a BoJ cartridge when BoJ integration is applicable.'
+inputs:
+  required:
+    description: 'Set true when this repository declares BoJ integration.'
+    required: false
+    default: 'false'
+runs:
+  using: 'composite'
+  steps:
+    - name: Run BoJ Cartridge Check
+      shell: bash
+      env:
+        BOJ_CARTRIDGE_REQUIRED: ${{ inputs.required }}
+      run: "${{ github.action_path }}/check.sh"

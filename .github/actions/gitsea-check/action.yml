@@ -1,0 +1,26 @@
+name: 'Git-Sea Analytics Gate'
+description: 'Validates Git-Sea analytics are togglable and contain a disclaimer.'
+runs:
+  using: 'composite'
+  steps:
+    - name: Run Git-Sea Analytics Check
+      shell: bash
+      run: |
+        echo "Validating Git-Sea Analytics Configuration..."
+        
+        # Check for Git-Sea configuration or disclaimer
+        if [ -f ".git-sea.yml" ] || grep -q "git-sea" README.adoc 2>/dev/null || grep -q "git-sea" README.md 2>/dev/null; then
+           echo "Git-Sea detected."
+           
+           # Check for disclaimer
+           if ! grep -qi "disclaimer" README.adoc 2>/dev/null && ! grep -qi "disclaimer" README.md 2>/dev/null; then
+             echo "::warning::Git-Sea is used but no analytics disclaimer was found in the README."
+           fi
+           
+           # Suggest toggles
+           echo "Ensure Git-Sea analytics are toggled appropriately (e.g. via environment variables) so internal details are not exposed."
+        else
+           echo "Git-Sea not heavily utilized or configured explicitly here."
+        fi
+        
+        echo "Git-Sea Analytics validation complete."

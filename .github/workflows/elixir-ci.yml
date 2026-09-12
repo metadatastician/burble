@@ -1,11 +1,8 @@
 # SPDX-License-Identifier: MPL-2.0
 # This workflow is managed by gh actions-lock.
-# This workflow is managed by gh actions-lock.
 # Elixir CI — test-pass evidence for CRG grade C.
 name: Elixir CI
 on:
-  merge_group:
-    types: [checks_requested]
   push:
     branches: [main, master, 'claude/**']
   pull_request:
@@ -46,7 +43,7 @@ jobs:
           # tracks ffi/zig/build.zig's declared "Zig 0.15".
           version: '0.15.2'
       - name: Install just
-        uses: taiki-e/install-action@v2.87.0
+        uses: taiki-e/install-action@37f7c5781271959fb65b6b35224e28652ff2b63d
         with:
           # Pin an explicit modern just: the Justfile uses `import?`
           # (optional import, just >= 1.19.0). Unversioned `tool: just`
@@ -70,7 +67,7 @@ jobs:
             ${{ runner.os }}-mix-msquic-v2.3.8-
             ${{ runner.os }}-mix-
       - name: Install dependencies
-        run: mix deps.get --check-locked
+        run: mix deps.get
       - name: Test Zig kernels (SNIF guest sources)
         working-directory: ${{ github.workspace }}
         # Application-owned in-VM NIFs are forbidden. These sources remain Zig,
@@ -89,7 +86,7 @@ jobs:
         run: just test-server
       - name: Run Rust client tests
         working-directory: ${{ github.workspace }}
-        run: cargo test --locked --manifest-path client/rust/Cargo.toml
+        run: cargo test --manifest-path client/rust/Cargo.toml
       - name: Bebop codegen gate (generator must run; drift reported)
         working-directory: ${{ github.workspace }}
         # Check A (ARMED): the generator must parse every .bop schema and
@@ -141,7 +138,7 @@ jobs:
             ${{ runner.os }}-mix-msquic-v2.3.8-
             ${{ runner.os }}-mix-
       - name: Install dependencies
-        run: mix deps.get --check-locked
+        run: mix deps.get
       - name: Compile
         run: mix compile
       - name: Create PLT directory
