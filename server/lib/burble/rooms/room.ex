@@ -87,9 +87,7 @@ defmodule Burble.Rooms.Room do
   def start_link(opts) do
     room_id = Keyword.fetch!(opts, :id)
 
-    GenServer.start_link(__MODULE__, opts,
-      name: {:via, Registry, {Burble.RoomRegistry, room_id}}
-    )
+    GenServer.start_link(__MODULE__, opts, name: {:via, Registry, {Burble.RoomRegistry, room_id}})
   end
 
   @doc "Join a room. Returns {:ok, room_state} or {:error, reason}."
@@ -110,6 +108,11 @@ defmodule Burble.Rooms.Room do
   @doc "Get current room state (participants, mode, etc.)."
   def get_state(room_id) do
     call_room(room_id, :get_state)
+  end
+
+  @doc false
+  def with_voice_members(room_id, user_id, peer_id, effect) do
+    call_room(room_id, {:with_voice_members, user_id, peer_id, effect})
   end
 
   @doc "Get participant count."
@@ -137,6 +140,7 @@ defmodule Burble.Rooms.Room do
             Logger.warning(
               "[Room #{room_id}] Failed to create RTSP mountpoint: #{inspect(reason)}"
             )
+
             nil
         end
       end
@@ -173,10 +177,10 @@ defmodule Burble.Rooms.Room do
         new_room = %{room | participants: new_participants, idle_timer: cancel_idle(room)}
 
         broadcast(new_room, {:participant_joined, user_id, participant})
-        
+
         # Voice-first accessibility announcement
         Burble.Accessibility.ScreenReader.announce_join(
-          participant.display_name, 
+          participant.display_name,
           new_room.name
         )
 
@@ -230,6 +234,18 @@ defmodule Burble.Rooms.Room do
   @impl true
   def handle_call(:get_state, _from, room) do
     {:reply, {:ok, summarise(room)}, room}
+  end
+
+  @impl true
+  def handle_call({:with_voice_members, user, peer, effect}, _from, room) do
+    # Membership checks and the routing effect share one mailbox turn, so a
+    # completed leave cannot race a later scoped send into this room.
+    reply =
+      if Map.has_key?(room.participants, user) and Map.has_key?(room.participants, peer),
+        do: effect.(),
+        else: {:error, :forbidden}
+
+    {:reply, reply, room}
   end
 
   @impl true

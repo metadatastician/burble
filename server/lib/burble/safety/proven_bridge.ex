@@ -38,6 +38,7 @@ defmodule Burble.Safety.ProvenBridge do
   # Module atoms for proven library — resolved at runtime only.
   @proven_nif :"Elixir.Proven.NIF"
   @proven_crypto :"Elixir.Proven.SafeCrypto"
+  # hypatia: allow security_errors/secret_detected -- Public Elixir module atom, not a password or credential.
   @proven_password :"Elixir.Proven.SafePassword"
   @proven_email :"Elixir.Proven.SafeEmail"
   @proven_uuid :"Elixir.Proven.SafeUuid"

@@ -138,6 +138,7 @@ defmodule BurbleWeb.Plugs.GroovePlug do
               200,
               Jason.encode!(%{
                 ok: true,
+                handle: session_id,
                 session_id: session_id,
                 provider: "burble",
                 state: "connected"
@@ -152,6 +153,7 @@ defmodule BurbleWeb.Plugs.GroovePlug do
               200,
               Jason.encode!(%{
                 ok: true,
+                handle: session_id,
                 session_id: session_id,
                 provider: "burble",
                 state: "connected",
@@ -164,7 +166,12 @@ defmodule BurbleWeb.Plugs.GroovePlug do
             conn
             |> put_resp_content_type("application/json")
             |> send_resp(
-              409,
+              case reason do
+                "invalid lease" -> 400
+                "invalid manifest" -> 400
+                "connection capacity reached" -> 503
+                _ -> 409
+              end,
               Jason.encode!(%{ok: false, error: reason, state: "rejected"})
             )
             |> halt()
@@ -186,8 +193,8 @@ defmodule BurbleWeb.Plugs.GroovePlug do
         %Plug.Conn{method: "POST", path_info: [".well-known", "groove", "disconnect"]} = conn,
         _opts
       ) do
-    case parse_json_body(conn) do
-      {:ok, %{"session_id" => session_id}} when is_binary(session_id) ->
+    case parse_json_body(conn) |> session_handle() do
+      {:ok, session_id} ->
         case Burble.Groove.disconnect(session_id) do
           :ok ->
             conn
@@ -201,7 +208,7 @@ defmodule BurbleWeb.Plugs.GroovePlug do
           {:error, :not_found} ->
             conn
             |> put_resp_content_type("application/json")
-            |> send_resp(404, ~s({"ok":false,"error":"session not found"}))
+            |> send_resp(410, ~s({"ok":false,"error":"session consumed or unknown"}))
             |> halt()
         end
 
@@ -224,16 +231,18 @@ defmodule BurbleWeb.Plugs.GroovePlug do
         _opts
       ) do
     conn = Plug.Conn.fetch_query_params(conn)
-    session_id = conn.query_params["handle"] || conn.query_params["session_id"]
 
-    case session_id do
-      nil ->
+    case {map_size(conn.query_params), session_handle({:ok, conn.query_params})} do
+      {0, _} ->
+        conn |> send_resp(204, "") |> halt()
+
+      {_, {:error, _}} ->
         conn
         |> put_resp_content_type("application/json")
         |> send_resp(400, ~s({"ok":false,"error":"missing session_id query parameter"}))
         |> halt()
 
-      sid ->
+      {_, {:ok, sid}} ->
         case Burble.Groove.heartbeat(sid) do
           :ok ->
             conn
@@ -269,7 +278,9 @@ defmodule BurbleWeb.Plugs.GroovePlug do
       ) do
     status =
       try do
-        Burble.Groove.connection_status()
+        Map.new(Burble.Groove.connection_status(), fn {handle, info} ->
+          {Burble.Groove.connection_id(handle), info}
+        end)
       catch
         :exit, _ -> %{}
       end
@@ -370,7 +381,11 @@ defmodule BurbleWeb.Plugs.GroovePlug do
               |> put_resp_content_type("application/json")
               |> send_resp(
                 502,
-                Jason.encode!(%{ok: false, error: "routing failed: #{reason}", target_service: target})
+                Jason.encode!(%{
+                  ok: false,
+                  error: "routing failed: #{reason}",
+                  target_service: target
+                })
               )
               |> halt()
           end
@@ -429,12 +444,32 @@ defmodule BurbleWeb.Plugs.GroovePlug do
   end
 
   # Parse JSON from the request body, handling both pre-parsed and raw bodies.
+  # The canonical wire member is handle. Keep session_id for older clients,
+  # but never accept contradictory aliases (request interpretation ambiguity).
+  defp session_handle({:ok, params}) when is_map(params) do
+    handle = params["handle"] || params["session_id"]
+
+    if is_binary(handle) and byte_size(handle) in 1..128 and
+         (not Map.has_key?(params, "handle") or not Map.has_key?(params, "session_id") or
+            params["handle"] == params["session_id"]),
+       do: {:ok, handle},
+       else: {:error, :invalid_handle}
+  end
+
+  defp session_handle(_), do: {:error, :invalid_handle}
+
   defp parse_json_body(conn) do
     case conn.body_params do
       %Plug.Conn.Unfetched{} ->
         case Plug.Conn.read_body(conn) do
-          {:ok, body, _conn} -> Jason.decode(body)
-          _ -> {:error, :no_body}
+          {:ok, body, _conn} ->
+            case Jason.decode(body) do
+              {:ok, value} when is_map(value) -> {:ok, value}
+              _ -> {:error, :invalid_object}
+            end
+
+          _ ->
+            {:error, :no_body}
         end
 
       %{"_json" => json} when is_map(json) ->

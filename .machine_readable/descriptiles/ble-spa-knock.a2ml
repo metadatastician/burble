@@ -63,6 +63,7 @@ psm-note = "outside the MAC; channel is authenticated by PAKE at connect (ADR-00
 [crypto]
 primitive = "HMAC-SHA256"
 labels = ["BRBL-KNOCK-v1", "BRBL-RESP-v1", "BRBL-PRES-v1", "BRBL-ROOM-v1"]
+# hypatia: allow security_errors/secret_detected -- Derivation formula, not a credential; the invite token is a runtime input.
 room-secret = "HMAC-SHA256(key = invite_token_utf8, msg = 'BRBL-ROOM-v1')"  # 32 bytes
 room-secret-note = "one extract step, no HKDF; 'having the room invite = having BLE discoverability'"
 knock-mac-truncation-bytes = 12

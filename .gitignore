@@ -69,8 +69,8 @@ erl_crash.dump
 
 # Rust
 # Cargo.lock  # Keep for binaries
-# Library consumers resolve their own dependency graph.
-/client/rust/Cargo.lock
+# Library consumers resolve their own graph; commit the lock for this repo's
+# reproducible tests and RustSec audit.
 
 # Elixir
 /cover/

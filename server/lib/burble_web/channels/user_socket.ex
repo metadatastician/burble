@@ -10,9 +10,9 @@ defmodule BurbleWeb.UserSocket do
 
   alias Burble.Auth.Guardian
 
-  channel "room:*", BurbleWeb.RoomChannel
-  channel "signaling:*", BurbleWeb.SignalingChannel
-  channel "game:*", BurbleWeb.GameChannel
+  channel("room:*", BurbleWeb.RoomChannel)
+  channel("signaling:*", BurbleWeb.SignalingChannel)
+  channel("game:*", BurbleWeb.GameChannel)
 
   @impl true
   def connect(%{"token" => token}, socket, _connect_info) do
@@ -25,6 +25,7 @@ defmodule BurbleWeb.UserSocket do
               |> assign(:user_id, user.id || user[:id])
               |> assign(:display_name, user.display_name || user[:display_name] || "User")
               |> assign(:is_guest, Map.get(user, :is_guest, false))
+              |> assign(:voice_auth, voice_auth(token))
 
             {:ok, socket}
 
@@ -51,6 +52,16 @@ defmodule BurbleWeb.UserSocket do
   end
 
   def connect(_params, _socket, _connect_info), do: :error
+
+  # Existing socket behavior is unchanged; the new scoped adapter only admits
+  # existing access/guest identities with current voice permissions. Refresh
+  # tokens and legacy unauthenticated guests gain no scoped bridge authority.
+  defp voice_auth(token) do
+    case Burble.GrooveVoice.authenticate(token) do
+      {:ok, auth} -> auth
+      _ -> nil
+    end
+  end
 
   @impl true
   def id(socket), do: "user_socket:#{socket.assigns.user_id}"

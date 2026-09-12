@@ -1,0 +1,57 @@
+# SPDX-License-Identifier: MPL-2.0
+# This workflow is managed by gh actions-lock.
+# This workflow is managed by gh actions-lock.
+name: Workflow safety
+on:
+  pull_request:
+  push:
+    branches: [main]
+  merge_group:
+    types: [checks_requested]
+permissions:
+  contents: read
+jobs:
+  workflows:
+    name: Workflow syntax and action locks
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install checksum-verified workflow validator
+        run: |
+          curl -fsSL --retry 3 -o "$RUNNER_TEMP/actionlint.tar.gz" https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz
+          echo "8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8  $RUNNER_TEMP/actionlint.tar.gz" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/actionlint.tar.gz" -C "$RUNNER_TEMP" actionlint
+      - name: Validate workflow schema and expressions
+        # ShellCheck has a separate legacy backlog in the consumer repositories;
+        # this check claims workflow-schema/expression coverage, not shell lint.
+        # Keep the explicitly disabled, unqualified Android device job disabled.
+        run: |
+          "$RUNNER_TEMP/actionlint" -shellcheck= -ignore 'constant expression "false" in condition'
+      - name: Prove malformed workflow rejection
+        run: |
+          printf 'jobs: [\n' > "$RUNNER_TEMP/rejected-workflow.yml"
+          if "$RUNNER_TEMP/actionlint" -shellcheck= "$RUNNER_TEMP/rejected-workflow.yml"; then
+            echo "::error::Malformed workflow was accepted"
+            exit 1
+          fi
+      - name: Verify authoritative action-lock coverage
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh extension install github/gh-actions-lock --pin v0.1.6
+          # Standards' reviewed wrapper accounts for the released tool's
+          # reusable-workflow gap; ordinary stale/wrong-ref findings still fail.
+          curl -fsSL --retry 3 -o "$RUNNER_TEMP/update-actions-lock.sh" https://raw.githubusercontent.com/hyperpolymath/standards/fcb566cfb8a86cea2d3666bf65a4f177a49b1313/scripts/update-actions-lock.sh
+          echo "dd5b1308b6644c866a79edf81adbfcdaff5a7009f186ade588df019adc20c9ed  $RUNNER_TEMP/update-actions-lock.sh" | sha256sum -c -
+          bash "$RUNNER_TEMP/update-actions-lock.sh" --verify-local
+      - name: Verify secret-baseline positive and negative controls
+        run: |
+          curl -fsSL --retry 3 -o "$RUNNER_TEMP/gitleaks.tar.gz" https://github.com/gitleaks/gitleaks/releases/download/v8.18.4/gitleaks_8.18.4_linux_x64.tar.gz
+          echo "ba6dbb656933921c775ee5a2d1c13a91046e7952e9d919f9bac4cec61d628e7d  $RUNNER_TEMP/gitleaks.tar.gz" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/gitleaks.tar.gz" -C "$RUNNER_TEMP" gitleaks
+          curl -fsSL --retry 3 -o "$RUNNER_TEMP/estate-baseline.toml" https://raw.githubusercontent.com/hyperpolymath/standards/fcb566cfb8a86cea2d3666bf65a4f177a49b1313/config/gitleaks/estate-baseline.toml
+          echo "2361fc7e5dd6a572d5bbe493dc82f896a936549462f9ded87235cb9094d5346b  $RUNNER_TEMP/estate-baseline.toml" | sha256sum -c -
+          TMPDIR="$RUNNER_TEMP" bash scripts/test-gitleaks-baseline.sh "$RUNNER_TEMP/estate-baseline.toml" "$RUNNER_TEMP/gitleaks"

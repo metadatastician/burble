@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: MPL-2.0
 # This workflow is managed by gh actions-lock.
+# This workflow is managed by gh actions-lock.
 #
 # install-tests.yml — cross-platform validation for the service-install
 # machinery (setup.sh, setup.ps1, scripts/install-service.sh,

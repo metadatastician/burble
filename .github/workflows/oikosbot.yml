@@ -1,8 +1,11 @@
 # SPDX-License-Identifier: MPL-2.0
 # This workflow is managed by gh actions-lock.
+# This workflow is managed by gh actions-lock.
 name: OikosBot Sustainability Analysis
 
 on:
+  merge_group:
+    types: [checks_requested]
   push:
     branches: [main]
   pull_request:
@@ -26,7 +29,7 @@ jobs:
       # pinned has never existed on the package, so the job died at container
       # pull, and the failure was masked. Config comes from .oikos.yml.
       - name: Run OikosBot analysis
-        uses: hyperpolymath/oikosbot@3fdad0c2b027f328e784ecf08caf62bf80a784c1 # v0.1.3
+        uses: hyperpolymath/oikosbot@v0.1.3
         with:
           mode: report
           path: .

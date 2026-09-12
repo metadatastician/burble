@@ -144,7 +144,7 @@ defmodule BurbleWeb.Channels.SignalingChannelTest do
       {:ok, _reply, chan} = join_signaling(socket, room_id)
 
       ref = push(chan, "ping", %{})
-      assert_reply ref, :ok, %{pong: true}
+      assert_reply(ref, :ok, %{pong: true})
 
       leave(chan)
     end
@@ -159,7 +159,7 @@ defmodule BurbleWeb.Channels.SignalingChannelTest do
          %{socket: socket, room_id: room_id, user_id: user_id, peer_id: peer_id} do
       # Subscribe the test process to the target peer's PubSub topic so we
       # can assert that the channel publishes to the right topic.
-      Phoenix.PubSub.subscribe(Burble.PubSub, "signaling_peer:#{peer_id}")
+      Phoenix.PubSub.subscribe(Burble.PubSub, Burble.GrooveVoice.peer_topic(room_id, peer_id))
 
       {:ok, _reply, chan} = join_signaling(socket, room_id)
 
@@ -186,7 +186,7 @@ defmodule BurbleWeb.Channels.SignalingChannelTest do
       {:ok, _reply, chan} = join_signaling(socket, room_id)
 
       ref = push(chan, "sdp:offer", %{"to" => "some-peer", "sdp" => "v=0"})
-      refute_reply ref, :ok, %{}, 200
+      refute_reply(ref, :ok, %{}, 200)
 
       leave(chan)
     end
@@ -199,7 +199,7 @@ defmodule BurbleWeb.Channels.SignalingChannelTest do
   describe "sdp:answer" do
     test "delivers {:signaling_msg, payload} to the target peer",
          %{socket: socket, room_id: room_id, user_id: user_id, peer_id: peer_id} do
-      Phoenix.PubSub.subscribe(Burble.PubSub, "signaling_peer:#{peer_id}")
+      Phoenix.PubSub.subscribe(Burble.PubSub, Burble.GrooveVoice.peer_topic(room_id, peer_id))
 
       {:ok, _reply, chan} = join_signaling(socket, room_id)
 
@@ -223,7 +223,7 @@ defmodule BurbleWeb.Channels.SignalingChannelTest do
   describe "ice:candidate" do
     test "delivers {:signaling_msg, payload} with candidate to the target peer",
          %{socket: socket, room_id: room_id, user_id: user_id, peer_id: peer_id} do
-      Phoenix.PubSub.subscribe(Burble.PubSub, "signaling_peer:#{peer_id}")
+      Phoenix.PubSub.subscribe(Burble.PubSub, Burble.GrooveVoice.peer_topic(room_id, peer_id))
 
       {:ok, _reply, chan} = join_signaling(socket, room_id)
 
@@ -243,12 +243,16 @@ defmodule BurbleWeb.Channels.SignalingChannelTest do
   # ---------------------------------------------------------------------------
 
   describe "presence:join" do
-    test "broadcasts presence:join event with user_id", %{socket: socket, room_id: room_id, user_id: user_id} do
+    test "broadcasts presence:join event with user_id", %{
+      socket: socket,
+      room_id: room_id,
+      user_id: user_id
+    } do
       {:ok, _reply, chan} = join_signaling(socket, room_id)
 
       push(chan, "presence:join", %{})
 
-      assert_broadcast "presence:join", %{user_id: ^user_id}
+      assert_broadcast("presence:join", %{user_id: ^user_id})
 
       leave(chan)
     end
@@ -259,12 +263,16 @@ defmodule BurbleWeb.Channels.SignalingChannelTest do
   # ---------------------------------------------------------------------------
 
   describe "presence:leave" do
-    test "broadcasts presence:leave event with user_id", %{socket: socket, room_id: room_id, user_id: user_id} do
+    test "broadcasts presence:leave event with user_id", %{
+      socket: socket,
+      room_id: room_id,
+      user_id: user_id
+    } do
       {:ok, _reply, chan} = join_signaling(socket, room_id)
 
       push(chan, "presence:leave", %{})
 
-      assert_broadcast "presence:leave", %{user_id: ^user_id}
+      assert_broadcast("presence:leave", %{user_id: ^user_id})
 
       leave(chan)
     end
@@ -281,9 +289,14 @@ defmodule BurbleWeb.Channels.SignalingChannelTest do
 
       # Simulate a peer routing a message to this user's PubSub topic.
       payload = %{type: "sdp:offer", from: "remote-peer", sdp: "v=0"}
-      Phoenix.PubSub.broadcast!(Burble.PubSub, "signaling_peer:#{user_id}", {:signaling_msg, payload})
 
-      assert_push "msg", ^payload, 500
+      Phoenix.PubSub.broadcast!(
+        Burble.PubSub,
+        Burble.GrooveVoice.peer_topic(room_id, user_id),
+        {:signaling_msg, payload}
+      )
+
+      assert_push("msg", ^payload, 500)
 
       leave(chan)
     end
@@ -303,7 +316,7 @@ defmodule BurbleWeb.Channels.SignalingChannelTest do
 
       Phoenix.PubSub.broadcast!(
         Burble.PubSub,
-        "signaling_peer:#{user_id}",
+        Burble.GrooveVoice.peer_topic(room_id, user_id),
         {:signaling_msg,
          %{
            type: "sdp:offer",
@@ -314,7 +327,7 @@ defmodule BurbleWeb.Channels.SignalingChannelTest do
          }}
       )
 
-      assert_push "msg", pushed, 500
+      assert_push("msg", pushed, 500)
       assert pushed.sdp == sdp
       assert pushed.enc == "json", "payloads are normalised for existing clients"
       refute Map.has_key?(pushed, :sdp_b64)
@@ -333,7 +346,7 @@ defmodule BurbleWeb.Channels.SignalingChannelTest do
       {:ok, _reply, chan} = join_signaling(socket, room_id)
 
       ref = push(chan, "not_a_real_event", %{})
-      assert_reply ref, :error, %{reason: "unknown_event"}
+      assert_reply(ref, :error, %{reason: "unknown_event"})
 
       leave(chan)
     end
