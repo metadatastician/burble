@@ -121,7 +121,7 @@ jobs:
           name: release-artifacts
           path: artifacts/
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v3.0.2
+        uses: softprops/action-gh-release@v3.0.3
         with:
           body: ${{ needs.changelog.outputs.changelog }}
           draft: false

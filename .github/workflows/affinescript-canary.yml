@@ -64,7 +64,7 @@ jobs:
           key: affinescript-${{ env.AFFINESCRIPT_REF }}-${{ runner.os }}
       - name: Setup OCaml (cache miss only)
         if: steps.detect.outputs.count > 0 && steps.cache-affinescript.outputs.cache-hit != 'true'
-        uses: ocaml/setup-ocaml@v3.7.2
+        uses: ocaml/setup-ocaml@v3.8.0
         with:
           ocaml-compiler: ${{ env.OCAML_COMPILER }}
       - name: Build affinescript from source (cache miss only)
