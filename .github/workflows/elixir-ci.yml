@@ -43,7 +43,7 @@ jobs:
           # tracks ffi/zig/build.zig's declared "Zig 0.15".
           version: '0.15.2'
       - name: Install just
-        uses: taiki-e/install-action@9534c84618278caac52cb373bb164ed464dbd8af
+        uses: taiki-e/install-action@4076c08d76dba979c11a7285295b0716c1d67908
         with:
           # Pin an explicit modern just: the Justfile uses `import?`
           # (optional import, just >= 1.19.0). Unversioned `tool: just`
