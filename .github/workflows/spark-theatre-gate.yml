@@ -15,7 +15,7 @@ permissions:
   contents: read
 jobs:
   spark-theatre-gate:
-    uses: hyperpolymath/standards/.github/workflows/spark-theatre-gate.yml@fcb566cfb8a86cea2d3666bf65a4f177a49b1313
+    uses: hyperpolymath/standards/.github/workflows/spark-theatre-gate.yml@e977cc67456de8349dcc08143b92ce5608083f67
     with:
       paths: "."
       enforce_zero_contract: false
