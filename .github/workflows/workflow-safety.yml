@@ -43,14 +43,14 @@ jobs:
           gh extension install github/gh-actions-lock --pin v0.1.6
           # Standards' reviewed wrapper accounts for the released tool's
           # reusable-workflow gap; ordinary stale/wrong-ref findings still fail.
-          curl -fsSL --retry 3 -o "$RUNNER_TEMP/update-actions-lock.sh" https://raw.githubusercontent.com/hyperpolymath/standards/fcb566cfb8a86cea2d3666bf65a4f177a49b1313/scripts/update-actions-lock.sh
-          echo "dd5b1308b6644c866a79edf81adbfcdaff5a7009f186ade588df019adc20c9ed  $RUNNER_TEMP/update-actions-lock.sh" | sha256sum -c -
+          curl -fsSL --retry 3 -o "$RUNNER_TEMP/update-actions-lock.sh" https://raw.githubusercontent.com/hyperpolymath/standards/e977cc67456de8349dcc08143b92ce5608083f67/scripts/update-actions-lock.sh
+          echo "476027a98cc0b05f0c5dd1040780b6858ad2e58f7ad9f13f1329a6372631f681  $RUNNER_TEMP/update-actions-lock.sh" | sha256sum -c -
           bash "$RUNNER_TEMP/update-actions-lock.sh" --verify-local
       - name: Verify secret-baseline positive and negative controls
         run: |
           curl -fsSL --retry 3 -o "$RUNNER_TEMP/gitleaks.tar.gz" https://github.com/gitleaks/gitleaks/releases/download/v8.18.4/gitleaks_8.18.4_linux_x64.tar.gz
           echo "ba6dbb656933921c775ee5a2d1c13a91046e7952e9d919f9bac4cec61d628e7d  $RUNNER_TEMP/gitleaks.tar.gz" | sha256sum -c -
           tar -xzf "$RUNNER_TEMP/gitleaks.tar.gz" -C "$RUNNER_TEMP" gitleaks
-          curl -fsSL --retry 3 -o "$RUNNER_TEMP/estate-baseline.toml" https://raw.githubusercontent.com/hyperpolymath/standards/fcb566cfb8a86cea2d3666bf65a4f177a49b1313/config/gitleaks/estate-baseline.toml
-          echo "2361fc7e5dd6a572d5bbe493dc82f896a936549462f9ded87235cb9094d5346b  $RUNNER_TEMP/estate-baseline.toml" | sha256sum -c -
+          curl -fsSL --retry 3 -o "$RUNNER_TEMP/estate-baseline.toml" https://raw.githubusercontent.com/hyperpolymath/standards/e977cc67456de8349dcc08143b92ce5608083f67/config/gitleaks/estate-baseline.toml
+          echo "877902ec90c68fca289d9f48b77b8cc0cd94a4ef4be3d95d13b7ae7052ff89d6  $RUNNER_TEMP/estate-baseline.toml" | sha256sum -c -
           TMPDIR="$RUNNER_TEMP" bash scripts/test-gitleaks-baseline.sh "$RUNNER_TEMP/estate-baseline.toml" "$RUNNER_TEMP/gitleaks"
