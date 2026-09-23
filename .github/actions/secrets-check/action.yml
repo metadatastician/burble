@@ -1,0 +1,8 @@
+name: 'Private Key Material Gate'
+description: 'Detects committed or untracked PEM/OpenSSH private-key material in the working tree.'
+runs:
+  using: 'composite'
+  steps:
+    - name: Run Secret Scanning
+      shell: bash
+      run: "${{ github.action_path }}/check.sh"

@@ -1,0 +1,15 @@
+name: 'Academic Referencing Gate'
+description: 'Validates the core Citation File Format fields when CITATION.cff is applicable.'
+inputs:
+  required:
+    description: 'Set true when the repository is required to publish citation metadata.'
+    required: false
+    default: 'false'
+runs:
+  using: 'composite'
+  steps:
+    - name: Run Referencing Check
+      shell: bash
+      env:
+        CITATION_REQUIRED: ${{ inputs.required }}
+      run: "${{ github.action_path }}/check.sh"

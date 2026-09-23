@@ -25,15 +25,18 @@ defmodule BurbleWeb.Plugs.InputSanitizerTest do
     end
 
     test "rejects room_id with path traversal" do
-      assert {:error, "room_id", _} = InputSanitizer.validate_params(%{"room_id" => "../../../etc/passwd"})
+      assert {:error, "room_id", _} =
+               InputSanitizer.validate_params(%{"room_id" => "../../../etc/passwd"})
     end
 
     test "rejects room_id with spaces" do
-      assert {:error, "room_id", _} = InputSanitizer.validate_params(%{"room_id" => "room with spaces"})
+      assert {:error, "room_id", _} =
+               InputSanitizer.validate_params(%{"room_id" => "room with spaces"})
     end
 
     test "rejects room_id with special characters" do
-      assert {:error, "room_id", _} = InputSanitizer.validate_params(%{"room_id" => "room<script>alert(1)</script>"})
+      assert {:error, "room_id", _} =
+               InputSanitizer.validate_params(%{"room_id" => "room<script>alert(1)</script>"})
     end
 
     test "rejects excessively long room_id" do
@@ -53,12 +56,16 @@ defmodule BurbleWeb.Plugs.InputSanitizerTest do
     end
 
     test "rejects display name with control characters" do
-      assert {:error, "display_name", _} = InputSanitizer.validate_params(%{"display_name" => "Alice\x00Bob"})
+      assert {:error, "display_name", _} =
+               InputSanitizer.validate_params(%{"display_name" => "Alice\x00Bob"})
     end
 
     test "rejects excessively long display name" do
       long_name = String.duplicate("a", 100)
-      assert {:error, "display_name", msg} = InputSanitizer.validate_params(%{"display_name" => long_name})
+
+      assert {:error, "display_name", msg} =
+               InputSanitizer.validate_params(%{"display_name" => long_name})
+
       assert msg =~ "maximum length"
     end
   end
@@ -84,14 +91,17 @@ defmodule BurbleWeb.Plugs.InputSanitizerTest do
     end
 
     test "rejects null bytes in password" do
-      assert {:error, "password", msg} = InputSanitizer.validate_params(%{"password" => "pass\x00word"})
+      assert {:error, "password", msg} =
+               InputSanitizer.validate_params(%{"password" => "pass\x00word"})
+
       assert msg =~ "null byte"
     end
   end
 
   describe "validate_params/1 — token fields" do
     test "accepts valid base64url token" do
-      assert :ok = InputSanitizer.validate_params(%{"token" => "abc123-_DEF="})
+      # Public alphabet-only parser fixture; never issued by an authenticator.
+      assert :ok = InputSanitizer.validate_params(%{"token" => "aaa111-_AAA="})
     end
 
     test "accepts valid connect code" do

@@ -153,3 +153,7 @@ Write-Host "──────────────────────�
 Write-Host ("Results: {0} pass, {1} fail" -f $script:Pass, $script:Fail) -ForegroundColor $(if ($script:Fail -eq 0) { 'Green' } else { 'Red' })
 Write-Host "──────────────────────────────────────────"
 if ($script:Fail -ne 0) { exit 1 }
+# The final best-effort sc.exe delete can return 1060 after the service was
+# successfully removed. Report this test's assertions, not that stale native
+# LASTEXITCODE (which GitHub's PowerShell wrapper otherwise propagates).
+exit 0

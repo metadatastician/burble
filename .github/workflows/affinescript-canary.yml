@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: MPL-2.0
 # This workflow is managed by gh actions-lock.
+# This workflow is managed by gh actions-lock.
 # Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
 #
 # affinescript-canary.yml — AffineScript Compilation Canary
@@ -64,7 +65,7 @@ jobs:
           key: affinescript-${{ env.AFFINESCRIPT_REF }}-${{ runner.os }}
       - name: Setup OCaml (cache miss only)
         if: steps.detect.outputs.count > 0 && steps.cache-affinescript.outputs.cache-hit != 'true'
-        uses: ocaml/setup-ocaml@v3.7.2
+        uses: ocaml/setup-ocaml@v3.9.0
         with:
           ocaml-compiler: ${{ env.OCAML_COMPILER }}
       - name: Build affinescript from source (cache miss only)

@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: MPL-2.0
 # This workflow is managed by gh actions-lock.
+# This workflow is managed by gh actions-lock.
 name: No-JS Scan (warn-first)
 
 # Estate policy: no hand-authored JavaScript/TypeScript source

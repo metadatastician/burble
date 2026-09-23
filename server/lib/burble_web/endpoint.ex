@@ -12,51 +12,58 @@ defmodule BurbleWeb.Endpoint do
     same_site: "Lax"
   ]
 
-  socket "/live", Phoenix.LiveView.Socket,
-    websocket: [connect_info: [session: @session_options]]
+  socket("/live", Phoenix.LiveView.Socket, websocket: [connect_info: [session: @session_options]])
 
-  socket "/voice", BurbleWeb.UserSocket,
+  socket("/voice", BurbleWeb.UserSocket,
     websocket: [timeout: 300_000, max_frame_size: 16_384],
     longpoll: false
+  )
 
-  plug Plug.Static,
+  plug(Plug.Static,
     at: "/",
     from: :burble,
     gzip: false,
     only: BurbleWeb.static_paths()
+  )
 
   if code_reloading? do
-    plug Phoenix.CodeReloader
+    plug(Phoenix.CodeReloader)
   end
 
-  plug Phoenix.LiveDashboard.RequestLogger,
+  plug(Phoenix.LiveDashboard.RequestLogger,
     param_key: "request_logger",
     cookie_key: "request_logger"
+  )
 
-  plug Plug.RequestId
-  plug Plug.Telemetry, event_prefix: [:phoenix, :endpoint]
+  plug(Plug.RequestId)
+  plug(Plug.Telemetry, event_prefix: [:phoenix, :endpoint])
 
-  plug Plug.Parsers,
+  # Read and bound authenticated native frames before the general JSON parser.
+  plug(BurbleWeb.Plugs.GrooveVoicePlug)
+
+  plug(Plug.Parsers,
     parsers: [:urlencoded, :multipart, :json],
     pass: ["*/*"],
     json_decoder: Phoenix.json_library()
+  )
 
-  plug Plug.MethodOverride
-  plug Plug.Head
-  plug Plug.Session, @session_options
+  plug(Plug.MethodOverride)
+  plug(Plug.Head)
+  plug(Plug.Session, @session_options)
   # CORS configuration. In production, restrict to the configured origin.
   # Default: allow all origins in dev/test, restrict in prod.
-  plug Corsica,
+  plug(Corsica,
     origins: Application.compile_env(:burble, :cors_origins, "*"),
     allow_headers: ["content-type", "authorization", "accept", "x-requested-with"],
     allow_methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     max_age: 600
+  )
 
   # Groove discovery — must be before the router so /.well-known/groove
   # is handled regardless of other pipeline configuration.
   # Enables Gossamer, PanLL, and other groove-aware systems to discover
   # Burble's voice/text capabilities via the Idris2-verified groove protocol.
-  plug BurbleWeb.Plugs.GroovePlug
+  plug(BurbleWeb.Plugs.GroovePlug)
 
-  plug BurbleWeb.Router
+  plug(BurbleWeb.Router)
 end

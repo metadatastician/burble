@@ -1,0 +1,19 @@
+name: 'Idris2 ABI Purity Gate'
+description: 'Checks that Idris2 ABI interfaces are pure and formally type-checked.'
+runs:
+  using: 'composite'
+  steps:
+    - name: Run Idris2 ABI Purity Check
+      shell: bash
+      run: |
+        echo "Validating Idris2 ABI Purity..."
+        if [ -f "abi.ipkg" ]; then
+          # Check for forbidden side-effects in Abi.* modules
+          if git grep -E 'IO |unsafePerformIO|primIO' -- 'src/Abi*' 'src/Hypatia/ABI*'; then
+            echo "::error::Idris2 ABI modules contain prohibited side-effects (IO/unsafe)."
+            exit 1
+          fi
+          echo "Idris2 ABI is pure."
+        else
+          echo "No abi.ipkg found. Skipping Idris2 ABI check."
+        fi

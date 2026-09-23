@@ -1,0 +1,35 @@
+name: 'Accreditations & Badges Gate'
+description: 'Validates presence, standing, and non-drift of accreditations and badges (GLAMA, Greenweb, OpenSSF, RSR, etc.).'
+runs:
+  using: 'composite'
+  steps:
+    - name: Run Badges and Accreditations Check
+      shell: bash
+      run: |
+        echo "Validating Accreditations and Badges..."
+        README="README.adoc"
+        [ -f "README.md" ] && README="README.md"
+        
+        if [ ! -f "$README" ]; then
+          echo "::warning::No README found to check badges."
+          exit 0
+        fi
+        
+        # Check for core badges
+        for badge in "GLAMA" "Greenweb" "OpenSSF" "License"; do
+          if ! grep -qi "$badge" "$README"; then
+            echo "::warning::Missing $badge badge in $README. Check standing and display."
+          fi
+        done
+        
+        # Check Idris Inside / RSR compliance
+        if [ -d "src" ] || ls *.ipkg 1>/dev/null 2>] || ls *.ipkg 1>/dev/null 2>&11; then
+           if ! grep -qi "Idris Inside" "$README"; then
+             echo "::warning::Idris source detected but 'Idris Inside' badge is missing."
+           fi
+           if ! grep -qi "RSR" "$README"; then
+             echo "::warning::Missing RSR-compliant badge in Idris repository."
+           fi
+        fi
+        
+        echo "Badges and Accreditations validation complete."
