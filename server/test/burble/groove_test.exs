@@ -245,7 +245,9 @@ defmodule Burble.GrooveTest do
 
       expiries =
         Groove.attestations()
-        |> Enum.filter(&(&1.event == "groove:lease-expired" and &1.consumer == "soft-expiry-peer"))
+        |> Enum.filter(
+          &(&1.event == "groove:lease-expired" and &1.consumer == "soft-expiry-peer")
+        )
 
       assert [record] = expiries
       assert record.residue == 0
@@ -268,7 +270,7 @@ defmodule Burble.GrooveTest do
       # The refused refresh must not have moved the expiry: past the
       # original TTL the connection is reaped regardless of heartbeats.
       Process.sleep(90)
-      assert {:error, :soft_lease} = Groove.heartbeat(session_id)
+      assert {:error, :not_found} = Groove.heartbeat(session_id)
       status = sweep()
       refute Map.has_key?(status, session_id)
     end
@@ -329,7 +331,9 @@ defmodule Burble.GrooveTest do
 
       expiries =
         Groove.attestations()
-        |> Enum.filter(&(&1.event == "groove:lease-expired" and &1.consumer == "hard-degrade-peer"))
+        |> Enum.filter(
+          &(&1.event == "groove:lease-expired" and &1.consumer == "hard-degrade-peer")
+        )
 
       assert [record] = expiries
       assert record.residue == 0

@@ -1,0 +1,25 @@
+name: 'Reasonably Good Token Validation Gate'
+description: 'Enforces that API keys and secrets are wrapped in the Reasonably Good Token Vault UUID format.'
+runs:
+  using: 'composite'
+  steps:
+    - name: Run Vaulted Tokens Check
+      shell: bash
+      run: |
+        echo "Validating token formats across environment configurations..."
+        
+        # Check .env.example or configuration files for raw keys
+        if find . -name "*.env*" -o -name "*config*.json" -o -name "*config*.yaml" -not -path "*/\.*" | grep -q .; then
+           # Search for patterns that look like raw API keys (e.g., sk_live_, AIzaSy)
+           # and NOT UUIDs.
+           if git grep -qiE "(sk_(live|test)_[0-9a-zA-Z]+|AIza[0-9A-Za-z-_]{35}|ghp_[0-9a-zA-Z]{36})" -- '*.env*' '*config*' 2>/dev/null; then
+             echo "::error::Raw API keys detected in configuration schemas! All keys must be wrapped using the Reasonably Good Token Vault."
+             echo "::error::Use 'rgtv wrap' to obfuscate keys into UUID format and bind them to an IPv6 address."
+             exit 1
+           fi
+           echo "Token formats appear to comply with UUID obfuscation standard."
+        else
+           echo "No explicit configuration files found. Passing token validation."
+        fi
+        
+        echo "Reasonably Good Token Validation complete."

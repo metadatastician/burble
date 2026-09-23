@@ -1,0 +1,29 @@
+name: 'WWW & Well-Known Compliance Gate'
+description: 'Validates that the www folder is constructed and compliant with .well-known and resource records.'
+runs:
+  using: 'composite'
+  steps:
+    - name: Run WWW Compliance Check
+      shell: bash
+      run: |
+        echo "Validating www folder and .well-known compliance..."
+        if [ -d "www" ] || [ -d "public" ]; then
+          WWW_DIR="www"
+          [ -d "public" ] && WWW_DIR="public"
+          
+          echo "Checking $WWW_DIR for .well-known directory..."
+          if [ ! -d "$WWW_DIR/.well-known" ]; then
+            echo "::warning::Missing .well-known directory in $WWW_DIR. Ensure compliance with resource records."
+          else
+            echo ".well-known directory found."
+          fi
+          
+          # Check for typical resource records (e.g. security.txt, robots.txt, etc.)
+          if [ ! -f "$WWW_DIR/.well-known/security.txt" ]; then
+             echo "::warning::security.txt is missing from .well-known."
+          fi
+        else
+          echo "No www or public directory found. Skipping compliance check."
+        fi
+        
+        echo "WWW compliance validation passed."

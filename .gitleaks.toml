@@ -1,0 +1,21 @@
+# SPDX-License-Identifier: MPL-2.0
+# Inherit the pinned estate baseline staged by secret-scanner-reusable.yml.
+[extend]
+path = ".gitleaks-estate.toml"
+
+[allowlist]
+description = "Exact published BLE-SPA v1 conformance values, never production credentials"
+# Derived from the public test-invite-room-alpha/bravo strings by
+# mix burble.gen_ble_vectors. No file or hexadecimal key class is exempted:
+# another credential in the same vector file must still fail the scanner.
+# Five exact values are accounted for below; keep the negative-control test
+# in Workflow safety so expanding this allowlist cannot blind a whole file.
+regexes = [
+  '''^b73d0f8b2aefa65ac5c64d526f0e97399810f533971f732030c32c5224eff090$''',
+  '''^d1c73bce7f5251cdc559cb2063ca6e424917a29faccf1ca27c89daae0ec64233$''',
+  # Response HMACs derived from the above keys and fixed timestamps/nonces.
+  '''^9d948106cd6166204dfe72296b03caa1$''',
+  '''^612b2828d522816ab4fc20e14f427bd1$''',
+  # Published contact-c byte-walk fixture for the presence-beacon vectors.
+  '''^00112233445566778899aabbccddeeff0102030405060708090a0b0c0d0e0f10$''',
+]

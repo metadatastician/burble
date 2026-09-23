@@ -1,0 +1,29 @@
+# This workflow is managed by gh actions-lock.
+# SPDX-License-Identifier: MPL-2.0
+name: Dependency audit
+on:
+  pull_request:
+  push:
+    branches: [main]
+  merge_group:
+    types: [checks_requested]
+  schedule:
+    - cron: '43 5 * * 1'
+permissions:
+  contents: read
+jobs:
+  rustsec:
+    name: RustSec locked dependencies
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de
+        with:
+          toolchain: 1.97.1
+      - name: Install versioned authoritative advisory checker
+        run: cargo install --locked cargo-audit --version 0.22.2
+      - name: Audit the actual committed dependency graph
+        run: cargo audit --file client/rust/Cargo.lock

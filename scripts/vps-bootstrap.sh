@@ -35,6 +35,8 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=scripts/lib/verified-installer.sh
+source "$REPO_ROOT/scripts/lib/verified-installer.sh"
 ENV_FILE="$REPO_ROOT/containers/.env"
 COMPOSE_FILE="$REPO_ROOT/containers/selur-compose.toml"
 CADDYFILE="/etc/caddy/Caddyfile"
@@ -216,8 +218,12 @@ BASE_URL_SCHEME="http"
 if [ "$MODE" = "1" ]; then
   # ---- Tailscale path -------------------------------------------------------
   if ! need_bin tailscale; then
-    if confirm "Tailscale isn't installed. Install it now (official install script)?"; then
-      curl -fsSL https://tailscale.com/install.sh | sh
+    if confirm "Tailscale isn't installed. Install it now (verified official installer)?"; then
+      # Review and update the immutable source URL and digest together.
+      run_verified_installer \
+        'https://raw.githubusercontent.com/tailscale/tailscale/5208e6d7f1abb282d19a480c8a5579c435ab2658/scripts/installer.sh' \
+        '805e85ed6f6f81a7ea2e70d52d47e7d5290863299e5c922b2787d71aa312f22e' \
+        || die "Tailscale installer failed verification or installation."
     else
       die "tailscale is required for this mode — install it, then re-run."
     fi

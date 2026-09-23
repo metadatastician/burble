@@ -11,10 +11,9 @@
 # When a consumer connects, additional features light up (panel embedding,
 # workspace voice, admin alerts, etc.).
 #
-# The groove connector types are formally verified in Gossamer's Groove.idr:
-# - CapabilityType proves what we offer is well-typed
-# - IsSubset proves consumers can only connect if we satisfy their needs
-# - GrooveHandle is linear: consumers MUST disconnect (no dangling grooves)
+# Gossamer's Groove.idr contains models of capability compatibility and
+# linear handles. They are not extracted into this GenServer and do not
+# prove its runtime behavior; the checks and integration tests below matter.
 #
 # Groove Protocol:
 #   GET  /.well-known/groove              — Capability manifest (JSON)
@@ -85,7 +84,8 @@ defmodule Burble.Groove do
     capabilities: %{
       voice: %{
         type: "voice",
-        description: "WebRTC voice channels with Opus codec, noise suppression, echo cancellation",
+        description:
+          "WebRTC voice channels with Opus codec, noise suppression, echo cancellation",
         protocol: "webrtc",
         endpoint: "/voice",
         requires_auth: false,
@@ -153,6 +153,7 @@ defmodule Burble.Groove do
 
   # Maximum queue depth to prevent memory exhaustion.
   @max_queue_depth 1000
+  @max_connections 1024
 
   # Maximum attestation chain length — oldest records rotate out past this.
   @max_attestation_depth 1000
@@ -226,7 +227,44 @@ defmodule Burble.Groove do
   @spec connect(map()) ::
           {:ok, String.t()} | {:ok, String.t(), map()} | {:error, String.t()}
   def connect(peer_manifest) when is_map(peer_manifest) do
-    GenServer.call(__MODULE__, {:connect, peer_manifest})
+    consumes = Map.get(peer_manifest, "consumes", [])
+    peer_id = Map.get(peer_manifest, "service_id", "unknown")
+
+    if is_binary(peer_id) and byte_size(peer_id) in 1..128 and
+         is_list(consumes) and length(consumes) <= 32 and
+         Enum.all?(consumes, &(is_binary(&1) and byte_size(&1) in 1..64)) do
+      GenServer.call(__MODULE__, {:connect, peer_manifest})
+    else
+      {:error, "invalid manifest"}
+    end
+  end
+
+  def connect(_), do: {:error, "invalid manifest"}
+
+  @doc false
+  def voice_connect(auth, scope, lease),
+    do:
+      voice_call(
+        {:voice_connect, auth, scope, lease, System.monotonic_time(:millisecond) + 4_000}
+      )
+
+  @doc false
+  def voice_operation(action, handle, auth, peer, bytes),
+    do:
+      voice_call(
+        {:voice_operation, action, handle, auth, peer, bytes,
+         System.monotonic_time(:millisecond) + 4_000}
+      )
+
+  defp voice_call(message) do
+    GenServer.call(__MODULE__, message)
+  catch
+    :exit, _ -> {:error, :not_found}
+  end
+
+  @doc "Non-authorizing public identifier; never use this digest as a session bearer."
+  def connection_id(handle) do
+    "sha256:" <> Base.encode16(:crypto.hash(:sha256, handle), case: :lower)
   end
 
   @doc """
@@ -269,8 +307,9 @@ defmodule Burble.Groove do
   @doc """
   Return the current status of all groove connections.
 
-  Returns a map of session_id => connection info (peer_id, state, connected_at,
-  last_heartbeat, capabilities).
+  Trusted in-process API: returns session_id => connection info. The HTTP
+  plug replaces bearer keys with connection_id/1 digests. Timing fields are
+  monotonic milliseconds local to this BEAM instance, not Unix timestamps.
   """
   @spec connection_status() :: map()
   def connection_status do
@@ -336,107 +375,79 @@ defmodule Burble.Groove do
         cap in our_offer_ids
       end)
 
-    if matched_capabilities == [] and peer_consumes != [] do
-      Logger.info("[Groove] Rejected connection from #{peer_id}: no capability match")
-      {:reply, {:error, "no matching capabilities"}, state}
-    else
-      case parse_lease(Map.get(peer_manifest, "lease")) do
-        {:error, reason} ->
-          Logger.info("[Groove] Rejected connection from #{peer_id}: #{reason}")
-          {:reply, {:error, reason}, state}
+    cond do
+      map_size(state.connections) >= @max_connections ->
+        {:reply, {:error, "connection capacity reached"}, state}
 
-        {:ok, lease} ->
-          session_id = generate_session_id()
-          now = System.system_time(:millisecond)
+      length(matched_capabilities) != length(peer_consumes) ->
+        Logger.info("[Groove] Rejected connection from #{peer_id}: no capability match")
+        {:reply, {:error, "no matching capabilities"}, state}
 
-          conn_info = %{
-            peer_id: peer_id,
-            state: :connected,
-            connected_at: now,
-            last_heartbeat: now,
-            matched_capabilities: matched_capabilities,
-            manifest: peer_manifest,
-            # Lease (SPEC v0.3): nil for legacy (no-lease) connections.
-            lease: lease,
-            lease_expires_at: if(lease, do: now + lease.ttl_ms, else: nil),
-            missed_windows: 0,
-            messages_sent: 0,
-            messages_received: 0,
-            errors: 0
-          }
+      true ->
+        case parse_lease(Map.get(peer_manifest, "lease")) do
+          {:error, reason} ->
+            Logger.info("[Groove] Rejected connection from #{peer_id}: #{reason}")
+            {:reply, {:error, reason}, state}
 
-          new_connections = Map.put(state.connections, session_id, conn_info)
+          {:ok, lease} ->
+            session_id = generate_session_id()
+            now = System.monotonic_time(:millisecond)
 
-          :telemetry.execute(
-            [:burble, :groove, :connect],
-            %{count: 1},
-            %{peer_id: peer_id, session_id: session_id}
-          )
+            conn_info = %{
+              peer_id: peer_id,
+              state: :connected,
+              connected_at: now,
+              last_heartbeat: now,
+              matched_capabilities: matched_capabilities,
+              # Lease (SPEC v0.3): nil for legacy (no-lease) connections.
+              lease: lease,
+              lease_expires_at: if(lease, do: now + lease.ttl_ms, else: nil),
+              missed_windows: 0,
+              messages_sent: 0,
+              messages_received: 0,
+              voice_scope: nil,
+              voice_inbox: [],
+              voice_epoch: System.unique_integer([:monotonic, :positive]),
+              errors: 0
+            }
 
-          Logger.info(
-            "[Groove] Connected: #{peer_id} (session=#{session_id}, capabilities=#{inspect(matched_capabilities)})"
-          )
+            new_connections = Map.put(state.connections, session_id, conn_info)
 
-          new_state =
-            %{state | connections: new_connections}
-            |> record_attestation("groove:connect", peer_id, matched_capabilities)
+            :telemetry.execute(
+              [:burble, :groove, :connect],
+              %{count: 1},
+              %{peer_id: peer_id, connection_id: connection_id(session_id)}
+            )
 
-          reply = if lease, do: {:ok, session_id, lease}, else: {:ok, session_id}
-          {:reply, reply, new_state}
-      end
+            Logger.info(
+              "[Groove] Connected: #{peer_id} (id=#{connection_id(session_id)}, capabilities=#{inspect(matched_capabilities)})"
+            )
+
+            new_state =
+              %{state | connections: new_connections}
+              |> record_attestation("groove:connect", peer_id, matched_capabilities)
+
+            reply = if lease, do: {:ok, session_id, lease}, else: {:ok, session_id}
+            {:reply, reply, new_state}
+        end
     end
   end
 
   @impl true
   def handle_call({:disconnect, session_id}, _from, state) do
-    case Map.pop(state.connections, session_id) do
-      {nil, _connections} ->
-        {:reply, {:error, :not_found}, state}
-
-      {conn_info, remaining} ->
-        :telemetry.execute(
-          [:burble, :groove, :disconnect],
-          %{duration_ms: System.system_time(:millisecond) - conn_info.connected_at},
-          %{peer_id: conn_info.peer_id, session_id: session_id}
-        )
-
-        Logger.info(
-          "[Groove] Disconnected: #{conn_info.peer_id} (session=#{session_id})"
-        )
-
-        new_state =
-          %{state | connections: remaining}
-          |> record_attestation(
-            "groove:disconnect",
-            conn_info.peer_id,
-            conn_info.matched_capabilities
-          )
-
-        {:reply, :ok, new_state}
+    if get_in(state, [:connections, session_id, :voice_scope]) do
+      {:reply, {:error, :not_found}, state}
+    else
+      disconnect_session(session_id, state)
     end
   end
 
   @impl true
   def handle_call({:heartbeat, session_id}, _from, state) do
-    case Map.get(state.connections, session_id) do
-      nil ->
-        {:reply, {:error, :not_found}, state}
-
-      conn_info ->
-        now = System.system_time(:millisecond)
-
-        updated =
-          %{conn_info | last_heartbeat: now, state: :active}
-          |> refresh_lease(now)
-
-        new_connections = Map.put(state.connections, session_id, updated)
-        reply =
-          case conn_info.lease do
-            %{mode: "soft"} -> {:error, :soft_lease}
-            _ -> :ok
-          end
-
-        {:reply, reply, %{state | connections: new_connections}}
+    if get_in(state, [:connections, session_id, :voice_scope]) do
+      {:reply, {:error, :not_found}, state}
+    else
+      heartbeat_session(session_id, state)
     end
   end
 
@@ -465,11 +476,195 @@ defmodule Burble.Groove do
     {:reply, Enum.reverse(state.attestations), state}
   end
 
+  @impl true
+  def handle_call({:voice_connect, auth, scope, lease, request_deadline}, from, state) do
+    # This API is internal: only the authenticated Plug constructs auth/scope.
+    result = voice_members(scope, auth, nil, request_deadline, fn -> :ok end)
+
+    case result do
+      :ok ->
+        manifest = %{"service_id" => "gossamer-voice", "consumes" => ["voice"], "lease" => lease}
+
+        case handle_call({:connect, manifest}, from, state) do
+          {:reply, {:ok, handle, accepted}, next} ->
+            next = put_in(next, [:connections, handle, :voice_scope], scope)
+            {:reply, {:ok, handle, accepted}, next}
+
+          {:reply, _, next} ->
+            {:reply, {:error, :capacity}, next}
+        end
+
+      error ->
+        {:reply, error, state}
+    end
+  end
+
+  @impl true
+  def handle_call(
+        {:voice_operation, action, handle, auth, peer, bytes, request_deadline},
+        _from,
+        state
+      ) do
+    state = expire_if_elapsed(state, handle)
+
+    case Map.get(state.connections, handle) do
+      %{voice_scope: %{subject: subject, peer: ^peer} = scope} = info
+      when subject == auth.subject ->
+        deadline = voice_deadline(info)
+
+        result =
+          voice_members(scope, auth, deadline, request_deadline, fn ->
+            voice_effect(action, scope, bytes)
+          end)
+
+        case {result, action} do
+          {:ok, "heartbeat"} ->
+            heartbeat_session(handle, state)
+
+          {:ok, "disconnect"} ->
+            disconnect_session(handle, state)
+
+          {:ok, "recv"} ->
+            case info.voice_inbox do
+              [] ->
+                {:reply, :ok, state}
+
+              [frame | rest] ->
+                {:reply, {:frame, frame},
+                 put_in(state, [:connections, handle, :voice_inbox], rest)}
+            end
+
+          _ ->
+            {:reply, result, state}
+        end
+
+      nil ->
+        {:reply, {:error, :not_found}, state}
+
+      _ ->
+        {:reply, {:error, :forbidden}, state}
+    end
+  end
+
+  defp disconnect_session(session_id, state) do
+    state = expire_if_elapsed(state, session_id)
+
+    case Map.pop(state.connections, session_id) do
+      {nil, _connections} ->
+        {:reply, {:error, :not_found}, state}
+
+      {conn_info, remaining} ->
+        :telemetry.execute(
+          [:burble, :groove, :disconnect],
+          %{duration_ms: System.monotonic_time(:millisecond) - conn_info.connected_at},
+          %{peer_id: conn_info.peer_id, connection_id: connection_id(session_id)}
+        )
+
+        Logger.info(
+          "[Groove] Disconnected: #{conn_info.peer_id} (id=#{connection_id(session_id)})"
+        )
+
+        {queue, depth} = wipe_peer_messages(state.queue, session_id, conn_info.peer_id)
+
+        new_state =
+          %{state | connections: remaining, queue: queue, depth: depth}
+          |> record_attestation(
+            "groove:disconnect",
+            conn_info.peer_id,
+            conn_info.matched_capabilities
+          )
+
+        {:reply, :ok, new_state}
+    end
+  end
+
+  defp heartbeat_session(session_id, state) do
+    state = expire_if_elapsed(state, session_id)
+
+    case Map.get(state.connections, session_id) do
+      nil ->
+        {:reply, {:error, :not_found}, state}
+
+      conn_info ->
+        now = System.monotonic_time(:millisecond)
+
+        updated =
+          %{conn_info | last_heartbeat: now, state: :active}
+          |> refresh_lease(now)
+
+        new_connections = Map.put(state.connections, session_id, updated)
+
+        reply =
+          case conn_info.lease do
+            %{mode: "soft"} -> {:error, :soft_lease}
+            _ -> :ok
+          end
+
+        {:reply, reply, %{state | connections: new_connections}}
+    end
+  end
+
+  defp voice_deadline(info),
+    do: info.lease_expires_at + if(info.lease.mode == "hard", do: 2 * info.lease.ttl_ms, else: 0)
+
+  defp voice_members(scope, auth, deadline, request_deadline, effect) do
+    # The deadline is minted BEFORE entering either provider or room mailbox,
+    # and precedes GenServer.call's 5s timeout. A late turn is a rejection,
+    # never a deferred send after timeout or lease consumption.
+
+    Burble.Rooms.Room.with_voice_members(scope.room, scope.subject, scope.peer, fn ->
+      cond do
+        System.monotonic_time(:millisecond) >= request_deadline ->
+          {:error, :not_found}
+
+        auth.expires <= System.system_time(:second) ->
+          {:error, :unauthorized}
+
+        deadline != nil and System.monotonic_time(:millisecond) >= deadline ->
+          {:error, :not_found}
+
+        true ->
+          effect.()
+      end
+    end)
+    |> case do
+      {:error, :room_not_found} -> {:error, :forbidden}
+      other -> other
+    end
+  catch
+    :exit, _ -> {:error, :forbidden}
+  end
+
+  defp voice_effect("send", scope, bytes) do
+    with {:ok, tag, msg} <- Burble.GrooveVoice.decode(bytes),
+         true <- msg.room_id == scope.room and msg.user_id == scope.subject do
+      Phoenix.PubSub.broadcast(
+        Burble.PubSub,
+        Burble.GrooveVoice.peer_topic(scope.room, scope.peer),
+        {:signaling_msg, Burble.GrooveVoice.payload(tag, msg)}
+      )
+
+      send(
+        __MODULE__,
+        {:voice_delivery, scope.room, scope.subject, scope.peer,
+         System.unique_integer([:monotonic, :positive]), bytes}
+      )
+
+      :ok
+    else
+      false -> {:error, :forbidden}
+      error -> error
+    end
+  end
+
+  defp voice_effect(action, _, _) when action in ["recv", "heartbeat", "disconnect"], do: :ok
+  defp voice_effect(_, _, _), do: {:error, :invalid_request}
+
   # --- Heartbeat / Lease Monitoring ---
 
   @impl true
   def handle_info(:check_heartbeats, state) do
-    now = System.system_time(:millisecond)
+    now = System.monotonic_time(:millisecond)
 
     new_state =
       Enum.reduce(state.connections, state, fn {session_id, info}, acc ->
@@ -481,6 +676,31 @@ defmodule Burble.Groove do
 
   # Catch-all for unexpected messages.
   @impl true
+  def handle_info({:voice_delivery, room, sender, recipient, epoch, bytes}, state) do
+    # Four bounded frames per live lease. Overflow drops the new frame; it
+    # cannot grow a process-owned inbox without bound. Delivery rechecks auth.
+    next =
+      Enum.reduce(Map.keys(state.connections), state, fn handle, acc ->
+        acc = expire_if_elapsed(acc, handle)
+
+        case Map.get(acc.connections, handle) do
+          %{
+            voice_scope: %{room: ^room, subject: ^recipient, peer: ^sender},
+            voice_inbox: inbox,
+            voice_epoch: connected_epoch
+          }
+          when length(inbox) < 4 and byte_size(bytes) <= 16_384 and connected_epoch < epoch ->
+            put_in(acc, [:connections, handle, :voice_inbox], inbox ++ [bytes])
+
+          _ ->
+            acc
+        end
+      end)
+
+    {:noreply, next}
+  end
+
+  @impl true
   def handle_info(_msg, state), do: {:noreply, state}
 
   # --- Sweep: one connection per pass (SPEC v0.3 leases + legacy heartbeats) ---
@@ -489,7 +709,7 @@ defmodule Burble.Groove do
   # provider-side residue (connection removed + queued messages wiped) and is
   # attested with residue: 0.
   defp sweep_connection(state, session_id, %{lease: %{mode: "soft"}} = info, now) do
-    if now > info.lease_expires_at do
+    if now >= info.lease_expires_at do
       expire_lease(state, session_id, info)
     else
       state
@@ -507,7 +727,7 @@ defmodule Burble.Groove do
     # degradation clock (a 5s sweep over a 1s TTL previously counted one
     # window per sweep pass instead of five).
     missed =
-      if now <= info.lease_expires_at,
+      if now < info.lease_expires_at,
         do: 0,
         else: div(now - info.lease_expires_at, info.lease.ttl_ms) + 1
 
@@ -520,7 +740,7 @@ defmodule Burble.Groove do
 
       true ->
         Logger.warning(
-          "[Groove] Peer #{info.peer_id} (session=#{session_id}) missed hard-lease window " <>
+          "[Groove] Peer #{info.peer_id} (id=#{connection_id(session_id)}) missed hard-lease window " <>
             "#{missed}/#{@lease_max_missed_windows}"
         )
 
@@ -542,7 +762,7 @@ defmodule Burble.Groove do
       # Timed out — transition to DISCONNECTED and remove.
       elapsed > @heartbeat_timeout_ms and info.state == :degraded ->
         Logger.warning(
-          "[Groove] Peer #{info.peer_id} (session=#{session_id}) timed out, removing"
+          "[Groove] Peer #{info.peer_id} (id=#{connection_id(session_id)}) timed out, removing"
         )
 
         %{state | connections: Map.delete(state.connections, session_id)}
@@ -550,7 +770,7 @@ defmodule Burble.Groove do
       # Missed heartbeats — transition to DEGRADED.
       elapsed > @heartbeat_timeout_ms ->
         Logger.warning(
-          "[Groove] Peer #{info.peer_id} (session=#{session_id}) degraded (no heartbeat for #{elapsed}ms)"
+          "[Groove] Peer #{info.peer_id} (id=#{connection_id(session_id)}) degraded (no heartbeat for #{elapsed}ms)"
         )
 
         %{state | connections: Map.put(state.connections, session_id, %{info | state: :degraded})}
@@ -569,11 +789,11 @@ defmodule Burble.Groove do
     :telemetry.execute(
       [:burble, :groove, :lease_expired],
       %{count: 1},
-      %{peer_id: info.peer_id, session_id: session_id, mode: info.lease.mode}
+      %{peer_id: info.peer_id, connection_id: connection_id(session_id), mode: info.lease.mode}
     )
 
     Logger.warning(
-      "[Groove] Lease expired: #{info.peer_id} (session=#{session_id}, mode=#{info.lease.mode}) — " <>
+      "[Groove] Lease expired: #{info.peer_id} (id=#{connection_id(session_id)}, mode=#{info.lease.mode}) — " <>
         "connection and queued messages wiped"
     )
 
@@ -592,6 +812,22 @@ defmodule Burble.Groove do
   end
 
   # --- Helpers ---
+
+  # Authorizing calls check the deadline themselves; a delayed sweep is not
+  # permission to revive an already-consumed lease. Time is monotonic.
+  defp expire_if_elapsed(state, session_id) do
+    case Map.get(state.connections, session_id) do
+      %{lease: %{mode: mode, ttl_ms: ttl}, lease_expires_at: expiry} = info ->
+        deadline = if mode == "hard", do: expiry + 2 * ttl, else: expiry
+
+        if System.monotonic_time(:millisecond) >= deadline,
+          do: expire_lease(state, session_id, info),
+          else: state
+
+      _ ->
+        state
+    end
+  end
 
   # Parse the optional "lease" field from a connect body (SPEC v0.3).
   # Absent lease -> {:ok, nil}: legacy behaviour unchanged.
@@ -630,10 +866,16 @@ defmodule Burble.Groove do
   end
 
   defp message_from_peer?(message, session_id, peer_id) when is_map(message) do
-    Enum.any?(
-      [:session_id, "session_id", :handle, "handle", :from, "from"],
-      fn key -> Map.get(message, key) in [session_id, peer_id] end
-    )
+    handles =
+      Enum.flat_map([:session_id, "session_id", :handle, "handle"], fn key ->
+        if Map.has_key?(message, key), do: [Map.get(message, key)], else: []
+      end)
+
+    if handles == [] do
+      Enum.any?([:from, "from"], &(Map.get(message, &1) in [session_id, peer_id]))
+    else
+      session_id in handles
+    end
   end
 
   defp message_from_peer?(_message, _session_id, _peer_id), do: false

@@ -2,7 +2,7 @@
 # Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
 #
 # burble.launcher.a2ml — per-app launcher config for Burble voice/media.
-# Compliant with launcher-standard.a2ml v0.3.0
+# Compliant with launcher-standard_praxis.deed v0.4.0
 
 [project]
 name         = "burble"
@@ -22,7 +22,7 @@ kind    = "server-url"
 port    = 6473
 url     = "http://localhost:6473"
 command = ["env", "MIX_ENV=dev", "mix", "phx.server"]
-# Per launcher-standard.a2ml [runtime] section:
+# Per launcher-standard_praxis.deed (runtime ...) clause:
 # PID files MUST use XDG_RUNTIME_DIR or TMPDIR, NEVER /tmp directly
 # Log files MUST use XDG_STATE_HOME, NEVER /tmp directly
 pid-file = "${XDG_RUNTIME_DIR:-${TMPDIR:-/tmp}}/burble-server.pid"
@@ -30,7 +30,7 @@ log-file = "${XDG_STATE_HOME:-$HOME/.local/state}/burble/server.log"
 wait-for-url-timeout-seconds = 20
 
 [version-output]
-# Per launcher-standard.a2ml [version-output] section
+# Per launcher-standard_praxis.deed (version-output ...) clause
 first-line-format = "burble {version} ({build-sha-short}) [{platform}]"
 example = "burble 0.1.0 (abc1234) [linux-x86_64]"
 exit-code = 0

@@ -1,0 +1,39 @@
+name: 'Metrics Extraction Gate'
+description: 'Extracts error counts from Pons/Panic Attack and generates a Proof Status Matrix.'
+runs:
+  using: 'composite'
+  steps:
+    - name: Run Metrics Extraction
+      shell: bash
+      run: |
+        echo "Extracting Metrics..."
+        
+        # 1. Pons/Panic Attack Error Count (Simulated for CI)
+        pons_errors=0
+        panic_errors=0
+        
+        if [ -f "pons.log" ]; then pons_errors=$(grep -c "ERROR" pons.log || echo 0); fi
+        if [ -f "panic.log" ]; then panic_errors=$(grep -c "ERROR" panic.log || echo 0); fi
+        
+        echo "Pons Error Count: $pons_errors"
+        echo "Panic Attack Error Count: $panic_errors"
+        
+        # 2. Proof Status Matrix
+        echo "--- Proof Status Matrix ---"
+        if [ -d "src" ] || ls *.ipkg 1>/dev/null 2>] || ls *.ipkg 1>/dev/null 2>&11; then
+           proven=$(git grep -i -c "total" || echo 0)
+           believeme=$(git grep -i -c "believe_me" || echo 0)
+           sorry=$(git grep -i -c "sorry" || echo 0)
+           admit=$(git grep -i -c "admit" || echo 0)
+           
+           if [ "$believeme" -gt 0 ] || [ "$sorry" -gt 0 ] || [ "$admit" -gt 0 ]; then
+             echo "Status: NOT FULLY PROVEN"
+             echo "Escape Hatches Used: believe_me ($believeme), sorry ($sorry), admit ($admit)"
+           else
+             echo "Status: PROVEN (No escape hatches detected)"
+           fi
+        else
+           echo "Status: N/A (No formal proofs detected)"
+        fi
+        
+        echo "Metrics extraction complete."

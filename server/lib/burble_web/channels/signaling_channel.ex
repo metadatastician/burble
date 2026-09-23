@@ -88,12 +88,13 @@ defmodule BurbleWeb.SignalingChannel do
       # Subscribe this process to the peer-specific PubSub topic so that
       # peer-directed messages (SDP offers, ICE candidates, etc.) are delivered
       # to this channel process and forwarded to the client via handle_info/2.
-      Phoenix.PubSub.subscribe(Burble.PubSub, peer_topic(user_id))
+      Phoenix.PubSub.subscribe(Burble.PubSub, peer_topic(room_id, user_id))
 
       socket =
         socket
         |> assign(:user_id, user_id)
         |> assign(:room_id, room_id)
+        |> assign(:bebop_delivery, params["wire_format"] == "bebop")
 
       Logger.debug("[SignalingChannel] #{user_id} joined signaling:#{room_id}")
 
@@ -123,7 +124,7 @@ defmodule BurbleWeb.SignalingChannel do
 
   @impl true
   def handle_in("ice:candidate", %{"to" => peer_id, "candidate" => candidate}, socket) do
-    route_to_peer(peer_id, %{
+    route_to_peer(socket, peer_id, %{
       type: "ice:candidate",
       from: socket.assigns.user_id,
       candidate: candidate
@@ -175,7 +176,8 @@ defmodule BurbleWeb.SignalingChannel do
   """
   @impl true
   def handle_info({:signaling_msg, payload}, socket) do
-    push(socket, "msg", decode_sdp_body(payload))
+    delivered = if socket.assigns[:bebop_delivery], do: payload, else: decode_sdp_body(payload)
+    push(socket, "msg", delivered)
     {:noreply, socket}
   end
 
@@ -222,9 +224,25 @@ defmodule BurbleWeb.SignalingChannel do
   #
   # The recipient peer's channel process is subscribed to its own topic and
   # will receive this as `{:signaling_msg, payload}` in `handle_info/2`.
-  @spec route_to_peer(String.t(), map()) :: :ok | {:error, term()}
-  defp route_to_peer(peer_id, payload) do
-    Phoenix.PubSub.broadcast(Burble.PubSub, peer_topic(peer_id), {:signaling_msg, payload})
+  @spec route_to_peer(Phoenix.Socket.t(), String.t(), map()) :: :ok | {:error, term()}
+  defp route_to_peer(socket, peer_id, payload) do
+    room_id = socket.assigns.room_id
+
+    Phoenix.PubSub.broadcast(
+      Burble.PubSub,
+      peer_topic(room_id, peer_id),
+      {:signaling_msg, payload}
+    )
+
+    Burble.GrooveVoice.from_channel(
+      room_id,
+      payload.from,
+      peer_id,
+      payload,
+      socket.assigns[:voice_auth]
+    )
+
+    :ok
   end
 
   # ---------------------------------------------------------------------------
@@ -252,7 +270,7 @@ defmodule BurbleWeb.SignalingChannel do
       %{type: type, from: socket.assigns.user_id}
       |> Map.merge(encode_sdp_body(sdp, media_type, type))
 
-    route_to_peer(peer_id, payload)
+    route_to_peer(socket, peer_id, payload)
     {:noreply, socket}
   end
 
@@ -357,6 +375,5 @@ defmodule BurbleWeb.SignalingChannel do
   end
 
   # Build the PubSub topic for a specific peer.
-  @spec peer_topic(String.t()) :: String.t()
-  defp peer_topic(peer_id), do: "signaling_peer:#{peer_id}"
+  defp peer_topic(room_id, peer_id), do: Burble.GrooveVoice.peer_topic(room_id, peer_id)
 end
