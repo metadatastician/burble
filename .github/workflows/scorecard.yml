@@ -19,6 +19,14 @@ jobs:
   scorecard:
     uses: hyperpolymath/standards/.github/workflows/scorecard-reusable.yml@0f2d9b5447d3d6e56b41fe69d54e834849d7c932
     permissions:
+      # A job-level `permissions:` block REPLACES the workflow-level grant
+      # rather than merging with it, and a called reusable workflow may not
+      # request more permission than its calling job holds. The reusable's
+      # own job declares `actions: read` (Scorecard's Packaging check calls
+      # Actions.ListWorkflowRunsByFileName), so omitting it here is an
+      # escalation and GitHub rejects the run at startup with zero jobs --
+      # which is why this workflow has been startup_failure, not merely red.
+      actions: read
       contents: read
       security-events: write
       id-token: write
