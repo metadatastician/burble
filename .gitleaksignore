@@ -51,3 +51,10 @@ c67c76e08a96a9552b81ae5b8a14d5edd29f4884:.machine_readable/test-vectors/ble-spa-
 c67c76e08a96a9552b81ae5b8a14d5edd29f4884:.machine_readable/test-vectors/ble-spa-v1.json:generic-api-key:187
 c67c76e08a96a9552b81ae5b8a14d5edd29f4884:.machine_readable/test-vectors/ble-spa-v1.json:generic-api-key:190
 c67c76e08a96a9552b81ae5b8a14d5edd29f4884:.machine_readable/test-vectors/ble-spa-v1.json:generic-api-key:191
+
+# Historical parser fixture in input_sanitizer_test.exs at e8e6020 line 94:
+# the literal "abc123-_DEF=" exercises the base64url alphabet check and was never
+# issued by any authenticator. The tree copy was already replaced in 4a4c7b4;
+# this fingerprint suppresses only that one historical blob/line for the
+# full-history pass. It covers no other commit, line, file or rule.
+e8e6020d81175d2a7640a9cfb3e88a6d2c40821d:server/test/burble_web/plugs/input_sanitizer_test.exs:generic-api-key:94

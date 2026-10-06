@@ -15,13 +15,13 @@ workflows:
         - 'actions/configure-pages@v6.0.0'
         - 'actions/deploy-pages@v5.0.1'
         - 'actions/upload-pages-artifact@v5.0.0'
-        - 'haskell-actions/setup@v2.12.0'
+        - 'haskell-actions/setup@v2.12.1'
     '.github/workflows/codeql.yml':
-        - 'actions/checkout@v7.0.1'
-        - 'github/codeql-action@b96794f015dfd88f77b49b1c93e0fa7110f94c63'
+        - 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1'
+        - 'github/codeql-action@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2'
     '.github/workflows/dependency-audit.yml':
         - 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1'
-        - 'dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de'
+        - 'dtolnay/rust-toolchain@7e38f4b43b4db5c8dd498af069a4f6196df1d067'
     '.github/workflows/dogfood-gate.yml':
         - 'actions/checkout@v7.0.1'
         - 'hyperpolymath/deed-ecosystem@f7a40a4d5cc82b2e73f861119baa6818d77a448d'
@@ -31,7 +31,7 @@ workflows:
         - 'actions/checkout@v7.0.1'
         - 'erlef/setup-beam@v1.24.1'
         - 'mlugg/setup-zig@v2.2.1'
-        - 'taiki-e/install-action@4076c08d76dba979c11a7285295b0716c1d67908'
+        - 'taiki-e/install-action@83ac0ad63c0167e6f06796fab0fce28db1bf3db0'
     '.github/workflows/governance.yml':
         - 'hyperpolymath/standards@0f2d9b5447d3d6e56b41fe69d54e834849d7c932'
     '.github/workflows/hypatia-scan.yml':
@@ -51,13 +51,14 @@ workflows:
         - 'oven-sh/setup-bun@v2.2.0'
     '.github/workflows/label-triage.yml': []
     '.github/workflows/labels.yml': []
+    '.github/workflows/lock-sync-gate.yml': []
     '.github/workflows/mirror.yml':
         - 'hyperpolymath/standards@0f2d9b5447d3d6e56b41fe69d54e834849d7c932'
     '.github/workflows/no-js-scan.yml':
         - 'actions/checkout@v7.0.1'
     '.github/workflows/oikosbot.yml':
         - 'actions/checkout@v7.0.1'
-        - 'github/codeql-action@b96794f015dfd88f77b49b1c93e0fa7110f94c63'
+        - 'github/codeql-action@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2'
         - 'hyperpolymath/oikosbot@3fdad0c2b027f328e784ecf08caf62bf80a784c1'
     '.github/workflows/pages.yml':
         - 'actions/checkout@v7.0.1'
@@ -218,6 +219,11 @@ dependencies:
         commit: 'sha1-67ef31d5b988238dd797d409d6f9574278e20537'
         owner_id: 1940490
         repo_id: 260749683
+    'dtolnay/rust-toolchain@7e38f4b43b4db5c8dd498af069a4f6196df1d067':
+        ref: '7e38f4b43b4db5c8dd498af069a4f6196df1d067'
+        commit: 'sha1-7e38f4b43b4db5c8dd498af069a4f6196df1d067'
+        owner_id: 1940490
+        repo_id: 260749683
     'editorconfig-checker/action-editorconfig-checker@51f63319f592f97930c73d9c46184d20bd206393':
         ref: 'v3.0.0'
         commit: 'sha1-51f63319f592f97930c73d9c46184d20bd206393'
@@ -238,6 +244,11 @@ dependencies:
         commit: 'sha1-54075bcc5e249e4758d363f27d099f55d843f124'
         owner_id: 47606891
         repo_id: 331103973
+    'github/codeql-action@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2':
+        ref: '2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2'
+        commit: 'sha1-2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2'
+        owner_id: 9919
+        repo_id: 259445878
     'github/codeql-action@b96794f015dfd88f77b49b1c93e0fa7110f94c63':
         ref: 'v4.38.0'
         commit: 'sha1-b96794f015dfd88f77b49b1c93e0fa7110f94c63'
@@ -248,9 +259,9 @@ dependencies:
         commit: 'sha1-e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e'
         owner_id: 90395851
         repo_id: 242854909
-    'haskell-actions/setup@v2.12.0':
-        ref: 'v2.12.0'
-        commit: 'sha1-6037f33647c3f17758a2356c80fc4a53d7e0685d'
+    'haskell-actions/setup@v2.12.1':
+        ref: 'v2.12.1'
+        commit: 'sha1-0f8e8c99d88aeb3fbfd523f1ef2c6f762d10d64d'
         owner_id: 75048950
         repo_id: 623796603
     'hyperpolymath/deed-ecosystem@f7a40a4d5cc82b2e73f861119baa6818d77a448d':
@@ -328,9 +339,9 @@ dependencies:
         commit: 'sha1-efb35369e0ad2afab669f228072c1b0d510eae64'
         owner_id: 2242
         repo_id: 204253808
-    'taiki-e/install-action@4076c08d76dba979c11a7285295b0716c1d67908':
-        ref: '4076c08d76dba979c11a7285295b0716c1d67908'
-        commit: 'sha1-4076c08d76dba979c11a7285295b0716c1d67908'
+    'taiki-e/install-action@83ac0ad63c0167e6f06796fab0fce28db1bf3db0':
+        ref: '83ac0ad63c0167e6f06796fab0fce28db1bf3db0'
+        commit: 'sha1-83ac0ad63c0167e6f06796fab0fce28db1bf3db0'
         owner_id: 43724913
         repo_id: 442947557
     'trufflesecurity/trufflehog@d411fff7b8879a62509f3fa98c07f247ac089a51':
