@@ -84,7 +84,7 @@ workflows:
     '.github/workflows/rhodibot.yml':
         - 'actions/checkout@v7.0.1'
     '.github/workflows/scorecard.yml':
-        - 'hyperpolymath/standards@0f2d9b5447d3d6e56b41fe69d54e834849d7c932'
+        - 'hyperpolymath/standards@9f68971b9fa254a80559432d9fcb7652b72e941d'
     '.github/workflows/secret-scanner.yml':
         - 'hyperpolymath/standards@0f2d9b5447d3d6e56b41fe69d54e834849d7c932'
     '.github/workflows/spark-theatre-gate.yml':
@@ -299,6 +299,16 @@ dependencies:
             - 'github/codeql-action@b96794f015dfd88f77b49b1c93e0fa7110f94c63'
             - 'ossf/scorecard-action@2d1146689b8cda280b9bc96326124645441f03bc'
             - 'webfactory/ssh-agent@e83874834305fe9a4a2997156cb26c5de65a8555'
+    'hyperpolymath/standards@9f68971b9fa254a80559432d9fcb7652b72e941d':
+        ref: '9f68971b9fa254a80559432d9fcb7652b72e941d'
+        commit: 'sha1-9f68971b9fa254a80559432d9fcb7652b72e941d'
+        owner_id: 6759885
+        repo_id: 1116521501
+        uses:
+            - 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1'
+            - 'actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a'
+            - 'github/codeql-action@b96794f015dfd88f77b49b1c93e0fa7110f94c63'
+            - 'ossf/scorecard-action@2d1146689b8cda280b9bc96326124645441f03bc'
     'mlugg/setup-zig@v2.2.1':
         ref: 'v2.2.1'
         commit: 'sha1-d1434d08867e3ee9daa34448df10607b98908d29'
