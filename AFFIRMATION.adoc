@@ -1,0 +1,243 @@
+// SPDX-License-Identifier: CC-BY-SA-4.0
+= AFFIRMATION — Burble, as of 2026-10-07
+Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
+:status: DRAFT — agent-authored, NOT affirmed by the owner
+:toc: preamble
+:toc-title: Contents
+:icons: font
+:doctype: article
+
+[WARNING]
+====
+*DRAFT.* This file is a draft until the owner lands it with a signed commit
+(`git commit -S`) whose parent is the anchor SHA below. Until then, read every
+claim in it as unaffirmed.
+====
+
+== What this is, and how it works
+
+Burble is a self-hostable voice platform. Its server is Elixir/Phoenix under
+`server/`, its coprocessor kernels are Zig under `ffi/zig/`, an embeddable game
+session client is Rust under `client/rust/`, and the ABI design is in Idris2
+under `src/Burble/ABI/`. This file reports what those four toolchains said when
+run against one commit on 2026-10-07. It reports runs, not intentions.
+
+== The epistemic contract
+
+You may conclude that each command below, run at the anchor commit with the
+listed toolchain, produced the exit code and counts stated. You may not conclude
+anything about other commits, about CI, about production deployments, or about
+runtime conformance between the Idris2 model and the Zig/Elixir code. A green
+type-check of the ABI is design assurance, not a proof that the running system
+obeys it. No CI badge or CI run is cited as evidence here.
+
+== Verifiable anchor
+
+[cols="1,3", options="header"]
+|===
+| Field | Value
+
+| Repo
+| `metadatastician/burble`
+
+| Branch
+| `main` (measured at `origin/main`, checked out as local branch
+  `docs/affirmation-2026-10-07`)
+
+| Commit (HEAD)
+| `308c118a792f442ae43400024369716872f6e93e`
+
+| Permalink
+| https://github.com/metadatastician/burble/tree/308c118a792f442ae43400024369716872f6e93e
+
+| Verified (UTC)
+| 2026-10-07T10:46:47Z to 2026-10-07T11:03:49Z
+
+| Working-tree delta at verification
+| `clean`: `git status --porcelain` printed 0 lines before and after the runs.
+  Gitignored build outputs were present (`server/deps/`, `server/_build/`,
+  `client/rust/target/`, `ffi/zig/.zig-cache/`, `src/Burble/ABI/build/`); they
+  are products of the runs and do not affect the results.
+
+| Toolchain
+| Zig 0.16.0; Elixir 1.18.3 on Erlang/OTP 27; Idris 2 0.7.0; rustc 1.99.0 and
+  cargo 1.99.0; Bun 1.3.14; just 1.56.0
+|===
+
+[CAUTION]
+====
+If you are reading this at a later commit, the claims may have drifted. Re-run
+the reproduction steps and write a fresh affirmation; do not trust a stale one.
+====
+
+== Companion documents and repo metadata (cross-check)
+
+[cols="1,3", options="header"]
+|===
+| Document | Relationship to this file
+
+| `README.adoc`, `EXPLAINME.adoc`
+| Aspiration and mechanism. Read them for what Burble is meant to be.
+
+| `BURBLE-PROOF-STATUS.md`
+| Agrees with this file that all 10 ABI modules compile and that there are 0
+  `postulate`/`believe_me`/`assert_total`. It does not mention totality; see
+  the nuance below.
+
+| `TEST-NEEDS.md`
+| *Contradicts this file.* It says the full ExUnit suite is ~707 tests with
+  134-165 failures and that the CI test gate is disarmed. The live runs below
+  found 790 tests and 0 failures, and the `mix test` step in
+  `.github/workflows/elixir-ci.yml` is not marked `continue-on-error` (only the
+  Dialyzer step at line 154 is). The live run wins; `TEST-NEEDS.md` is stale.
+
+| `READINESS.adoc`
+| *Stale.* Line 39 says 652 tests / 0 failures. The live count is 790.
+
+| `.github/actions/affirmation-check/`
+| The repo's own affirmation gate. It looks only at the repository root, which
+  is why this file is at `AFFIRMATION.adoc` and not under `docs/`.
+|===
+
+== The honest state (one breath)
+
+The Elixir suite, the Zig kernel tests, the Rust client tests and the Idris2 ABI
+build are green at this commit, with the counts below. The aspect suite is red,
+the web client cannot build, and one Hex dependency carries a HIGH advisory.
+
+=== What is solid (and how we checked)
+
+[cols="3,1,3", options="header"]
+|===
+| Command (from the named directory) | Exit | Result
+
+| `mix test --no-start` (`server/`, seed 945101)
+| 0
+| 14 properties, 790 tests, 0 failures, 1 skipped (90.6 s)
+
+| `mix test --no-start --seed 4242` (`server/`)
+| 0
+| 14 properties, 790 tests, 0 failures, 1 skipped (105.0 s). Two seeds, same
+  result: no order-dependence was observed in these two runs.
+
+| `zig build test --summary all` (`ffi/zig/`)
+| 0
+| 3/3 build steps succeeded; 5/5 tests passed (Debug)
+
+| `zig build test -Doptimize=ReleaseSafe --summary all` (`ffi/zig/`)
+| 0
+| 3/3 build steps succeeded; 5/5 tests passed (ReleaseSafe, the `just
+  build-ffi` mode)
+
+| `cargo test --manifest-path client/rust/Cargo.toml` (root)
+| 0
+| 6 unit tests passed, 0 failed; 0 doc-tests
+
+| `idris2 --build burble-abi.ipkg` (`src/Burble/ABI/`)
+| 0
+| 10/10 modules built (the `just build-proofs` recipe)
+
+| `grep -cE 'believe_me\|assert_total\|postulate'` over
+  `src/Burble/ABI.idr` and `src/Burble/ABI/*.idr` (root)
+| -
+| 0 occurrences across the 10 module files. Positive control: piping the
+  single line `believe_me` through the same `grep -cE` printed 1.
+
+| `bash .github/actions/affirmation-check/test.sh` (root)
+| 0
+| "affirmation-check controls passed"
+|===
+
+=== The honest nuance you must not lose
+
+* *Compiles is not total.* Only `src/Burble/ABI.idr` carries `%default total`,
+  and `burble-abi.ipkg` passes no `--total` option. The other 9 modules
+  type-check without totality being enforced. "10/10 modules build" does not
+  mean "10/10 modules are total".
+* *Type-check is not conformance.* Nothing here checks that the Zig kernels or
+  the Elixir server implement what the Idris2 ABI states.
+* *Toolchain skew.* Local Zig was 0.16.0; `.github/workflows/elixir-ci.yml`
+  pins Zig 0.15.2. A pass on 0.16.0 is not evidence for 0.15.2, or the reverse.
+* *The 1 skipped ExUnit test* is still skipped; it was not exercised.
+* *Vacuous guards.* `just test-server` first runs
+  `scripts/ensure-msquic-version.sh` and `scripts/ensure-quicer-prereqs.sh`.
+  Both exited 0 only because they skipped: `quicer` is commented out in
+  `server/mix.exs` (line 211), so `server/deps/quicer` never exists. They
+  checked nothing.
+
+=== Known-incomplete but honestly fenced
+
+* `BURBLE-PROOF-STATUS.md` lists runtime-enforcement gaps (Avow is
+  data-type-only on the Elixir side; no LLM or Timing proofs; SNIF buffer ABI
+  conformance not established). This session did not re-examine them, and they
+  are not affirmed either way.
+
+=== Outstanding / weak / refuted (no spin)
+
+* *Aspect suite is red.* `bash tests/aspect/aspect_tests.sh` exited 1. Aspect 1
+  of 4 (licence headers) passed. Aspect 2 (no secrets in source) failed with 4
+  hits: `server/lib/burble/application.ex:188`, `READINESS.adoc:194`, and
+  `containers/compose.toml:57-58`. All 4 look like environment-variable names
+  or `${...}` interpolations, not secret values, so they are probably false
+  positives. Even so, the gate is red, and because the script runs under
+  `set -e`, aspects 3 and 4 never ran.
+* *Web client cannot build.* `just build-client` runs `bun run build` in
+  `client/web/`. It exited 1 with `Script not found "build"`. The directory has
+  no `package.json`. It does have a `deno.json` and a `rescript.json`, both
+  banned toolchains under the estate's Bun-only policy.
+* *Vulnerable dependency.* `mix deps.get` reported `mint 1.10.0 VULNERABLE!`
+  with 4 advisories: CVE-2026-91043 (HIGH), and CVE-2026-92103,
+  CVE-2026-82672 and CVE-2026-94194 (MEDIUM).
+* *Stale status documents.* `TEST-NEEDS.md` (~707 tests, 134-165 failures, CI
+  gate disarmed) and `READINESS.adoc` (652 tests) are refuted by the runs
+  above, as set out in the cross-check table.
+* *Not run.* `just e2e` (it only re-runs `just test`), `just bench`,
+  `just lint`/`dialyzer` and container builds were not run. Nothing is claimed
+  for them.
+
+== Reproduce it yourself
+
+[source,bash]
+----
+git clone https://github.com/metadatastician/burble && cd burble
+git checkout 308c118a792f442ae43400024369716872f6e93e
+(cd server && mix deps.get && mix test --no-start)
+# expect: 14 properties, 790 tests, 0 failures, 1 skipped
+(cd ffi/zig && zig build test --summary all)
+# expect: 5/5 tests passed
+(cd ffi/zig && zig build test -Doptimize=ReleaseSafe --summary all)
+# expect: 5/5 tests passed
+cargo test --manifest-path client/rust/Cargo.toml
+# expect: test result: ok. 6 passed; 0 failed
+(cd src/Burble/ABI && idris2 --build burble-abi.ipkg)
+# expect: 10/10 modules built, exit 0
+bash tests/aspect/aspect_tests.sh
+# expect: exit 1, "Potential secrets found:" with 4 hits
+(cd client/web && bun run build)
+# expect: exit 1, Script not found "build"
+----
+
+== One-line characterisation (quote this)
+
+At `308c118a`, Burble's Elixir server (790 tests, 14 properties, 0 failures),
+Zig kernels (5/5), Rust client (6/6) and 10-module Idris2 ABI build are green
+locally; its aspect suite is red, its web client has no buildable manifest, and
+`mint 1.10.0` carries a HIGH advisory.
+
+== Joint attestation
+
+Engineering party (AI)::
+  `claude-opus-5-5` (Anthropic), running in Claude Code. The checks were run
+  between 2026-10-07T10:46:47Z and 2026-10-07T11:03:49Z at the anchor commit.
+  The wording of this file is a faithful report of those runs and of nothing
+  else.
+
+Owner / maintainer::
+  Jonathan D.A. Jewell. The owner affirms by landing this file with a signed
+  commit whose parent is the anchor SHA:
++
+[source,bash]
+----
+git commit -S -s -m "docs: affirm state at 308c118a"
+git log --show-signature -1
+----
