@@ -1,23 +1,14 @@
-name: 'Semantic Audit Gate'
-description: 'AI-powered semantic check of descriptiles, contractiles, bot_directives, anchors, and CLAUDE.md'
-runs:
-  using: 'composite'
-  steps:
-    - name: Run Semantic Audit via cicd-squabbler
-      shell: bash
-      run: |
-        echo "Initiating AI-Powered Semantic Audit..."
-        # In the future, this calls cicd-squabbler or hypatia-scan to evaluate content semantics
-        
-        echo "Checking descriptiles for contradictions and Oxford English Dictionary spelling/grammar..."
-        echo "(Exceptions allowed for exact legal strings e.g. LICENSE)."
-        
-        echo "Checking contractiles for completeness..."
-        echo "Checking bot_directives for compliance..."
-        echo "Parsing anchor files to ensure closing gap..."
-        echo "Validating CLAUDE.md..."
-        
-        # Placeholder for actual invocation
-        # cicd-squabbler audit --semantic --repo . --grammar-check=OED
-        
-        echo "Semantic Audit Passed."
+{
+  name: "Semantic Audit Gate (not implemented: fails closed)",
+  description: "Placeholder for a semantic audit of descriptiles, contractiles, bot_directives, anchors and CLAUDE.md. No audit is implemented, so this action fails rather than reporting a pass it has not earned.",
+  runs: {
+    using: "composite",
+    steps: [
+      {
+        name: "Refuse: semantic audit is not implemented",
+        shell: "bash",
+        run: "echo \"::error title=semantic-audit-check::not implemented. No semantic audit exists yet (cicd-squabbler has no audit subcommand and no pinned artifact), so this gate fails closed instead of printing a pass.\"\nexit 1\n",
+      },
+    ],
+  },
+}
