@@ -41,17 +41,16 @@ obeys it. No CI badge or CI run is cited as evidence here.
 | `metadatastician/burble`
 
 | Branch
-| `main` (measured at `origin/main`, checked out as local branch
-  `docs/affirmation-2026-10-07`)
+| `main` (measured at `origin/main`, detached HEAD)
 
 | Commit (HEAD)
-| `308c118a792f442ae43400024369716872f6e93e`
+| `6d9c7acca6ec8f959d25767777947fc59f950213`
 
 | Permalink
-| https://github.com/metadatastician/burble/tree/308c118a792f442ae43400024369716872f6e93e
+| https://github.com/metadatastician/burble/tree/6d9c7acca6ec8f959d25767777947fc59f950213
 
 | Verified (UTC)
-| 2026-10-07T10:46:47Z to 2026-10-07T11:03:49Z
+| 2026-10-07T17:05:08Z to 2026-10-07T17:08:50Z
 
 | Working-tree delta at verification
 | `clean`: `git status --porcelain` printed 0 lines before and after the runs.
@@ -113,11 +112,11 @@ the web client cannot build, and one Hex dependency carries a HIGH advisory.
 
 | `mix test --no-start` (`server/`, seed 945101)
 | 0
-| 14 properties, 790 tests, 0 failures, 1 skipped (90.6 s)
+| 14 properties, 790 tests, 0 failures, 1 skipped (71.3 s)
 
 | `mix test --no-start --seed 4242` (`server/`)
 | 0
-| 14 properties, 790 tests, 0 failures, 1 skipped (105.0 s). Two seeds, same
+| 14 properties, 790 tests, 0 failures, 1 skipped (70.4 s). Two seeds, same
   result: no order-dependence was observed in these two runs.
 
 | `zig build test --summary all` (`ffi/zig/`)
@@ -135,7 +134,7 @@ the web client cannot build, and one Hex dependency carries a HIGH advisory.
 
 | `idris2 --build burble-abi.ipkg` (`src/Burble/ABI/`)
 | 0
-| 10/10 modules built (the `just build-proofs` recipe)
+| 10/10 modules built from an empty `build/` (the `just build-proofs` recipe)
 
 | `grep -cE 'believe_me\|assert_total\|postulate'` over
   `src/Burble/ABI.idr` and `src/Burble/ABI/*.idr` (root)
@@ -200,7 +199,7 @@ the web client cannot build, and one Hex dependency carries a HIGH advisory.
 [source,bash]
 ----
 git clone https://github.com/metadatastician/burble && cd burble
-git checkout 308c118a792f442ae43400024369716872f6e93e
+git checkout 6d9c7acca6ec8f959d25767777947fc59f950213
 (cd server && mix deps.get && mix test --no-start)
 # expect: 14 properties, 790 tests, 0 failures, 1 skipped
 (cd ffi/zig && zig build test --summary all)
@@ -219,7 +218,7 @@ bash tests/aspect/aspect_tests.sh
 
 == One-line characterisation (quote this)
 
-At `308c118a`, Burble's Elixir server (790 tests, 14 properties, 0 failures),
+At `6d9c7acc`, Burble's Elixir server (790 tests, 14 properties, 0 failures),
 Zig kernels (5/5), Rust client (6/6) and 10-module Idris2 ABI build are green
 locally; its aspect suite is red, its web client has no buildable manifest, and
 `mint 1.10.0` carries a HIGH advisory.
@@ -228,7 +227,9 @@ locally; its aspect suite is red, its web client has no buildable manifest, and
 
 Engineering party (AI)::
   `claude-opus-5-5` (Anthropic), running in Claude Code. The checks were run
-  between 2026-10-07T10:46:47Z and 2026-10-07T11:03:49Z at the anchor commit.
+  between 2026-10-07T17:05:08Z and 2026-10-07T17:08:50Z (tests and builds)
+  and between 2026-10-08T06:05:54Z and 2026-10-08T06:07:00Z (aspect suite,
+  web client, `mix deps.get` advisories), all at the anchor commit.
   The wording of this file is a faithful report of those runs and of nothing
   else.
 
@@ -238,6 +239,11 @@ Owner / maintainer::
 +
 [source,bash]
 ----
-git commit -S -s -m "docs: affirm state at 308c118a"
+git commit -S -s -m "docs: affirm state at 6d9c7acc"
 git log --show-signature -1
 ----
+
+This repository requires linear history, so the landing PR is squash-merged.
+Squash only while `main` is still at `6d9c7acc`, and never press "Update
+branch" on the PR: either one moves the squash commit off the anchor and
+turns this file back into a draft.
