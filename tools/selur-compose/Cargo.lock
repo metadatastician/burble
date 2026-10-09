@@ -486,7 +486,7 @@ checksum = "3d3067d79b975e8844ca9eb072e16b31c3c1c36928edf9c6789548c524d0d954"
 [[package]]
 name = "ijson-jcs"
 version = "0.1.0"
-source = "git+https://github.com/hyperpolymath/ijson-jcs?rev=38e81e24b036e5804f074af309d385ffc3f6691c#38e81e24b036e5804f074af309d385ffc3f6691c"
+source = "git+https://github.com/hyperpolymath/ijson-jcs?rev=f135af2e76ed5d310530055db1ede15057ba1e41#f135af2e76ed5d310530055db1ede15057ba1e41"
 dependencies = [
  "serde",
  "serde_json",
