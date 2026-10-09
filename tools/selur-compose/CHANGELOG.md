@@ -7,6 +7,26 @@ Versioning: [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [Unreleased]
+
+### Changed
+
+- **Config hash over RFC 8785 bytes** (`selur-compose-plan`): the
+  `io.podman.compose.config-hash` label is now SHA-256 over the JCS canonical
+  bytes from `ijson-jcs`, the estate's JSON canonicaliser, instead of a private
+  sorted-key writer. Every service in the repository's compose files hashes to
+  the same value as before. A service's hash changes only if one of its
+  `environment`, `build.args` or `build.labels` maps holds a key with a
+  character above U+FFFF and another with a character in U+E000–U+FFFF at
+  the position where they first differ.
+
+- **A service holding a Unicode noncharacter is refused** (`selur-compose-plan`):
+  a string containing U+FDD0–U+FDEF, or a code point ending in FFFE or FFFF, is
+  not I-JSON (RFC 7493), so `plan` returns `PlanError::ConfigHash` naming the
+  service. Such a service used to be hashed and planned.
+
+---
+
 ## [0.1.0] — 2026-05-12
 
 ### Added

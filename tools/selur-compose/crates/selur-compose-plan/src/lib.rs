@@ -287,6 +287,16 @@ pub enum PlanError {
     /// An interpolation error occurred during variable expansion.
     #[error("interpolation error: {0}")]
     Interp(#[from] InterpError),
+
+    /// A service could not be hashed for its `config-hash` label, because
+    /// its JSON form is not I-JSON (RFC 7493): one of its strings holds a
+    /// Unicode noncharacter.
+    #[error("service `{service}` cannot be hashed: {source}")]
+    ConfigHash {
+        service: String,
+        #[source]
+        source: ijson_jcs::CanonicalizationError,
+    },
 }
 
 // ---------------------------------------------------------------------------
@@ -301,6 +311,8 @@ pub enum PlanError {
 /// * A `depends_on` cycle is detected.
 /// * A service references a non-existent dependency, network, or volume.
 /// * A requested profile or service name is unknown.
+/// * A service cannot be hashed, because one of its strings holds a Unicode
+///   noncharacter (see [`hash::service_hash`]).
 ///
 /// # Example
 ///
@@ -429,7 +441,10 @@ pub fn plan(compose: &Compose, opts: &PlanOptions) -> Result<Plan, PlanError> {
             let svc = &active_services[svc_name];
 
             // Config hash
-            let config_hash = hash::service_hash(svc);
+            let config_hash = hash::service_hash(svc).map_err(|source| PlanError::ConfigHash {
+                service: svc_name.to_string(),
+                source,
+            })?;
 
             // Determine image: built tag or explicit image.
             let image = if svc.build.is_some() {

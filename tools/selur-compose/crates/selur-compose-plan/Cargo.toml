@@ -16,6 +16,7 @@ serde_json           = { workspace = true }
 thiserror            = { workspace = true }
 sha2                 = { workspace = true }
 petgraph             = { workspace = true }
+ijson-jcs            = { git = "https://github.com/hyperpolymath/ijson-jcs", rev = "f135af2e76ed5d310530055db1ede15057ba1e41" }
 
 [dev-dependencies]
 insta = { workspace = true }
