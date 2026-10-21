@@ -83,8 +83,15 @@ jobs:
         working-directory: client/lib
         run: |
           bun run res:build
-          if ! git diff --exit-code --stat -- src; then
-            echo "::error title=Stale client/lib artifacts::src/**/*.res.mjs does not match src/**/*.res. Run 'bun run res:build' in client/lib and commit the result."
+          # `git diff` cannot see a NEW file: a generated *.res.mjs that has
+          # never been committed appears in neither the worktree diff nor the
+          # index. That is not hypothetical — BurbleLOL.res.mjs sat untracked
+          # for weeks while this step reported clean, and the published package
+          # was missing it. `git status` sees added, modified and deleted alike.
+          drift="$(git status --porcelain --untracked-files=all -- src)"
+          if [ -n "$drift" ]; then
+            printf '%s\n' "$drift"
+            echo "::error title=Stale client/lib artifacts::src/**/*.res.mjs does not match src/**/*.res. Run 'bun run res:build' in client/lib and commit the regenerated output."
             exit 1
           fi
       - name: Run the web-client suite

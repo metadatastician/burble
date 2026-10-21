@@ -29,17 +29,21 @@ Severity is about **consequence if left alone**, not effort.
 
 ## Summary
 
-| Domain | Items | HIGH |
+Counted from the entries below on 2026-10-21 — the numbers are a claim like any
+other, so they are derived rather than carried forward. `HIGH` is split as
+`open / resolved`; the two add up to the HIGH-labelled items in that section.
+
+| Domain | Items | HIGH (open / resolved) |
 |---|---|---|
-| Build | 1 | 0 (resolved) |
-| Supply chain | 4 | 3 |
-| CI/CD | 5 | 2 |
-| Licence | 4 | 3 |
-| Documentation | 6 | 3 |
-| Code | 6 | 4 |
-| Proof | 4 | 2 |
-| Test | 3 | 1 |
-| **Total** | **33** | **17 open + 6 resolved** |
+| Build | 1 | 0 / 1 |
+| Supply chain | 4 | 2 / 1 |
+| CI/CD | 5 | 3 / 1 |
+| Licence | 4 | 2 / 2 |
+| Documentation | 6 | 2 / 1 |
+| Code | 9 | 5 / 0 |
+| Proof | 4 | 2 / 0 |
+| Test | 3 | 1 / 0 |
+| **Total** | **36** | **17 / 6** |
 
 ---
 
