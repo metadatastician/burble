@@ -685,6 +685,8 @@ toolchain was built from source — matching `.github/workflows/elixir-ci.yml`
 | Module compiles | `elixirc lib/burble/media/e2ee.ex -o /tmp/ebin` | **compiles**; one expected warning (`Phoenix.PubSub` not installed — a dependency, not a defect) |
 | Unit suite runs | `elixir -pa /tmp/ebin -e 'ExUnit.start(); {:ok, _} = Burble.Media.E2EE.start_link()' -r test/burble/media/e2ee_test.exs` | **24 tests, 0 failures** |
 | Crypto kernel | same, with `backend.ex` + `elixir_backend.ex` compiled | **20 tests, 1 failure** — the failure is `Jason` missing (dependency), not code |
+| `:e2ee_key` → `:pipeline_key` rename | `pipeline_security_test.exs` with the pipeline + backends compiled | **1 test, 0 failures** |
+| Every other touched module | `elixirc` on `media/{privacy,engine}.ex`, `security/key_rotation.ex`, `application.ex`, `coprocessor/{backend,elixir_backend,smart_backend,zig_backend,pipeline}.ex` | **9/9 compile**, no errors or unused-variable warnings |
 | Formatting | `mix format --check-formatted` | 99 files unformatted, **all pre-existing**; every file touched in this round passes |
 | Cross-language vectors | `node scripts/verify-e2ee-vectors.mjs` | **6/6 agree** with WebCrypto |
 
