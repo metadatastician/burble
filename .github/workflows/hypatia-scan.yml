@@ -2,11 +2,22 @@
 # This workflow is managed by gh actions-lock.
 name: Hypatia Security Scan
 
+# The scan itself is the pinned reusable. Everything in this file around it —
+# the wider trigger, the extra `pull-requests: read`, and the two jobs after it
+# — exists so the lane's verdict grid reaches the pull request. The reusable
+# renders the grid (findings family of docs/VERDICT-GRID-SPEC.adoc: one row per
+# reporter, worst finding decides the colour) and uploads it as the
+# `verdict-grid` artifact, but it cannot post the comment: a reusable may not
+# be granted more than its caller holds, so the posting belongs here.
+
 on:
   push:
     branches: [main, master, develop]
   pull_request:
-    branches: [main, master]
+    # Every pull request, not only those into main: a findings lane that is
+    # silent on a long-lived branch is a lane nobody reads. `pull_request` and
+    # never `pull_request_target`, so a fork gets no privileged token.
+    branches: ['**']
   schedule:
     - cron: '0 0 * * 0'
   workflow_dispatch:
@@ -22,5 +33,100 @@ jobs:
       contents: read
       # Required by upload-sarif in the pinned reusable workflow.
       security-events: write
+      # The lane reads the grid comment it posted on the previous revision, to
+      # fill the "since previous revision" column. Best effort: without it the
+      # column says "no comparable baseline".
+      pull-requests: read
     uses: hyperpolymath/standards/.github/workflows/hypatia-scan-reusable.yml@0d47b89259128962bc0609f223dbff559724bfb1
     secrets: inherit
+
+  verdict:
+    name: Post the Hypatia verdict grid
+    needs: scan
+    if: >-
+      always() && github.event_name == 'pull_request'
+      && needs.scan.result != 'skipped'
+      && github.event.pull_request.head.repo.full_name == github.repository
+      && github.event.pull_request.user.login != 'dependabot[bot]'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Download the grid
+        uses: actions/download-artifact@v8.0.2
+        continue-on-error: true
+        with:
+          name: verdict-grid
+          path: ${{ runner.temp }}/verdict-grid
+
+      - name: Create or update the grid comment
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          GRID: ${{ runner.temp }}/verdict-grid/report.md
+          MARKER: '<!-- verdict-grid:hypatia regenerated on every run -->'
+        run: |
+          set -euo pipefail
+          if [ ! -s "$GRID" ]; then
+            echo "::warning::the verdict-grid artifact holds no report.md; the lane did not render a grid, see its job"
+            exit 0
+          fi
+          comment_id="$(gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" \
+            | jq -r --arg m "$MARKER" \
+                '[.[][] | select(.user.login == "github-actions[bot]" and (.body | contains($m)))] | last | .id // ""')"
+          jq -n --rawfile body "$GRID" '{body: $body}' > "$RUNNER_TEMP/grid-comment.json"
+          if [ -n "$comment_id" ]; then
+            gh api -X PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$comment_id" --input "$RUNNER_TEMP/grid-comment.json" >/dev/null
+          else
+            gh api -X POST "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" --input "$RUNNER_TEMP/grid-comment.json" >/dev/null
+          fi
+
+  badge:
+    name: Publish the Hypatia grid badge
+    needs: scan
+    if: always() && github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.scan.result != 'skipped'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - name: Download the grid
+        uses: actions/download-artifact@v8.0.2
+        continue-on-error: true
+        with:
+          name: verdict-grid
+          path: ${{ runner.temp }}/verdict-grid
+
+      - name: Publish badges/hypatia-grid.json to the governance-badges branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BADGE: ${{ runner.temp }}/verdict-grid/badge.json
+          BRANCH: governance-badges
+          DEST: badges/hypatia-grid.json
+        run: |
+          set -euo pipefail
+          if [ ! -s "$BADGE" ]; then
+            echo "::warning::the verdict-grid artifact holds no badge.json; nothing to publish"
+            exit 0
+          fi
+          jq -e 'type == "object" and has("schemaVersion")' "$BADGE" >/dev/null
+          content="$(base64 -w0 "$BADGE")"
+          message="badges: Hypatia grid at ${GITHUB_SHA:0:12}"
+          if gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/$BRANCH" >/dev/null 2>&1; then
+            sha="$(gh api "repos/$GITHUB_REPOSITORY/contents/$DEST?ref=$BRANCH" --jq .sha 2>/dev/null || true)"
+            jq -n --arg c "$content" --arg s "$sha" --arg b "$BRANCH" --arg m "$message" \
+              '{message: $m, content: $c, branch: $b} + (if $s != "" then {sha: $s} else {} end)' > "$RUNNER_TEMP/put.json"
+            gh api -X PUT "repos/$GITHUB_REPOSITORY/contents/$DEST" --input "$RUNNER_TEMP/put.json" >/dev/null
+          else
+            jq -n --arg c "$content" '{content: $c, encoding: "base64"}' > "$RUNNER_TEMP/blob.json"
+            blob="$(gh api -X POST "repos/$GITHUB_REPOSITORY/git/blobs" --input "$RUNNER_TEMP/blob.json" --jq .sha)"
+            jq -n --arg b "$blob" --arg p "$DEST" '{tree: [{path: $p, mode: "100644", type: "blob", sha: $b}]}' > "$RUNNER_TEMP/tree.json"
+            tree="$(gh api -X POST "repos/$GITHUB_REPOSITORY/git/trees" --input "$RUNNER_TEMP/tree.json" --jq .sha)"
+            jq -n --arg t "$tree" --arg m "$message" '{message: $m, tree: $t, parents: []}' > "$RUNNER_TEMP/commit.json"
+            commit="$(gh api -X POST "repos/$GITHUB_REPOSITORY/git/commits" --input "$RUNNER_TEMP/commit.json" --jq .sha)"
+            jq -n --arg s "$commit" --arg r "refs/heads/$BRANCH" '{ref: $r, sha: $s}' > "$RUNNER_TEMP/ref.json"
+            gh api -X POST "repos/$GITHUB_REPOSITORY/git/refs" --input "$RUNNER_TEMP/ref.json" >/dev/null
+          fi
+          echo "published $DEST on $BRANCH"
