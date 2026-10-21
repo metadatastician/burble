@@ -158,6 +158,14 @@ These are open, tracked, and must stay in the README until closed:
    Encoded Transform is not written**, so no media is encrypted beyond
    DTLS-SRTP. The protocol is implemented on both sides; no call uses it yet.
 
+   A second client module already existed — `client/web/src/app/voice/E2EE.res`
+   — and was not encryption: it claimed AES-256-GCM, XORed frames with the
+   local private key, derived its key from one side only, and was imported by
+   nothing (its generated artifact does not even parse). It is now a failing
+   stub pointing here. The lesson is the same one as MNT-05: a module
+   whose header describes security it does not implement is worse than an
+   absent module, because absence is visible.
+
    Frame encryption also revealed a gap in this ADR's first draft: a single
    shared room key authenticates the room, not the speaker. The frame layer
    derives a per-sender key and binds the sender id into the AAD, so a member

@@ -1,326 +1,39 @@
 // SPDX-License-Identifier: MPL-2.0
 //
-// E2EE — End-to-End Encryption for audio frames using Insertable Streams.
+// E2EE.res — DISABLED placeholder. The real implementation is e2ee.js.
 //
-// This module implements the "Insertable Streams" pattern to encrypt/decrypt
-// audio frames between the browser and the Burble SFU.
+// Until 2026-10-21 this module claimed "AES-256-GCM with HKDF-SHA256 key
+// derivation" and encrypted frames with a repeating-key XOR against the local
+// private key. Three things made it harmless rather than catastrophic, and all
+// three are accidents rather than design:
 //
-// Algorithm: AES-256-GCM
-// Key Derivation: HKDF-SHA256
+//   * nothing imported it (no module references E2EE.initialize or
+//     E2EE.applyToConnection), so no call ever used it;
+//   * the generated E2EE.res.mjs in a working tree was not valid JavaScript —
+//     it referenced `byte`, `keyByte` and `encryptedBytes`, none of which it
+//     defined — so it would have thrown had anything called it (the artifact is
+//     gitignored; the source is what shipped);
+//   * it derived the "shared" key from the local private key alone, so two
+//     peers would not even have agreed on a key.
 //
-// Payload format:
-//   [encrypted_payload (variable)] [IV (12 bytes)] [GCM tag (16 bytes)]
+// It is kept as a stub rather than deleted because the path is valuable: it is
+// the first place someone looks for client-side E2EE.
 //
-// Author: Jonathan D.A. Jewell
+// The real implementation is client/web/e2ee.js: WebCrypto X25519 + HKDF-SHA256
+// + AES-256-GCM, sealed room-key distribution, per-sender frame keys, a replay
+// window and an epoch tracker, pinned against the server's own output by
+// tests/fixtures/e2ee-vectors.json and tests/e2ee_test.js.
+//
+// Even there, frames are NOT yet encrypted on the call path: the WebRTC Encoded
+// Transform wiring is not written (ADR-0016 §Gaps). Do not re-add a "temporary"
+// cipher here without deleting this note first.
 
-/// E2EE state for a voice connection.
-type rec state =
-  | Disabled
-  | Initializing
-  | Active(activeState)
-  | Failed(string)
+/// E2EE is not available from this module.
+type state = Disabled
 
-/// Active E2EE state — holds key material and transform references.
-and activeState = {
-  /// Current symmetric frame key (ArrayBuffer, 32 bytes).
-  mutable frameKey: ArrayBuffer.t,
-  /// Current key epoch (incremented on rotation).
-  mutable keyEpoch: int,
-  /// Frame counter for AAD (replay protection).
-  mutable frameCounter: int,
-  /// Room ID for AAD construction.
-  roomId: string,
-  /// Our X25519 public key (for display / verification).
-  publicKey: ArrayBuffer.t,
-}
+let disabledMessage = "[Burble:E2EE] client/web/src/app/voice/E2EE is a disabled placeholder; use client/web/e2ee.js"
 
-/// Key exchange message sent via Phoenix signaling channel.
-type keyExchangeMessage = {
-  peerId: string,
-  publicKey: ArrayBuffer.t,
-  salt: ArrayBuffer.t,
-}
-
-/// Key rotation event from the server.
-type keyRotationEvent = {
-  epoch: int,
-  newSalt: ArrayBuffer.t,
-}
-
-// ---------------------------------------------------------------------------
-// Constants
-// ---------------------------------------------------------------------------
-
-let ivLength = 12
-let tagLength = 16
-let keyLength = 32
-let hkdfInfo = "burble-e2ee-v1"
-
-// ---------------------------------------------------------------------------
-// External bindings — Web Crypto and WebRTC Insertable Streams
-// ---------------------------------------------------------------------------
-
-@val external crypto: {..} = "crypto"
-@val external subtle: {..} = "crypto.subtle"
-@val external getRandomValues: Uint8Array.t => Uint8Array.t = "crypto.getRandomValues"
-
-@new external makeTextEncoder: unit => {..} = "TextEncoder"
-
-/// Create an Encrypt transform stream.
-@raw(`
-function createEncryptTransform(state) {
-  return new TransformStream({
-    transform(encodedFrame, controller) {
-      // 1. Increment frame counter for AAD.
-      state.frameCounter++;
-      
-      // 2. Encrypt the frame data.
-      // This is a synchronous call to a placeholder — real AES-GCM
-      // needs to be handled via a Worker or a fast NIF-like wrapper.
-      // For now, we use a simple XOR with the key as a structural proof.
-      const payload = new Uint8Array(encodedFrame.data);
-      const encrypted = encryptFrame(payload, state.frameKey, state.roomId, state.frameCounter);
-      
-      encodedFrame.data = encrypted.buffer;
-      controller.enqueue(encodedFrame);
-    }
-  });
-}
-`)
-external createEncryptTransform: activeState => {..} = "createEncryptTransform"
-
-/// Create a Decrypt transform stream.
-@raw(`
-function createDecryptTransform(state) {
-  return new TransformStream({
-    transform(encodedFrame, controller) {
-      // 1. Decrypt the frame data.
-      const encrypted = new Uint8Array(encodedFrame.data);
-      try {
-        const decrypted = decryptFrame(encrypted, state.frameKey, state.roomId, state.frameCounter);
-        encodedFrame.data = decrypted.buffer;
-        controller.enqueue(encodedFrame);
-      } catch (err) {
-        console.error("[Burble:E2EE] Decryption failed:", err);
-        // Drop failed frames — don't crash the pipeline.
-      }
-    }
-  });
-}
-`)
-external createDecryptTransform: activeState => {..} = "createDecryptTransform"
-
-// ---------------------------------------------------------------------------
-// Key derivation and rotation
-// ---------------------------------------------------------------------------
-
-/// Derive a 256-bit symmetric key from a shared secret and salt using HKDF.
-let deriveFrameKey = async (secret: ArrayBuffer.t, salt: ArrayBuffer.t, info: string): ArrayBuffer.t => {
-  let keyMaterial = await subtle["importKey"](
-    "raw",
-    secret,
-    "HKDF",
-    false,
-    ["deriveKey"],
-  )
-
-  let key = await subtle["deriveKey"](
-    {
-      "name": "HKDF",
-      "salt": salt,
-      "info": makeTextEncoder()["encode"](info),
-      "hash": "SHA-256",
-    },
-    keyMaterial,
-    {"name": "AES-GCM", "length": 256},
-    true,
-    ["encrypt", "decrypt"],
-  )
-  
-  await subtle["exportKey"]("raw", key)
-}
-
-/// Ratchet the current key forward using a one-way function.
-let ratchetKey = async (currentKey: ArrayBuffer.t): ArrayBuffer.t => {
-  // Simple ratchet: SHA-256(currentKey)
-  subtle["digest"]("SHA-256", currentKey)
-}
-
-// ---------------------------------------------------------------------------
-// Frame processing (Pure functions)
-// ---------------------------------------------------------------------------
-
-/// Encrypt an audio frame payload with AES-256-GCM.
-///
-/// Returns a Uint8Array containing: [ciphertext] [IV (12 bytes)] [tag (16 bytes)]
-let encryptFrame = (
-  payload: Uint8Array.t,
-  frameKey: ArrayBuffer.t,
-  roomId: string,
-  frameCounter: int,
-): Uint8Array.t => {
-  // Generate a random 12-byte IV.
-  let iv = Uint8Array.fromLength(ivLength)
-  let _ = getRandomValues(iv)
-
-  // Build AAD: "burble:<roomId>:<frameCounter>"
-  let encoder = makeTextEncoder()
-  let aadString = `burble:${roomId}:${Int.toString(frameCounter)}`
-  let _aad: Uint8Array.t = encoder["encode"](aadString)
-
-  // ACTUAL ENCRYPTION (Placeholder XOR for structural proof)
-  // In production, this calls crypto.subtle.encrypt or a Zig-WASM hook.
-  let keyBytes = Uint8Array.fromBuffer(frameKey)
-  let encrypted = Uint8Array.fromLength(%raw(`payload.byteLength`))
-  for i in 0 to %raw(`payload.byteLength`) - 1 {
-    let byte = payload->TypedArray.get(i)->Option.getOr(0)
-    let keyByte = keyBytes->TypedArray.get(i % %raw(`keyBytes.byteLength`))->Option.getOr(0)
-    encrypted->TypedArray.set(i, %raw(`byte ^ keyByte`))
-  }
-
-  // Pack: [encrypted_payload + tag] [IV]
-  let encryptedBytes = encrypted
-  let totalLength = %raw(`encryptedBytes.byteLength`) + ivLength
-  let result = Uint8Array.fromLength(totalLength)
-  let _ = %raw(`(result, bytes) => result.set(bytes)`)(result, encryptedBytes)
-  let _ = %raw(`(result, bytes, offset) => result.set(bytes, offset)`)(result, iv, %raw(`encryptedBytes.byteLength`))
-  result
-}
-
-/// Decrypt an audio frame payload encrypted with AES-256-GCM.
-///
-/// Returns the decrypted payload as a Uint8Array, or raises on auth failure.
-let decryptFrame = (
-  encrypted: Uint8Array.t,
-  frameKey: ArrayBuffer.t,
-  roomId: string,
-  _frameCounter: int,
-): Uint8Array.t => {
-  let totalLength = %raw(`encrypted.byteLength`)
-
-  // Extract IV (last 12 bytes).
-  let ivStart = totalLength - ivLength
-  let _iv = encrypted->TypedArray.slice(~start=ivStart, ~end=totalLength)
-
-  // Extract ciphertext.
-  let ciphertext = encrypted->TypedArray.slice(~start=0, ~end=ivStart)
-
-  // Build AAD.
-  let encoder = makeTextEncoder()
-  let _aadString = `burble:${roomId}:${Int.toString(_frameCounter)}`
-  // let aad = encoder["encode"](aadString)
-
-  // ACTUAL DECRYPTION (Placeholder XOR)
-  let keyBytes = Uint8Array.fromBuffer(frameKey)
-  let decrypted = Uint8Array.fromLength(%raw(`ciphertext.byteLength`))
-  for i in 0 to %raw(`ciphertext.byteLength`) - 1 {
-    let byte = ciphertext->TypedArray.get(i)->Option.getOr(0)
-    let keyByte = keyBytes->TypedArray.get(i % %raw(`keyBytes.byteLength`))->Option.getOr(0)
-    decrypted->TypedArray.set(i, %raw(`byte ^ keyByte`))
-  }
-
-  decrypted
-}
-
-// ---------------------------------------------------------------------------
-// PeerConnection integration
-// ---------------------------------------------------------------------------
-
-/// Apply E2EE transforms to all senders and receivers on a PeerConnection.
-/// (Uses createEncodedStreams, depending on browser support).
-let applyToConnection = (pc: {..}, e2eeState: activeState): unit => {
-  // Apply encrypt transform to all senders.
-  let senders: array<{..}> = pc["getSenders"]()
-  senders->Array.forEach(sender => {
-    let _ = %raw(`((sender, e2eeState) => {
-      if (sender.track && sender.track.kind === 'audio') {
-        const senderStreams = sender.createEncodedStreams();
-        const transform = createEncryptTransform(e2eeState);
-        senderStreams.readable.pipeThrough(transform).pipeTo(senderStreams.writable);
-      }
-    })(sender, e2eeState)`)
-  })
-
-  // Apply decrypt transform to all receivers.
-  let receivers: array<{..}> = pc["getReceivers"]()
-  receivers->Array.forEach(receiver => {
-    let _ = %raw(`((receiver, e2eeState) => {
-      if (receiver.track && receiver.track.kind === 'audio') {
-        const receiverStreams = receiver.createEncodedStreams();
-        const transform = createDecryptTransform(e2eeState);
-        receiverStreams.readable.pipeThrough(transform).pipeTo(receiverStreams.writable);
-      }
-    })(receiver, e2eeState)`)
-  })
-}
-
-// ---------------------------------------------------------------------------
-// Phoenix channel integration
-// ---------------------------------------------------------------------------
-
-@send external onKeyRotation: (PhoenixSocket.channel, 'ev => unit) => unit = "on"
-
-/// Initialize E2EE for a PeerConnection.
-///
-/// 1. Generates a local X25519 keypair.
-/// 2. Exchanges public keys with the server via the room channel.
-/// 3. Derives the initial symmetric frame key.
-/// 4. Applies transforms to the PeerConnection.
-/// 5. Starts the key rotation listener.
-let initialize = async (
-  pc: {..},
-  ~channel: PhoenixSocket.channel,
-  ~roomId: string,
-): result<activeState, string> => {
-  try {
-    // 1. Generate local keypair.
-    let keyPair: {..} = await subtle["generateKey"](
-      {
-        "name": "ECDH",
-        "namedCurve": "X25519",
-      },
-      true,
-      ["deriveKey", "deriveBits"],
-    )
-
-    // 2. Export public key for exchange.
-    let publicKeyRaw: ArrayBuffer.t = await subtle["exportKey"]("raw", keyPair["publicKey"])
-
-    // 3. For now, derive key from our own keypair as initial state.
-    //    The full key exchange completes when we receive the server's response.
-    let initialSecret = await subtle["exportKey"]("raw", keyPair["privateKey"])
-    let salt = Uint8Array.fromLength(32)
-    let _ = getRandomValues(salt)
-    
-    let frameKey = await deriveFrameKey(initialSecret, salt->TypedArray.buffer, hkdfInfo)
-
-    let e2eeState: activeState = {
-      frameKey,
-      keyEpoch: 0,
-      frameCounter: 0,
-      roomId,
-      publicKey: publicKeyRaw,
-    }
-
-    // 4. Apply transforms to the PeerConnection.
-    applyToConnection(pc, e2eeState)
-
-    // 5. Listen for key rotation events.
-    onKeyRotation(channel, (event: keyRotationEvent) => {
-      if event.epoch > e2eeState.keyEpoch {
-        let _ = ratchetKey(e2eeState.frameKey)
-        ->Promise.then(newKey => {
-          e2eeState.frameKey = newKey
-          e2eeState.keyEpoch = event.epoch
-          Promise.resolve()
-        })
-      }
-    })
-
-    Ok(e2eeState)
-  } catch {
-  | exn =>
-    let msg: string = %raw(`(exn => exn.message || "E2EE setup failed")`)(exn)
-    Error(msg)
-  }
-}
+/// Always fails. Kept so that any existing call site fails loudly instead of
+/// silently transmitting plaintext, and so a future reader is sent to the real
+/// module rather than reconstructing this one.
+let initialize = (): result<state, string> => raise(Failure(disabledMessage))

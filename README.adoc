@@ -177,6 +177,15 @@ peer-held group keys; the coordination half is in the tree:
   Transform (Insertable Streams) is not written**, so no media is encrypted
   beyond DTLS-SRTP. The crypto exists and is verified; the call path does not
   use it.
+* **There was already a client E2EE module, and it was not encryption.**
+  `client/web/src/app/voice/E2EE.res` claimed "AES-256-GCM with HKDF-SHA256"
+  and XORed each frame with the local private key, repeated. Nothing imported
+  it, it derived its key from one peer's private key alone (so two peers could
+  not have agreed), and the build artifact in a working tree is not even valid
+  JavaScript. All three are luck rather than design. It is now a failing stub
+  that points at `e2ee.js`.
+  Had anyone wired it up, Burble would have shipped something labelled E2EE
+  that is trivially breakable.
 * The server-side coprocessor pipeline still runs in `:e2ee` rooms. It no
   longer receives a key (the engine refuses one and logs a warning) and cannot
   decrypt, but ADR-0011 §3 puts content DSP at the edge; that move is not done.

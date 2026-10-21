@@ -35,6 +35,13 @@ end-to-end encrypted today** — DTLS-SRTP only — and
   and `e2ee_status`. Payloads are public keys and opaque blobs only; sealed
   blobs are broadcast because a third peer can neither open nor replay them.
   Covered by `test/burble_web/channels/room_channel_e2ee_test.exs`.
+- **Security — `client/web/src/app/voice/E2EE.res` was not encryption.** It
+  claimed AES-256-GCM with HKDF key derivation and XORed each frame with the
+  local private key, repeated; it derived its key from one peer's private key
+  alone, nothing imported it, and its generated `.mjs` does not even parse. It
+  is now a failing stub that names the real module. Had it ever been wired
+  up, Burble would have shipped a trivially breakable feature under an E2EE
+  label.
 - **The browser half of E2EE now exists** (`client/web/e2ee.js`): X25519
   keypairs (PKCS#8-wrapped private keys), pairwise agreement, sealed room-key
   distribution, per-sender frame keys, a replay window and an epoch tracker —

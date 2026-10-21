@@ -346,6 +346,27 @@ absent*; when SNIF **is** present, a dispatch to any of the 22 is an
 `ZigBackend`, or mark them `@optional_callbacks` and make `SmartBackend`
 route around them. Any of the three is fine; the current state is not.
 
+### CODE-1a — the client's E2EE module was not encryption · RESOLVED 2026-10-21
+
+`client/web/src/app/voice/E2EE.res` opened with *"Algorithm: AES-256-GCM / Key
+Derivation: HKDF-SHA256"* and encrypted each frame by XORing it with the local
+private key, repeated. It also derived that key from **one peer's** private key,
+so two participants could never have agreed on one.
+
+It was harmless by accident, not by design: nothing imported it, and the
+generated `.res.mjs` in a working tree referenced three variables it never
+defined (so it would have thrown). Evidence:
+
+```
+grep -rn 'E2EE\.\(initialize\|applyToConnection\)' --include=*.res --include=*.affine client/ | wc -l   # -> 0
+grep -n 'ACTUAL ENCRYPTION' client/web/src/app/voice/E2EE.res          # -> "Placeholder XOR for structural proof"
+```
+
+**Resolved:** the module is now a failing stub that names `client/web/e2ee.js`,
+the real WebCrypto implementation, which is pinned against the server's output
+by `client/web/tests/fixtures/e2ee-vectors.json`. **Still open:** wiring that
+module into the call path, and the WebRTC Encoded Transform (ADR-0016 §Gaps).
+
 ### CODE-2 — load-bearing modules with no matching test file · HIGH
 
 50 of 126 `server/lib/burble/**.ex` modules have no name-matching test.
