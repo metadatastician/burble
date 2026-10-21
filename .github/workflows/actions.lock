@@ -39,7 +39,7 @@ workflows:
         - 'hyperpolymath/standards@0d47b89259128962bc0609f223dbff559724bfb1'
     '.github/workflows/hypatia-scan.yml':
         - 'actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333'
-        - 'hyperpolymath/standards@0d47b89259128962bc0609f223dbff559724bfb1'
+        - 'hyperpolymath/standards@01c9b0c9f2646ebea0b30a9588462642ac94aee9'
     '.github/workflows/idris-abi.yml':
         - 'actions/checkout@v7.0.1'
     '.github/workflows/install-roundtrip.yml':
@@ -254,6 +254,11 @@ dependencies:
         commit: 'sha1-c1c9fa07992a02c1fd3d67a0dc1b08cccb852aef'
         owner_id: 6759885
         repo_id: 1352485172
+    'hyperpolymath/standards@01c9b0c9f2646ebea0b30a9588462642ac94aee9':
+        ref: 'main'
+        commit: 'sha1-01c9b0c9f2646ebea0b30a9588462642ac94aee9'
+        owner_id: 6759885
+        repo_id: 1116521501
     'hyperpolymath/standards@0d47b89259128962bc0609f223dbff559724bfb1':
         ref: 'main'
         commit: 'sha1-0d47b89259128962bc0609f223dbff559724bfb1'

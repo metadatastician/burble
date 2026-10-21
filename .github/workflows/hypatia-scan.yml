@@ -37,7 +37,7 @@ jobs:
       # fill the "since previous revision" column. Best effort: without it the
       # column says "no comparable baseline".
       pull-requests: read
-    uses: hyperpolymath/standards/.github/workflows/hypatia-scan-reusable.yml@0d47b89259128962bc0609f223dbff559724bfb1
+    uses: hyperpolymath/standards/.github/workflows/hypatia-scan-reusable.yml@01c9b0c9f2646ebea0b30a9588462642ac94aee9
     secrets: inherit
 
   verdict:
