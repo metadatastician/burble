@@ -199,7 +199,14 @@ const HEARTBEAT_INTERVAL_MS = 15_000;
 const HEARTBEAT_TIMEOUT_MS = 5_000;
 
 // WebSocket server for p2p-voice.html to connect to.
-serve({ port: PORT + 1, hostname: "127.0.0.1" }, (req, ctx) => {
+serve({ port: PORT + 1, hostname: "127.0.0.1" }, /**
+ * Accept a page WebSocket, start its heartbeat, and queue up to 1,000 received
+ * payloads, dropping the oldest when full.
+ * Return HTTP 400 for a non-upgrade, 403 for a non-local origin, 401 for a bad
+ * token when authentication is enabled, or 409 when a client is already open.
+ * On success, return ctx.upgrade's response (undefined on Bun, a Response on
+ * Deno). Upgrade errors propagate; malformed incoming JSON is ignored.
+ */ (req, ctx) => {
   if (req.headers.get("upgrade") !== "websocket") {
     return new Response("WebSocket only", { status: 400 });
   }
