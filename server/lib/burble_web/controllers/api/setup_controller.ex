@@ -67,7 +67,7 @@ defmodule BurbleWeb.API.SetupController do
           "pipewire_available": true,
           "audio_input_configured": false,
           "audio_output_configured": false,
-          "e2ee_keys_generated": true,
+          "e2ee_coordinator_running": true,
           "server_name_set": false
         },
         "missing": ["audio_input", "audio_output", "server_name"]
@@ -80,7 +80,7 @@ defmodule BurbleWeb.API.SetupController do
       pipewire_available: PipeWire.available?(),
       audio_input_configured: audio_input_configured?(),
       audio_output_configured: audio_output_configured?(),
-      e2ee_keys_generated: e2ee_keys_exist?(),
+      e2ee_coordinator_running: e2ee_coordinator_running?(),
       server_name_set: server_name_set?()
     }
 
@@ -387,11 +387,15 @@ defmodule BurbleWeb.API.SetupController do
   defp present?(map, string_key, atom_key),
     do: not is_nil(Map.get(map, string_key) || Map.get(map, atom_key))
 
-  # Check if E2EE keys have been generated.
-  @spec e2ee_keys_exist?() :: boolean()
-  defp e2ee_keys_exist? do
-    # E2EE keys are generated per-room, not globally.
-    # For setup check, we verify the E2EE GenServer is running.
+  # Check whether the E2EE coordinator is running.
+  #
+  # The name matters: this used to be `e2ee_keys_exist?`, but the server
+  # generates no E2EE keys — it never has, and after ADR-0016 it never will.
+  # Peers generate their own ephemeral X25519 keypairs and seal the room key
+  # to each other; this process only tracks public keys, epochs and opaque
+  # blobs. "Keys generated" would have been a claim we cannot make.
+  @spec e2ee_coordinator_running?() :: boolean()
+  defp e2ee_coordinator_running? do
     case Process.whereis(Burble.Media.E2EE) do
       nil -> false
       _pid -> true

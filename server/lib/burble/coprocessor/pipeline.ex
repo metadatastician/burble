@@ -35,7 +35,7 @@ defmodule Burble.Coprocessor.Pipeline do
 
   ## Usage
 
-      {:ok, pid} = Pipeline.start_link(peer_id: "user_123", e2ee_key: key)
+      {:ok, pid} = Pipeline.start_link(peer_id: "user_123", pipeline_key: key)
       {:ok, opus_frame} = Pipeline.process_outbound(pid, pcm_samples)
       {:ok, pcm_samples} = Pipeline.process_inbound(pid, opus_frame)
   """
@@ -118,7 +118,7 @@ defmodule Burble.Coprocessor.Pipeline do
   @impl true
   def init(opts) do
     peer_id = Keyword.fetch!(opts, :peer_id)
-    e2ee_key = Keyword.get(opts, :e2ee_key)
+    pipeline_key = Keyword.get(opts, :pipeline_key)
     config = Keyword.get(opts, :config, default_config())
 
     # Initialise per-kernel state.
@@ -128,7 +128,7 @@ defmodule Burble.Coprocessor.Pipeline do
     state = %{
       peer_id: peer_id,
       config: config,
-      e2ee_key: e2ee_key,
+      pipeline_key: pipeline_key,
       # Per-kernel state
       neural_state: neural_state,
       jitter_buffer: %{},
@@ -183,12 +183,19 @@ defmodule Burble.Coprocessor.Pipeline do
     # Step 4: Encode.
     case Backend.audio_encode(pcm, config.sample_rate, config.channels, state.current_bitrate) do
       {:ok, encoded} ->
-        # Step 5: Encrypt (if E2EE).
+        # Step 5: Encrypt, if this pipeline was given a key.
+        #
+        # This is SERVER-SIDE encryption with a server-held key: it protects a
+        # frame at rest / in a handoff, and it is the opposite of E2EE, because
+        # the process that encrypts can also decrypt. Real end-to-end
+        # encryption happens at the peers (ADR-0016) and never gives this
+        # process the key; when a room is end-to-end encrypted the engine
+        # therefore refuses to build a pipeline with a key at all.
         encrypted =
-          if state.e2ee_key do
+          if state.pipeline_key do
             aad = state.peer_id
 
-            case Backend.crypto_encrypt_frame(encoded, state.e2ee_key, aad) do
+            case Backend.crypto_encrypt_frame(encoded, state.pipeline_key, aad) do
               {:ok, {ct, iv, tag}} -> {:ok, iv <> tag <> ct}
               {:error, reason} -> {:error, reason}
             end
@@ -244,12 +251,12 @@ defmodule Burble.Coprocessor.Pipeline do
         # Step 2: Check for loss (gap in sequence numbers handled by jitter buffer).
         # Step 3: Decrypt (if E2EE).
         decrypted =
-          if state.e2ee_key do
+          if state.pipeline_key do
             case ready_frame do
               <<iv::binary-12, tag::binary-16, ct::binary>> ->
                 aad = state.peer_id
 
-                case Backend.crypto_decrypt_frame(ct, state.e2ee_key, iv, tag, aad) do
+                case Backend.crypto_decrypt_frame(ct, state.pipeline_key, iv, tag, aad) do
                   {:ok, plaintext} -> plaintext
                   {:error, _} -> ready_frame
                 end
@@ -305,7 +312,11 @@ defmodule Burble.Coprocessor.Pipeline do
       frames_dropped: state.frames_dropped,
       drop_rate: safe_div(state.frames_dropped, state.frames_processed),
       current_bitrate: state.current_bitrate,
-      e2ee: state.e2ee_key != nil,
+      # Server-side pipeline crypto with a key this process holds. It is
+      # NOT end-to-end encryption: anything this process can encrypt it can
+      # also decrypt. Real E2EE is peer-side (ADR-0016) and cannot be
+      # reported from here at all, so this field is deliberately not `e2ee:`.
+      pipeline_encrypted: state.pipeline_key != nil,
       neural_denoise: state.config.neural_denoise,
       uptime_seconds: DateTime.diff(DateTime.utc_now(), state.started_at)
     }

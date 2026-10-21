@@ -101,10 +101,10 @@ findings are gates that cannot fail.
 | ~30ms
 
 | **Privacy**
-| E2EE optional, no telemetry
+| DTLS-SRTP today; peer-held E2EE part-way †
 | Encrypted, no telemetry
 | Telemetry, scanning
-| E2EE optional
+| E2EE optional (vendor claim)
 
 | **Precision timing**
 | IEEE 1588 PTP (<1µs)*
@@ -126,7 +126,65 @@ findings are gates that cannot fail.
 500+ concurrent scale are **not yet benchmarked** (issue #52). `IEEE 1588
 PTP <1µs` requires a PTP-capable NIC; without one the system falls back
 to NTP (~1ms) and the PTP hardware path remains **unvalidated**.
+
+† **End-to-end encryption is part-way: no room is end-to-end encrypted
+today.** See <<_encryption_what_is_true_today>>.
 ====
+
+== Encryption: what is true today
+
+Burble's target is the one ADR-0011 sets out: the server has **no capability**
+to see call content, rather than a promise not to look. Burble is **only part
+of the way there**, and this section is the scoreboard.
+
+**What protects a call today.** Every hop is encrypted with DTLS-SRTP. That is
+real encryption, and it is not end-to-end: it terminates at the SFU, so the
+server can decrypt the media it forwards. Where an older version of this file,
+a UI string, or a third-party summary says "E2EE", discount it.
+
+**What is implemented (server side, 2026-10-21).**
+link:docs/decisions/0016-peer-held-group-keys.adoc[ADR-0016] moved Burble to
+peer-held group keys; the coordination half is in the tree:
+
+* `Burble.Media.E2EE` no longer generates or returns a room key. It stores, per
+  room, **public** X25519 keys, an epoch counter, and opaque sealed blobs. There
+  is no key-returning function in its API.
+* Each peer would generate its own ephemeral keypair; one peer per epoch (the
+  lowest peer id) generates the room key and seals it to every other peer under
+  their pairwise X25519 + HKDF key. The server relays ciphertext it cannot open.
+* Pairwise agreement, sealing/opening and per-frame derivation are peer-side
+  pure functions (`pairwise_key/6`, `seal_group_key/6`, `open_group_key/6`,
+  `derive_frame_key/3`) with domain-separated labels, AAD bound to
+  room/epoch/direction, an all-zero-shared-secret check (RFC 7748 §6.1) and
+  size caps. They are the part a test suite can exercise without a browser.
+* Any membership change bumps the epoch and **drops every sealed blob**, so a
+  departing peer never learns the next key and a joining peer never learns a
+  past one. `Burble.Security.KeyRotation` now requests these epoch bumps; it
+  does not, and cannot, ratchet a key the server does not have.
+
+**What is *not* implemented — the part that matters.**
+
+* **The browser half does not exist.** There is no WebCrypto X25519, no
+  AES-GCM frame layer, and no WebRTC Insertable Streams / Encoded Transform
+  wiring in `client/web`. Without them there is no frame encryption at all:
+  the protocol above has no live endpoint.
+* The server-side coprocessor pipeline still runs in `:e2ee` rooms. It no
+  longer receives a key (the engine refuses one and logs a warning) and cannot
+  decrypt, but ADR-0011 §3 puts content DSP at the edge; that move is not done.
+* No mid-epoch key-leader failover, and nothing on this path is formally
+  verified.
+
+**So the names changed, to stop the drift.** `:e2ee_key` became
+`:pipeline_key` (server-side, explicitly *not* the room key); the pipeline
+health map reports `pipeline_encrypted:`; the peer offer carries
+`e2ee_requested:` — the policy asked for, not proof; `Privacy.e2ee_config/1`
+returns `enabled: false, implemented: false`; and `GET /api/v1/setup/check`
+reports `e2ee_coordinator_running:` instead of `e2ee_keys_generated:`. A room
+marked `:e2ee` is a *request* until the client half lands.
+
+Tracking: link:docs/decisions/0016-peer-held-group-keys.adoc[ADR-0016 §Gaps]
+and link:docs/reports/maintenance/maintenance-2026-10-21.md[the 2026-10-21
+maintenance report] (MNT-16).
 
 == Key Features
 
@@ -144,7 +202,9 @@ export built in. Direct in-VM device access is forbidden; a PTP hardware path
 requires an isolated OS service and real-hardware validation.
 
 **Four topology modes** — From single-server (monarchic) to fully distributed
-mesh (serverless with mandatory E2EE). Set `BURBLE_TOPOLOGY` and go.
+mesh. The serverless mode is *designed* for mandatory E2EE and will enforce it
+once the client half ships; today no topology is end-to-end encrypted. Set
+`BURBLE_TOPOLOGY` and go.
 
 **Erlang/OTP backbone** — Supervision trees, hot code upgrades, fault isolation.
 If a room crashes, everything else keeps running. That's not marketing — that's

@@ -10,6 +10,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed — E2EE is now honest, and part-way by design (2026-10-21)
+
+ADR-0016 ([`docs/decisions/0016-peer-held-group-keys.adoc`](docs/decisions/0016-peer-held-group-keys.adoc)):
+the server coordinates peer-held group keys and never holds one. **No room is
+end-to-end encrypted today** — DTLS-SRTP only — and
+[`README.adoc`](README.adoc) now says so. Design survey of the hyperpolymath
+`*-types`, `absolute-zero` and `januskey` repositories:
+[`docs/reports/design-enhancements-2026-10-21.md`](docs/reports/design-enhancements-2026-10-21.md).
+
+- **`Burble.Media.E2EE` rewritten as a coordinator, not a key authority.** It
+  stores public X25519 keys, an epoch counter and opaque sealed blobs; there is
+  no key-returning function left in its API (`ratchet_key/1`,
+  `get_frame_key/1` and the key-bearing `encrypt_frame/3` / `decrypt_frame/5`
+  are gone). The peer-side protocol — `generate_keypair/0`, `pairwise_key/6`,
+  `seal_group_key/6`, `open_group_key/6`, `derive_frame_key/3` — is implemented
+  as pure, unit-testable functions with domain-separated labels, AAD bound to
+  room/epoch/direction, an all-zero-shared-secret check (RFC 7748 §6.1) and
+  size caps (512 B per blob, 512 peers per room). Any membership change bumps
+  the epoch and drops every sealed blob.
+- **`Burble.Media.E2EE` was not in the supervision tree at all**, so every call
+  would have failed and `setup/check` could never see it. It is now started
+  before `Burble.Security.KeyRotation`.
+- **`KeyRotation` now calls `E2EE.request_rotation/1`.** The scheduler used to
+  "ratchet" a key the server should not have had; it now requests an epoch bump
+  and the revocation of distributed blobs.
+- **Renamed to stop claiming encryption that is not there.** `:e2ee_key` →
+  `:pipeline_key` (server-side, explicitly not the room key) and the engine
+  refuses a pipeline key in `:e2ee`/`:maximum` rooms; `Pipeline.health/1`
+  reports `pipeline_encrypted:` instead of `e2ee:`; the peer offer carries
+  `e2ee_requested:` (policy, not proof); `Privacy.e2ee_config/1` returns
+  `enabled: false, implemented: false`; `GET /api/v1/setup/check` reports
+  `e2ee_coordinator_running:` instead of the untrue `e2ee_keys_generated:`.
+- **Not implemented, stated plainly:** the browser half (WebCrypto X25519,
+  AES-GCM frames, WebRTC Encoded Transform) does not exist; the server-side
+  coprocessor pipeline still runs in `:e2ee` rooms (keyless, but it should not
+  run at all per ADR-0011 §3); there is no mid-epoch leader failover; nothing
+  on this path is formally verified.
+
 ### Fixed — maintenance sweep 2026-10-21
 
 Full detail, evidence and remaining recommendations:

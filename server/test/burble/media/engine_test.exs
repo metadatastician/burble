@@ -98,7 +98,9 @@ defmodule Burble.Media.EngineTest do
       assert {:error, :no_session} = Engine.add_peer(unknown_room, generate_user_id())
     end
 
-    test "offer reflects e2ee privacy mode: e2ee true, ice_policy relay", %{room_id: room_id} do
+    test "offer reflects e2ee privacy mode: e2ee_requested true, ice_policy relay", %{
+      room_id: room_id
+    } do
       e2ee_room = "e2ee-" <> generate_room_id()
 
       on_exit(fn -> Engine.destroy_room_session(e2ee_room) end)
@@ -106,7 +108,8 @@ defmodule Burble.Media.EngineTest do
       {:ok, _} = Engine.create_room_session(e2ee_room, privacy: :e2ee)
       {:ok, offer} = Engine.add_peer(e2ee_room, generate_user_id())
 
-      assert offer.e2ee == true
+      # Policy echoed back, not proof of encryption (ADR-0016).
+      assert offer.e2ee_requested == true
       assert offer.ice_policy == :relay
     end
   end

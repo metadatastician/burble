@@ -22,13 +22,22 @@ Burble exposes three integration surfaces:
 | HTTP REST     | HTTPS / JSON     | Auth, room/server CRUD, control  | `server/lib/burble_web/router.ex`               |
 | Realtime      | Phoenix Channels | Signaling, room events, presence | `server/lib/burble_web/channels/`               |
 | Wire schemas  | Bebop binary     | Voice signal + room event frames | `server/lib/burble/protocol/`                   |
-| Media plane   | WebRTC SRTP      | E2EE audio frames (SFU-blind)    | `server/lib/burble/media/`                      |
+| Media plane   | WebRTC SRTP      | DTLS-SRTP per hop (not E2EE yet — see below) | `server/lib/burble/media/`          |
 | BLE presence  | BLE advertising  | Knock/rendezvous + presence beacon (v1 FROZEN) | `server/lib/burble/presence/ble_spa.ex` |
 | Rust client   | Phoenix/WebSocket | Embeddable game-session client   | `client/rust/`                                  |
 
-The SFU **does not decrypt** media: voice frames pass through the media
-plane uninterpreted. The Mumble control-plane bridge (experimental) transcodes
-at the control plane only.
+**Media-plane encryption status.** Voice frames are protected by DTLS-SRTP on
+every hop, and that is where it ends: SRTP terminates at the SFU, so the server
+can decrypt the media it forwards. This is *not* end-to-end encryption, and it
+is not "SFU-blind" — earlier revisions of this document said so and were wrong.
+
+ADR-0016 defines the end-to-end design (peers hold the group key, the server
+coordinates public keys, epochs and opaque sealed blobs) and the server half is
+implemented in `server/lib/burble/media/e2ee.ex`. The browser half — WebCrypto
+X25519, AES-GCM frames, WebRTC Encoded Transform — does not exist yet, so no
+room is end-to-end encrypted today. `README.adoc` §*Encryption: what is true
+today* is the authoritative scoreboard. The Mumble control-plane bridge
+(experimental) transcodes at the control plane only.
 
 ## HTTP REST (`/api/v1`)
 

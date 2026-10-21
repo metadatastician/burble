@@ -62,7 +62,7 @@ Traefik) must:
 | Guardian refresh tokens                        | Hashed (Argon2id) before storage        | Built-in                                         |
 | User passwords                                 | Argon2id                                | Built-in                                         |
 | Magic-link tokens                              | HMAC-signed, single-use, time-bounded   | Built-in                                         |
-| Voice frames (in flight)                       | DTLS-SRTP (E2EE optional)               | SFU never decrypts                               |
+| Voice frames (in flight)                       | DTLS-SRTP only, per hop                 | Terminates at the SFU, which **can** decrypt. End-to-end encryption is part-way: peer-held keys are implemented server-side, the browser frame layer is not (ADR-0016, README) |
 | Voice frames (recordings, if enabled)          | **Recording is OFF by default**         | If enabled, recording target storage MUST be FDE |
 | Coprocessor temp buffers                       | RAM-only, zeroised on release           | Zig NIF discipline                               |
 | Container image layers                         | N/A (signed only, see below)            | Cosign-style signing                             |

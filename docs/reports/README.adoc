@@ -1,1 +1,4 @@
 = reports Unit
+
+* xref:maintenance/README.adoc[Maintenance reports] — corrective / adaptive / perfective sweeps.
+* xref:design-enhancements-2026-10-21.md[Design enhancements 2026-10-21] — what Burble could borrow from the hyperpolymath `*-types`, `absolute-zero` and `januskey` repositories.

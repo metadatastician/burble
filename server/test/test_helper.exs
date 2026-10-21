@@ -16,6 +16,7 @@ required = [
   Burble.Chat.MessageStore,
   Burble.Text.NNTPSBackend,
   Burble.Media.Engine,
+  Burble.Media.E2EE,
   Burble.Timing.PTP,
   Burble.Timing.ClockCorrelator,
   Burble.Timing.Alignment,

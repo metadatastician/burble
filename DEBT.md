@@ -350,9 +350,13 @@ route around them. Any of the three is fine; the current state is not.
 
 50 of 126 `server/lib/burble/**.ex` modules have no name-matching test.
 The ones that matter: `auth/auth.ex`, `auth/guardian.ex`,
-`auth/guardian_pipeline.ex`, `media/e2ee.ex`, `security/mtls.ex`,
-`security/key_rotation.ex`, `verification/avow.ex`, `protocol/voice_signal.ex`
-(the file that broke `main`).
+`auth/guardian_pipeline.ex`, `security/mtls.ex`, `security/key_rotation.ex`,
+`verification/avow.ex`, `protocol/voice_signal.ex` (the file that broke `main`).
+
+**2026-10-21:** `media/e2ee.ex` now has `server/test/burble/media/e2ee_test.exs`
+(peer-side protocol, coordinator state machine, and an assertion that no
+key-returning function is exported). `security/key_rotation.ex` still has none —
+its remaining work is inseparable from `E2EE`, which is now tested.
 
 **Caveat, stated because it changes what you should do with this:** this is a
 *filename heuristic*. Some are genuinely exercised inside other suites — treat

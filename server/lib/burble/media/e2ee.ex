@@ -1,246 +1,403 @@
 # SPDX-License-Identifier: MPL-2.0
 #
-# Burble.Media.E2EE — End-to-end encryption via WebRTC Insertable Streams.
+# Burble.Media.E2EE — peer-held group keys for voice rooms.
 #
-# Manages per-room symmetric key state for E2EE voice. The server never
-# has access to plaintext audio — it forwards opaque encrypted frames
-# between peers (SFU model). Key exchange happens out-of-band via the
-# Phoenix signaling channel; the server relays key-exchange messages
-# but cannot derive the shared secret (X25519 DH is peer-to-peer).
+# The design rule this module now enforces (ADR-0016, 2026-10-21):
 #
-# Key lifecycle:
-#   1. Room creator generates an X25519 keypair
-#   2. Each joining peer generates their own keypair
-#   3. Peers exchange public keys via the signaling channel
-#   4. Each peer derives the shared secret via X25519 DH
-#   5. HKDF-SHA256 derives a symmetric AES-256-GCM frame key from the secret
-#   6. On participant join/leave, a new key is generated and distributed
-#   7. Forward secrecy via key ratcheting (each frame key derives the next)
+#   The server stores public keys and opaque blobs. It never generates,
+#   receives, derives, logs or returns a symmetric room key.
 #
-# Frame encryption format (per RTP payload):
-#   [encrypted_payload (variable)] [IV (12 bytes)] [GCM tag (16 bytes)]
+# What that means in practice:
 #
-# The AAD (additional authenticated data) includes the room ID and a
-# monotonic frame counter to prevent replay attacks.
+#   * Every peer generates its own ephemeral X25519 keypair, client-side.
+#   * Peers publish only their PUBLIC key; the server relays it to the room.
+#   * Any two peers can derive a pairwise key from (my private, their public) —
+#     and so can nobody else, including this process.
+#   * One peer per epoch (the "key leader" — lowest peer id, deterministic)
+#     generates a random 32-byte room key and sends it to every other peer
+#     SEALED under that pairwise key. The server sees ciphertext it cannot open.
+#   * Membership change ⇒ new epoch ⇒ new room key ⇒ re-seal. A departing peer
+#     never learns the next key; a joining peer never learns past ones.
+#   * Frame keys are derived from the room key on the peers, per frame counter.
 #
-# Author: Jonathan D.A. Jewell
+# This module is therefore a *coordination* service plus a set of pure
+# functions that both ends of the protocol (browser client, tests, any future
+# native client) can mirror. The functions are marked "PEER-SIDE": they only
+# make sense on a machine that holds a private key. Nothing here calls them
+# with key material the server owns, because it owns none.
+#
+# ## Status: part-way
+#
+# Implemented and tested here:
+#   - peer key registration, epoch handling, revocation on membership change
+#   - pairwise key agreement, group-key sealing/opening, frame-key derivation
+#   - opaque, size-bounded distribution storage with per-peer retrieval
+#
+# NOT yet implemented (tracked in the maintenance report):
+#   - the browser side: WebCrypto X25519 + AES-GCM + Insertable Streams
+#     (Encoded Transform) wiring in client/web. Until that lands, rooms are
+#     encrypted in transit by DTLS-SRTP only and MUST NOT be called E2EE.
+#   - multi-leader failover if the leader disconnects mid-epoch (today the
+#     remaining peers re-elect on the next epoch bump).
+#
+# Everything above is stated the same way in README.adoc so the code and the
+# front page cannot drift apart again.
 
 defmodule Burble.Media.E2EE do
   @moduledoc """
-  End-to-end encryption for Burble voice rooms.
+  Peer-held group-key coordination for Burble voice rooms.
 
-  Manages per-room cryptographic key state: X25519 key exchange with each
-  peer, HKDF-SHA256 derivation of a room frame key, rotation on membership
-  change, and one-way ratcheting for forward secrecy. Frames are AES-256-GCM.
-  Read "What this module is NOT" below before calling a deployment E2EE.
+  ## Division of responsibility
 
-  ## Architecture
+  | Concern | Where it happens |
+  |---|---|
+  | X25519 keypair generation | peer (client) |
+  | Pairwise key agreement | peer, via `pairwise_key/6` |
+  | Room key generation | peer, via `random_group_key/0` |
+  | Room key distribution | peer → peer, sealed; server relays opaque blobs |
+  | Frame encryption | peer (Insertable Streams) |
+  | Membership, epochs, revocation | this module |
 
-  This GenServer maintains key state for all active E2EE rooms.
-  It does NOT perform frame encryption/decryption itself — that happens
-  client-side via WebRTC Insertable Streams (Encoded Transform API).
-  This module handles:
+  The server's view of a room is `%{epoch, peers: %{peer_id => public_key},
+  sealed: %{peer_id => opaque_blob}}`. There is deliberately no API that
+  returns a key: `key_set/1` returns public keys only, and `room_status/1`
+  reports `key_custody: :peers`.
 
-  - Key exchange orchestration (X25519 public key distribution)
-  - Symmetric key derivation (HKDF-SHA256)
-  - Key rotation on participant join/leave
-  - Key ratcheting for forward secrecy
-  - Integration with `Burble.Media.Engine` lifecycle events
+  ## Protocol sketch
 
-  ## Security properties
+      # every peer, locally
+      {my_pub, my_priv} = E2EE.generate_keypair()
+      publish my_pub                      # -> signalling channel -> register_peer_key/3
 
-  - **Confidentiality**: AES-256-GCM with unique IV per frame
-  - **Integrity**: GCM tag authenticates ciphertext + AAD
-  - **Forward secrecy**: Key ratcheting prevents past-frame decryption
-  - **Replay protection**: Frame counter in AAD prevents replay
+      # leader (lowest peer id), once it has everyone's public key
+      {:ok, pairwise} = E2EE.pairwise_key(my_priv, their_pub, room, epoch, me, them)
+      room_key = E2EE.random_group_key()
+      {:ok, sealed} = E2EE.seal_group_key(room_key, pairwise, room, epoch, me, them)
+      publish sealed for `them`           # -> publish_sealed/4
 
-  ## What this module is NOT
+      # each other peer
+      {:ok, %{blob: sealed}} = fetch my blob   # -> sealed_for/2
+      {:ok, pairwise} = E2EE.pairwise_key(my_priv, leader_pub, room, epoch, me, leader)
+      {:ok, room_key} = E2EE.open_group_key(sealed, pairwise, room, epoch, leader, me)
 
-  Earlier revisions of this documentation claimed "server ignorance" — that
-  the server relays opaque frames and never sees plaintext. That is not what
-  the code does, and the claim has been removed rather than left standing:
+  ## Threat model
 
-  - `get_frame_key/1` returns the room's symmetric frame key to the caller, so
-    the server-side coprocessor can encrypt/decrypt frames
-    (`crypto_encrypt_frame/4`, `crypto_decrypt_frame/5`). The server therefore
-    both holds the key and can process plaintext.
-  - `rotate_room_key/1` derives each new key from fresh local entropy. The
-    X25519 exchange with each peer is recorded (`register_peer_key/4`) but is
-    **not** an input to the room key, so peer-side knowledge of the key is not
-    currently guaranteed by this path.
-
-  Genuine end-to-end encryption — where the server cannot decrypt — is the
-  `:serverless` topology (see `Burble.Topology`), where media never transits a
-  Burble server. Treat anything running through this module as
-  server-mediated transport encryption, and see the maintenance report /
-  issue tracker before describing a deployment as E2EE.
+  In scope: a curious or compromised *server*, passive network observers, and a
+  peer that has left the room. Out of scope: a compromised *peer* (it holds the
+  key by construction — this is a shared-key group protocol, not per-sender
+  ratcheting), endpoint compromise, and denial of service.
   """
 
   use GenServer
 
   require Logger
 
-  alias Burble.Coprocessor.SmartBackend
-
   # ── Types ──
-
-  @type room_id :: String.t()
-  @type peer_id :: String.t()
 
   @typedoc "X25519 keypair: {public_key, private_key}, each 32 bytes."
   @type keypair :: {binary(), binary()}
 
-  @typedoc "Per-peer key exchange state."
-  @type peer_key_state :: %{
-          peer_id: peer_id(),
-          public_key: binary(),
-          shared_secret: binary() | nil,
-          frame_counter: non_neg_integer()
+  @typedoc "Peer-side key material — never constructed by the server."
+  @type group_key :: <<_::256>>
+
+  @typedoc "Sealed room key as it travels through the server."
+  @type sealed_key :: {ciphertext :: binary(), iv :: binary(), tag :: binary()}
+
+  @typedoc "Public view of a room."
+  @type key_set :: %{
+          room_id: String.t(),
+          epoch: non_neg_integer(),
+          peers: %{peer_id :: String.t() => public_key :: binary()}
         }
 
-  @typedoc "Per-room E2EE state."
-  @type room_key_state :: %{
-          room_id: room_id(),
-          server_keypair: keypair(),
-          current_frame_key: binary(),
-          key_epoch: non_neg_integer(),
-          peers: %{peer_id() => peer_key_state()},
-          created_at: DateTime.t()
+  @typedoc "Server-side room state — public keys and opaque blobs only."
+  @type room_state :: %{
+          room_id: String.t(),
+          epoch: non_neg_integer(),
+          peers: %{String.t() => %{public_key: binary(), joined_at: DateTime.t()}},
+          sealed: %{String.t() => %{epoch: non_neg_integer(), blob: binary()}},
+          created_at: DateTime.t(),
+          rotated_at: DateTime.t() | nil
         }
 
-  # AES-256-GCM IV length (12 bytes per NIST SP 800-38D).
-  # @iv_length 12  # Reserved — used by crypto_encrypt_frame/crypto_decrypt_frame.
+  # ── Constants ──
 
-  # AES-256-GCM tag length (16 bytes, full strength).
-  # @tag_length 16  # Reserved — used by crypto_encrypt_frame/crypto_decrypt_frame.
+  # X25519 keys and HKDF outputs are 32 bytes; AES-256-GCM IVs are 12.
+  @key_bytes 32
+  @iv_bytes 12
+  @tag_bytes 16
 
-  # HKDF info string for frame key derivation.
-  @hkdf_info "burble-e2ee-frame-key-v1"
+  # Domain-separation labels. Changing any of these is a wire break.
+  @label_pairwise "burble-e2ee-pairwise-v1"
+  @label_group "burble-e2ee-group-v1"
+  @label_frame "burble-e2ee-frame-v1"
 
-  # HKDF info string for ratchet derivation (distinct from frame key).
-  @ratchet_info "burble-e2ee-ratchet-v1"
+  # A sealed room key is 32 bytes of ciphertext + 12 IV + 16 tag = 60 bytes.
+  # 512 is generous and stops the unauthenticated-ish distribution path from
+  # being used as free storage.
+  @max_sealed_bytes 512
 
-  # ── Client API ──
+  # Bound the peer map so a room cannot grow without limit.
+  @max_peers 512
+
+  @lifecycle_topic "e2ee:lifecycle"
+
+  # ── Peer-facing API ──
 
   @doc """
-  Start the E2EE key manager.
+  Start the key coordinator.
   """
   def start_link(opts \\ []) do
     GenServer.start_link(__MODULE__, opts, name: __MODULE__)
   end
 
   @doc """
-  Initialise E2EE for a room.
-
-  Generates an X25519 keypair for the room and prepares key state.
-  Returns `{:ok, room_public_key}` — the public key is distributed
-  to all peers via the signaling channel.
+  Register a room. No key material is created — epoch 0 starts empty and waits
+  for peers to publish their public keys.
   """
-  def init_room(room_id) do
+  @spec init_room(String.t()) :: {:ok, %{epoch: non_neg_integer()}} | {:error, term()}
+  def init_room(room_id) when is_binary(room_id) do
     GenServer.call(__MODULE__, {:init_room, room_id})
   end
 
-  @doc """
-  Tear down E2EE state for a room.
-
-  Called when a room is destroyed. Securely erases all key material.
-  """
+  @doc "Tear down a room's coordination state (no key material to erase)."
+  @spec destroy_room(String.t()) :: :ok | {:error, term()}
   def destroy_room(room_id) do
     GenServer.call(__MODULE__, {:destroy_room, room_id})
   end
 
   @doc """
-  Register a peer's X25519 public key for key exchange.
+  Record a peer's X25519 public key.
 
-  Called when a peer joins the room and sends their public key via
-  the signaling channel. The server derives the shared secret using
-  its own private key, then derives the symmetric frame key via HKDF.
-
-  Returns `{:ok, server_public_key}` — the peer needs this to derive
-  the same shared secret on their side.
+  If the room's key has already been distributed (any sealed blob exists) and
+  the peer set changed, the epoch is bumped and every sealed blob is dropped —
+  the new member cannot read the old key and the old key is no longer current.
   """
-  def register_peer_key(room_id, peer_id, peer_public_key) do
-    GenServer.call(__MODULE__, {:register_peer_key, room_id, peer_id, peer_public_key})
+  @spec register_peer_key(String.t(), String.t(), binary()) ::
+          {:ok, %{epoch: non_neg_integer(), peer_count: non_neg_integer()}} | {:error, term()}
+  def register_peer_key(room_id, peer_id, public_key) do
+    GenServer.call(__MODULE__, {:register_peer_key, room_id, peer_id, public_key})
   end
 
   @doc """
-  Remove a peer and trigger key rotation.
+  Drop a peer and rotate.
 
-  When a peer leaves, the room key must be rotated so the departing
-  peer cannot decrypt future frames. All remaining peers receive
-  the new key via the signaling channel.
-
-  Returns `{:ok, new_key_epoch}`.
+  Rotation here means "invalidate": the epoch advances and the sealed blobs are
+  discarded, so the room key that the departing peer holds can never be the
+  current one. Peers re-derive with fresh ephemeral keys on the new epoch.
   """
+  @spec remove_peer(String.t(), String.t()) :: {:ok, non_neg_integer()} | {:error, term()}
   def remove_peer(room_id, peer_id) do
     GenServer.call(__MODULE__, {:remove_peer, room_id, peer_id})
   end
 
   @doc """
-  Get the current frame key for a room.
-
-  Used by `Burble.Media.Engine` when setting up coprocessor pipelines.
-  Returns `{:ok, {frame_key, key_epoch}}` or `{:error, :no_room}`.
+  Force a rotation (used by the periodic `Burble.Security.KeyRotation` sweep).
   """
-  def get_frame_key(room_id) do
-    GenServer.call(__MODULE__, {:get_frame_key, room_id})
+  @spec request_rotation(String.t()) :: {:ok, non_neg_integer()} | {:error, term()}
+  def request_rotation(room_id) do
+    GenServer.call(__MODULE__, {:request_rotation, room_id})
   end
 
   @doc """
-  Ratchet the frame key forward (forward secrecy).
+  Public key set for a room: everything a peer needs to derive pairwise keys.
 
-  Derives a new frame key from the current one using HKDF. The old
-  key is securely erased — past frames cannot be decrypted even if
-  the new key is compromised.
-
-  Called periodically or after a configurable number of frames.
-  Returns `{:ok, new_key_epoch}`.
+  Contains no secret material by construction.
   """
-  def ratchet_key(room_id) do
-    GenServer.call(__MODULE__, {:ratchet_key, room_id})
+  @spec key_set(String.t()) :: {:ok, key_set()} | {:error, term()}
+  def key_set(room_id) do
+    GenServer.call(__MODULE__, {:key_set, room_id})
   end
 
   @doc """
-  Encrypt an audio frame using the room's current frame key.
+  Store an opaque sealed room key destined for one peer.
 
-  Delegates to the coprocessor backend (proved SNIF guest or BEAM fallback).
-  Returns `{:ok, {ciphertext, iv, tag}}` or `{:error, reason}`.
-
-  The AAD includes the room ID and frame counter for replay protection.
+  The leader computes this peer-side; the server only checks size and epoch.
   """
-  def encrypt_frame(room_id, peer_id, plaintext) do
-    GenServer.call(__MODULE__, {:encrypt_frame, room_id, peer_id, plaintext})
+  @spec publish_sealed(String.t(), String.t(), non_neg_integer(), binary()) ::
+          :ok | {:error, term()}
+  def publish_sealed(room_id, peer_id, epoch, blob) do
+    GenServer.call(__MODULE__, {:publish_sealed, room_id, peer_id, epoch, blob})
   end
 
   @doc """
-  Decrypt an audio frame using the room's current frame key.
-
-  Returns `{:ok, plaintext}` or `{:error, :decrypt_failed}`.
+  Fetch the sealed room key addressed to `peer_id` for the current epoch.
   """
-  def decrypt_frame(room_id, peer_id, ciphertext, iv, tag) do
-    GenServer.call(__MODULE__, {:decrypt_frame, room_id, peer_id, ciphertext, iv, tag})
+  @spec sealed_for(String.t(), String.t()) ::
+          {:ok, %{epoch: non_neg_integer(), blob: binary()}} | {:error, term()}
+  def sealed_for(room_id, peer_id) do
+    GenServer.call(__MODULE__, {:sealed_for, room_id, peer_id})
   end
 
   @doc """
-  Get E2EE status and metadata for a room.
-
-  Returns peer count, key epoch, and whether E2EE is active.
+  Room status. Reports `key_custody: :peers` — the server holds no key.
   """
+  @spec room_status(String.t()) :: {:ok, map()} | {:error, :no_room}
   def room_status(room_id) do
     GenServer.call(__MODULE__, {:room_status, room_id})
   end
 
-  # ── Server Callbacks ──
+  # ── PEER-SIDE pure functions ──
+  #
+  # These are the protocol. They are pure, deterministic and independent of
+  # this process's state, so a browser (WebCrypto), a native client and the
+  # test suite can all implement the same bytes.
+
+  @doc """
+  Generate an ephemeral X25519 keypair. **Peer-side.**
+
+  Returns `{public_key, private_key}`.
+  """
+  @spec generate_keypair() :: keypair()
+  def generate_keypair, do: :crypto.generate_key(:ecdh, :x25519)
+
+  @doc """
+  Generate a random 32-byte room key. **Peer-side** (leader only).
+  """
+  @spec random_group_key() :: group_key()
+  def random_group_key, do: :crypto.strong_rand_bytes(@key_bytes)
+
+  @doc """
+  Derive the pairwise key shared by two peers in a room/epoch. **Peer-side.**
+
+  `my_private` is the caller's X25519 private key; `peer_public` is the
+  other peer's public key. The result is identical on both sides and known to
+  neither the server nor any third peer.
+
+  Returns `{:ok, key}` or `{:error, reason}` — never raises on bad input.
+  """
+  @spec pairwise_key(
+          binary(),
+          binary(),
+          String.t(),
+          non_neg_integer(),
+          String.t(),
+          String.t()
+        ) :: {:ok, <<_::256>>} | {:error, term()}
+  def pairwise_key(my_private, peer_public, room_id, epoch, my_peer_id, peer_id) do
+    with :ok <- valid_key(my_private, :invalid_private_key),
+         :ok <- valid_public_key(peer_public),
+         :ok <- valid_ids(my_peer_id, peer_id),
+         {:ok, shared} <- agree(my_private, peer_public) do
+      salt = :crypto.hash(:sha256, ["pairwise|", room_id, "|", Integer.to_string(epoch)])
+
+      info =
+        @label_pairwise <>
+          "|" <> Enum.join(Enum.sort([my_peer_id, peer_id]), "|")
+
+      {:ok, hkdf(shared, salt, info)}
+    end
+  end
+
+  @doc """
+  Seal a room key for one peer. **Peer-side** (leader only).
+
+  AAD binds the blob to the room, the epoch and both identities, so a blob
+  cannot be replayed into another room, epoch or recipient.
+  """
+  @spec seal_group_key(
+          group_key(),
+          binary(),
+          String.t(),
+          non_neg_integer(),
+          String.t(),
+          String.t()
+        ) :: {:ok, sealed_key()} | {:error, term()}
+  def seal_group_key(group_key, pairwise, room_id, epoch, from_id, to_id) do
+    with :ok <- valid_key(group_key, :invalid_group_key),
+         :ok <- valid_key(pairwise, :invalid_pairwise_key),
+         :ok <- valid_ids(from_id, to_id) do
+      iv = :crypto.strong_rand_bytes(@iv_bytes)
+      aad = seal_aad(room_id, epoch, from_id, to_id)
+
+      {ciphertext, tag} =
+        :crypto.crypto_one_time_aead(:aes_256_gcm, pairwise, iv, group_key, aad, true)
+
+      {:ok, {ciphertext, iv, tag}}
+    end
+  end
+
+  @doc """
+  Open a sealed room key. **Peer-side.**
+
+  Returns `{:error, :open_failed}` for a wrong key, wrong epoch, wrong room or
+  tampered blob — the AAD check covers all four.
+  """
+  @spec open_group_key(
+          sealed_key(),
+          binary(),
+          String.t(),
+          non_neg_integer(),
+          String.t(),
+          String.t()
+        ) :: {:ok, group_key()} | {:error, term()}
+  def open_group_key({ciphertext, iv, tag}, pairwise, room_id, epoch, from_id, to_id)
+      when is_binary(ciphertext) and is_binary(iv) and is_binary(tag) do
+    with :ok <- valid_key(pairwise, :invalid_pairwise_key),
+         true <- byte_size(iv) == @iv_bytes and byte_size(tag) == @tag_bytes,
+         aad = seal_aad(room_id, epoch, from_id, to_id),
+         plaintext when is_binary(plaintext) <-
+           :crypto.crypto_one_time_aead(:aes_256_gcm, pairwise, iv, ciphertext, aad, tag, false),
+         true <- byte_size(plaintext) == @key_bytes do
+      {:ok, plaintext}
+    else
+      _ -> {:error, :open_failed}
+    end
+  end
+
+  def open_group_key(blob, _pairwise, _room, _epoch, _from, _to) when is_binary(blob),
+    do: {:error, :malformed_sealed_key}
+
+  def open_group_key(_, _, _, _, _, _), do: {:error, :malformed_sealed_key}
+
+  @doc """
+  Encode a sealed key as the single binary that travels over the wire.
+
+  Layout: `iv (12) || tag (16) || ciphertext (32)`.
+  """
+  @spec encode_sealed(sealed_key()) :: binary()
+  def encode_sealed({ciphertext, iv, tag}), do: iv <> tag <> ciphertext
+
+  @doc """
+  Decode the wire form produced by `encode_sealed/1`.
+  """
+  @spec decode_sealed(binary()) :: {:ok, sealed_key()} | {:error, :malformed_sealed_key}
+  def decode_sealed(<<iv::binary-size(@iv_bytes), tag::binary-size(@tag_bytes), ct::binary>>)
+      when byte_size(ct) > 0,
+      do: {:ok, {ct, iv, tag}}
+
+  def decode_sealed(_), do: {:error, :malformed_sealed_key}
+
+  @doc """
+  Derive the per-frame key from the room key. **Peer-side.**
+
+  `counter` is the peer's monotonic frame counter; it is also the AAD field
+  that makes replay detectable. Epoch is part of the salt so a key from one
+  epoch can never decrypt another's frames.
+  """
+  @spec derive_frame_key(group_key(), non_neg_integer(), non_neg_integer()) :: group_key()
+  def derive_frame_key(group_key, epoch, counter)
+      when is_binary(group_key) and byte_size(group_key) == @key_bytes and
+             is_integer(epoch) and is_integer(counter) do
+    salt = :crypto.hash(:sha256, ["frame|", Integer.to_string(epoch)])
+    hkdf(group_key, salt, @label_frame <> "|" <> Integer.to_string(counter))
+  end
+
+  @doc """
+  The AAD that binds a sealed room key to its context. Public so clients can
+  reproduce it exactly.
+  """
+  @spec seal_aad(String.t(), non_neg_integer(), String.t(), String.t()) :: binary()
+  def seal_aad(room_id, epoch, from_id, to_id) do
+    Enum.join([@label_group, room_id, Integer.to_string(epoch), from_id, to_id], "|")
+  end
+
+  # ── GenServer ──
 
   @impl true
   def init(_opts) do
-    state = %{
-      # room_id => room_key_state
-      rooms: %{}
-    }
-
-    Logger.info("[E2EE] Key manager started")
-    {:ok, state}
+    Logger.info("[E2EE] Key coordinator started — server holds no room keys")
+    {:ok, %{rooms: %{}}}
   end
 
   @impl true
@@ -248,27 +405,19 @@ defmodule Burble.Media.E2EE do
     if Map.has_key?(state.rooms, room_id) do
       {:reply, {:error, :room_exists}, state}
     else
-      # Generate X25519 keypair for this room's key exchange.
-      {public_key, private_key} = generate_x25519_keypair()
-
-      # Derive initial frame key from random entropy.
-      initial_secret = :crypto.strong_rand_bytes(32)
-      initial_salt = :crypto.strong_rand_bytes(32)
-      frame_key = derive_frame_key(initial_secret, initial_salt)
-
-      room_state = %{
+      room = %{
         room_id: room_id,
-        server_keypair: {public_key, private_key},
-        current_frame_key: frame_key,
-        key_epoch: 0,
+        epoch: 0,
         peers: %{},
-        created_at: DateTime.utc_now()
+        sealed: %{},
+        created_at: DateTime.utc_now(),
+        rotated_at: nil
       }
 
-      new_rooms = Map.put(state.rooms, room_id, room_state)
+      broadcast_lifecycle({:e2ee_room_init, %{room_id: room_id}})
+      Logger.info("[E2EE] Room registered: #{room_id} (epoch 0, no key material)")
 
-      Logger.info("[E2EE] Room initialised: #{room_id} (epoch 0)")
-      {:reply, {:ok, public_key}, %{state | rooms: new_rooms}}
+      {:reply, {:ok, %{epoch: 0}}, put_in(state, [:rooms, room_id], room)}
     end
   end
 
@@ -278,189 +427,130 @@ defmodule Burble.Media.E2EE do
       {nil, _} ->
         {:reply, {:error, :no_room}, state}
 
-      {_room_state, remaining} ->
-        # Key material is garbage-collected; Erlang/BEAM does not
-        # support secure erasure, but the references are dropped.
-        Logger.info("[E2EE] Room destroyed: #{room_id}")
+      {_room, remaining} ->
+        # Nothing secret is stored, so there is nothing to erase — but say so
+        # plainly rather than implying a zeroing step that does not exist.
+        broadcast_lifecycle({:e2ee_room_destroy, %{room_id: room_id}})
+        Logger.info("[E2EE] Room deregistered: #{room_id}")
         {:reply, :ok, %{state | rooms: remaining}}
     end
   end
 
   @impl true
-  def handle_call({:register_peer_key, room_id, peer_id, peer_public_key}, _from, state) do
-    case Map.get(state.rooms, room_id) do
-      nil ->
-        {:reply, {:error, :no_room}, state}
+  def handle_call({:register_peer_key, room_id, peer_id, public_key}, _from, state) do
+    with {:ok, room} <- fetch_room(state, room_id),
+         :ok <- valid_public_key(public_key),
+         :ok <- valid_peer_id(peer_id),
+         :ok <- check_capacity(room) do
+      existing = Map.get(room.peers, peer_id)
 
-      room_state ->
-        {server_public, server_private} = room_state.server_keypair
+      cond do
+        existing && existing.public_key == public_key ->
+          # Re-registration (e.g. a reconnect) — nothing changes.
+          {:reply, {:ok, %{epoch: room.epoch, peer_count: map_size(room.peers)}}, state}
 
-        # The peer key arrives from the network, so validate it before handing it
-        # to :crypto. A value that is not 32 bytes makes compute_key raise, which
-        # would crash this GenServer — taking every room's key state with it. A
-        # low-order point yields an all-zero secret (RFC 7748 §6.1); reject that
-        # too. Previously neither check existed.
-        with :ok <- validate_peer_public_key(peer_public_key),
-             {:ok, shared_secret} <-
-               compute_x25519_shared_secret(server_private, peer_public_key) do
-          peer_state = %{
-            peer_id: peer_id,
-            public_key: peer_public_key,
-            shared_secret: shared_secret,
-            frame_counter: 0
-          }
+        true ->
+          peers =
+            Map.put(room.peers, peer_id, %{public_key: public_key, joined_at: DateTime.utc_now()})
 
-          updated_peers = Map.put(room_state.peers, peer_id, peer_state)
-          updated_room = %{room_state | peers: updated_peers}
+          room = %{room | peers: peers}
+          room = maybe_rotate(room, reason: :membership_change)
+          broadcast_lifecycle({:e2ee_room_init, %{room_id: room_id}})
 
-          # Rotate key on new participant join (if not the first peer).
-          {final_room, new_epoch} =
-            if map_size(room_state.peers) > 0 do
-              rotate_room_key(updated_room)
-            else
-              {updated_room, updated_room.key_epoch}
-            end
+          Logger.info(
+            "[E2EE] Peer #{peer_id} registered in #{room_id} " <>
+              "(epoch #{room.epoch}, peers #{map_size(peers)})"
+          )
 
-          new_rooms = Map.put(state.rooms, room_id, final_room)
-
-          Logger.info("[E2EE] Peer #{peer_id} registered in #{room_id} (epoch #{new_epoch})")
-
-          {:reply, {:ok, server_public}, %{state | rooms: new_rooms}}
-        else
-          {:error, reason} ->
-            Logger.warning(
-              "[E2EE] Rejected peer key for #{peer_id} in #{room_id}: #{inspect(reason)}"
-            )
-
-            {:reply, {:error, reason}, state}
-        end
+          {:reply, {:ok, %{epoch: room.epoch, peer_count: map_size(peers)}},
+           put_in(state, [:rooms, room_id], room)}
+      end
+    else
+      {:error, reason} ->
+        Logger.warning("[E2EE] Rejected peer key for #{room_id}: #{inspect(reason)}")
+        {:reply, {:error, reason}, state}
     end
   end
 
   @impl true
   def handle_call({:remove_peer, room_id, peer_id}, _from, state) do
-    case Map.get(state.rooms, room_id) do
-      nil ->
-        {:reply, {:error, :no_room}, state}
+    case fetch_room(state, room_id) do
+      {:error, reason} ->
+        {:reply, {:error, reason}, state}
 
-      room_state ->
-        updated_peers = Map.delete(room_state.peers, peer_id)
-        updated_room = %{room_state | peers: updated_peers}
-
-        # Rotate key so the departing peer cannot decrypt future frames.
-        {final_room, new_epoch} =
-          if map_size(updated_peers) > 0 do
-            rotate_room_key(updated_room)
-          else
-            {updated_room, updated_room.key_epoch}
-          end
-
-        new_rooms = Map.put(state.rooms, room_id, final_room)
+      {:ok, room} ->
+        peers = Map.delete(room.peers, peer_id)
+        room = %{room | peers: peers} |> maybe_rotate(reason: :peer_left, force: true)
+        broadcast_lifecycle({:e2ee_room_init, %{room_id: room_id}})
 
         Logger.info(
-          "[E2EE] Peer #{peer_id} removed from #{room_id} — key rotated (epoch #{new_epoch})"
+          "[E2EE] Peer #{peer_id} removed from #{room_id} — epoch #{room.epoch}, " <>
+            "#{map_size(peers)} peer(s) remain"
         )
 
-        # Broadcast key rotation to remaining peers via PubSub.
-        broadcast_key_rotation(room_id, new_epoch)
-
-        {:reply, {:ok, new_epoch}, %{state | rooms: new_rooms}}
+        {:reply, {:ok, room.epoch}, put_in(state, [:rooms, room_id], room)}
     end
   end
 
   @impl true
-  def handle_call({:get_frame_key, room_id}, _from, state) do
-    case Map.get(state.rooms, room_id) do
-      nil ->
-        {:reply, {:error, :no_room}, state}
+  def handle_call({:request_rotation, room_id}, _from, state) do
+    case fetch_room(state, room_id) do
+      {:error, reason} ->
+        {:reply, {:error, reason}, state}
 
-      room_state ->
-        {:reply, {:ok, {room_state.current_frame_key, room_state.key_epoch}}, state}
+      {:ok, room} ->
+        room = rotate(room, :requested)
+        broadcast_lifecycle({:e2ee_room_init, %{room_id: room_id}})
+        {:reply, {:ok, room.epoch}, put_in(state, [:rooms, room_id], room)}
     end
   end
 
   @impl true
-  def handle_call({:ratchet_key, room_id}, _from, state) do
+  def handle_call({:key_set, room_id}, _from, state) do
     case Map.get(state.rooms, room_id) do
       nil ->
         {:reply, {:error, :no_room}, state}
 
-      room_state ->
-        # Derive next key from current key (one-way ratchet).
-        new_key = ratchet_frame_key(room_state.current_frame_key)
-        new_epoch = room_state.key_epoch + 1
-
-        updated_room = %{room_state | current_frame_key: new_key, key_epoch: new_epoch}
-        new_rooms = Map.put(state.rooms, room_id, updated_room)
-
-        Logger.debug("[E2EE] Key ratcheted for #{room_id} (epoch #{new_epoch})")
-
-        # Broadcast epoch change so clients ratchet in sync.
-        broadcast_key_rotation(room_id, new_epoch)
-
-        {:reply, {:ok, new_epoch}, %{state | rooms: new_rooms}}
+      room ->
+        peers = Map.new(room.peers, fn {id, %{public_key: key}} -> {id, key} end)
+        {:reply, {:ok, %{room_id: room_id, epoch: room.epoch, peers: peers}}, state}
     end
   end
 
   @impl true
-  def handle_call({:encrypt_frame, room_id, peer_id, plaintext}, _from, state) do
-    case Map.get(state.rooms, room_id) do
-      nil ->
-        {:reply, {:error, :no_room}, state}
-
-      room_state ->
-        # Build AAD: room_id + peer_id + frame_counter (replay protection).
-        peer_state = Map.get(room_state.peers, peer_id, %{frame_counter: 0})
-        frame_counter = peer_state.frame_counter
-        aad = build_aad(room_id, peer_id, frame_counter)
-
-        case SmartBackend.crypto_encrypt_frame(plaintext, room_state.current_frame_key, aad) do
-          {:ok, {ciphertext, iv, tag}} ->
-            # Increment frame counter for this peer.
-            updated_peer = %{peer_state | frame_counter: frame_counter + 1}
-            updated_peers = Map.put(room_state.peers, peer_id, updated_peer)
-            updated_room = %{room_state | peers: updated_peers}
-            new_rooms = Map.put(state.rooms, room_id, updated_room)
-
-            {:reply, {:ok, {ciphertext, iv, tag}}, %{state | rooms: new_rooms}}
-
-          {:error, reason} ->
-            {:reply, {:error, reason}, state}
-        end
+  def handle_call({:publish_sealed, room_id, peer_id, epoch, blob}, _from, state) do
+    with {:ok, room} <- fetch_room(state, room_id),
+         :ok <- valid_peer_id(peer_id),
+         true <- is_binary(blob) and byte_size(blob) > 0,
+         true <- byte_size(blob) <= @max_sealed_bytes,
+         true <- Map.has_key?(room.peers, peer_id),
+         :ok <- check_epoch(room, epoch) do
+      room = put_in(room, [:sealed, peer_id], %{epoch: epoch, blob: blob})
+      {:reply, :ok, put_in(state, [:rooms, room_id], room)}
+    else
+      false -> {:reply, {:error, :invalid_sealed_blob}, state}
+      {:error, reason} -> {:reply, {:error, reason}, state}
     end
   end
 
   @impl true
-  def handle_call({:decrypt_frame, room_id, peer_id, ciphertext, iv, tag}, _from, state) do
+  def handle_call({:sealed_for, room_id, peer_id}, _from, state) do
     case Map.get(state.rooms, room_id) do
       nil ->
         {:reply, {:error, :no_room}, state}
 
-      room_state ->
-        peer_state = Map.get(room_state.peers, peer_id, %{frame_counter: 0})
-        aad = build_aad(room_id, peer_id, peer_state.frame_counter)
+      room ->
+        current = room.epoch
 
-        result =
-          SmartBackend.crypto_decrypt_frame(
-            ciphertext,
-            room_state.current_frame_key,
-            iv,
-            tag,
-            aad
-          )
+        case Map.get(room.sealed, peer_id) do
+          %{epoch: ^current, blob: blob} ->
+            {:reply, {:ok, %{epoch: current, blob: blob}}, state}
 
-        case result do
-          {:ok, plaintext} ->
-            # Increment frame counter for this peer.
-            updated_peer = %{peer_state | frame_counter: peer_state.frame_counter + 1}
-            updated_peers = Map.put(room_state.peers, peer_id, updated_peer)
-            updated_room = %{room_state | peers: updated_peers}
-            new_rooms = Map.put(state.rooms, room_id, updated_room)
+          %{epoch: _stale} ->
+            {:reply, {:error, :stale_epoch}, state}
 
-            {:reply, {:ok, plaintext}, %{state | rooms: new_rooms}}
-
-          {:error, reason} ->
-            {:reply, {:error, reason}, state}
+          nil ->
+            {:reply, {:error, :not_found}, state}
         end
     end
   end
@@ -471,42 +561,90 @@ defmodule Burble.Media.E2EE do
       nil ->
         {:reply, {:error, :no_room}, state}
 
-      room_state ->
-        status = %{
-          room_id: room_id,
-          e2ee_active: true,
-          peer_count: map_size(room_state.peers),
-          key_epoch: room_state.key_epoch,
-          created_at: room_state.created_at
-        }
-
-        {:reply, {:ok, status}, state}
+      room ->
+        {:reply,
+         {:ok,
+          %{
+            room_id: room_id,
+            epoch: room.epoch,
+            peers: map_size(room.peers),
+            sealed_peers: map_size(room.sealed),
+            # The point of the whole module, reported explicitly so an
+            # operator can see it rather than infer it.
+            key_custody: :peers,
+            created_at: room.created_at,
+            rotated_at: room.rotated_at
+          }}, state}
     end
   end
 
-  # ── Private: Cryptographic primitives ──
+  @impl true
+  def handle_info(_msg, state), do: {:noreply, state}
 
-  # Generate an X25519 Diffie-Hellman keypair.
-  # Returns {public_key, private_key} where each is a 32-byte binary.
-  @doc false
-  defp generate_x25519_keypair do
-    {public, private} = :crypto.generate_key(:ecdh, :x25519)
-    {public, private}
+  # ── Rotation ──
+
+  # Bump the epoch and invalidate every sealed blob. Peers notice the epoch
+  # change (via the lifecycle broadcast) and re-derive with fresh keys.
+  defp rotate(room, reason) do
+    if map_size(room.sealed) > 0 do
+      Logger.info(
+        "[E2EE] Rotating #{room.room_id} (#{reason}): epoch #{room.epoch} -> #{room.epoch + 1}"
+      )
+    end
+
+    %{room | epoch: room.epoch + 1, sealed: %{}, rotated_at: DateTime.utc_now()}
   end
 
-  # A peer's X25519 public key must be exactly 32 bytes.
-  @doc false
-  defp validate_peer_public_key(key) when is_binary(key) and byte_size(key) == 32, do: :ok
-  defp validate_peer_public_key(_), do: {:error, :invalid_public_key}
+  # Membership changes only require a new epoch once a key has actually been
+  # distributed; before that, peers are still gathering public keys for the
+  # first epoch and bumping would just churn.
+  defp maybe_rotate(room, opts) do
+    force = Keyword.get(opts, :force, false)
+    reason = Keyword.get(opts, :reason, :unspecified)
 
-  # Compute the X25519 shared secret from our private key and the peer's public
-  # key. Returns {:ok, secret} or {:error, reason} — never raises, and rejects
-  # the all-zero secret produced by low-order points (RFC 7748 §6.1).
-  @doc false
-  defp compute_x25519_shared_secret(our_private, their_public) do
-    case :crypto.compute_key(:ecdh, their_public, our_private, :x25519) do
-      secret when is_binary(secret) and byte_size(secret) == 32 ->
-        if secret == :binary.copy(<<0>>, 32),
+    if force or map_size(room.sealed) > 0 do
+      rotate(room, reason)
+    else
+      room
+    end
+  end
+
+  # ── Validation helpers ──
+
+  defp fetch_room(state, room_id) do
+    case Map.get(state.rooms, room_id) do
+      nil -> {:error, :no_room}
+      room -> {:ok, room}
+    end
+  end
+
+  defp check_capacity(room) do
+    if map_size(room.peers) >= @max_peers, do: {:error, :room_full}, else: :ok
+  end
+
+  defp check_epoch(room, epoch) do
+    if epoch == room.epoch, do: :ok, else: {:error, :stale_epoch}
+  end
+
+  defp valid_key(key, _error) when is_binary(key) and byte_size(key) == @key_bytes, do: :ok
+  defp valid_key(_, error), do: {:error, error}
+
+  defp valid_public_key(key) when is_binary(key) and byte_size(key) == @key_bytes, do: :ok
+  defp valid_public_key(_), do: {:error, :invalid_public_key}
+
+  defp valid_peer_id(id) when is_binary(id) and byte_size(id) in 1..128, do: :ok
+  defp valid_peer_id(_), do: {:error, :invalid_peer_id}
+
+  defp valid_ids(a, b) do
+    with :ok <- valid_peer_id(a), do: valid_peer_id(b)
+  end
+
+  # X25519 agreement that returns a tagged tuple instead of raising, and
+  # rejects the all-zero secret produced by low-order points (RFC 7748 §6.1).
+  defp agree(my_private, peer_public) do
+    case :crypto.compute_key(:ecdh, peer_public, my_private, :x25519) do
+      secret when is_binary(secret) and byte_size(secret) == @key_bytes ->
+        if secret == :binary.copy(<<0>>, @key_bytes),
           do: {:error, :degenerate_shared_secret},
           else: {:ok, secret}
 
@@ -517,54 +655,17 @@ defmodule Burble.Media.E2EE do
     _ -> {:error, :invalid_public_key}
   end
 
-  # Derive a 32-byte AES-256-GCM frame key from a shared secret using HKDF-SHA256.
-  # Delegates to the coprocessor backend for consistency with the rest of the pipeline.
-  @doc false
-  defp derive_frame_key(shared_secret, salt) do
-    SmartBackend.crypto_derive_frame_key(shared_secret, salt, @hkdf_info)
+  # HKDF-SHA256 (RFC 5869), extract + one expand block. Local rather than via
+  # the coprocessor so the peer-side helpers have no runtime dependency.
+  defp hkdf(ikm, salt, info) do
+    prk = :crypto.mac(:hmac, :sha256, salt, ikm)
+    :crypto.mac(:hmac, :sha256, prk, info <> <<1::8>>)
   end
 
-  # Ratchet the frame key forward: derive a new key from the current one.
-  # This is a one-way function — knowing the new key does not reveal the old key.
-  # Uses HKDF with a distinct info string to prevent domain separation issues.
-  @doc false
-  defp ratchet_frame_key(current_key) do
-    # Use the current key as both IKM and salt for the ratchet.
-    # The distinct @ratchet_info ensures this derivation is independent
-    # from the initial key derivation.
-    SmartBackend.crypto_derive_frame_key(current_key, current_key, @ratchet_info)
-  end
-
-  # Rotate the room key: generate fresh entropy and derive a new frame key.
-  # Called on participant join/leave to ensure key freshness.
-  # Returns {updated_room_state, new_epoch}.
-  @doc false
-  defp rotate_room_key(room_state) do
-    new_secret = :crypto.strong_rand_bytes(32)
-    new_salt = :crypto.strong_rand_bytes(32)
-    new_key = derive_frame_key(new_secret, new_salt)
-    new_epoch = room_state.key_epoch + 1
-
-    updated = %{room_state | current_frame_key: new_key, key_epoch: new_epoch}
-    {updated, new_epoch}
-  end
-
-  # Build AAD (Additional Authenticated Data) for AES-256-GCM.
-  # Includes room_id, peer_id, and frame counter to prevent replay attacks
-  # and cross-room key confusion.
-  @doc false
-  defp build_aad(room_id, peer_id, frame_counter) do
-    "burble:#{room_id}:#{peer_id}:#{frame_counter}"
-  end
-
-  # Broadcast a key rotation event to all connected peers via PubSub.
-  # Peers use this to ratchet their local key state in sync.
-  @doc false
-  defp broadcast_key_rotation(room_id, new_epoch) do
-    Phoenix.PubSub.broadcast(
-      Burble.PubSub,
-      "e2ee:#{room_id}",
-      {:key_rotated, %{room_id: room_id, epoch: new_epoch}}
-    )
+  defp broadcast_lifecycle(event) do
+    Phoenix.PubSub.broadcast(Burble.PubSub, @lifecycle_topic, event)
+  catch
+    # PubSub is absent in isolated unit tests; the broadcast is advisory.
+    _kind, _reason -> :ok
   end
 end

@@ -349,6 +349,17 @@ a decision, not a patch:
 server-mediated room is encrypted-in-transit-only or end-to-end, then align
 `Burble.Media.E2EE`, `README.adoc`, `EXPLAINME.adoc` and `Topology` with it.
 
+**Done, 2026-10-21 (round 2).** ADR-0016 written and the code aligned with it:
+`Burble.Media.E2EE` is now a coordinator that holds public keys, epochs and
+opaque blobs and has **no key-returning API**; the peer-side protocol
+(`pairwise_key/6`, `seal_group_key/6`, `open_group_key/6`, `derive_frame_key/3`)
+is implemented and unit-testable; rotation is an epoch bump that drops every
+sealed blob. `:e2ee_key` became `:pipeline_key` and is refused in `:e2ee` rooms;
+`Privacy.e2ee_config/1` and `setup/check` no longer report encryption that does
+not exist; `README.adoc` now states plainly that **no room is end-to-end
+encrypted today** and that the browser half is unwritten. See
+`docs/decisions/0016-peer-held-group-keys.adoc` §Gaps for what remains.
+
 ### MNT-17 · CORS is not runtime-configurable, by design of the current code · **MEDIUM**
 
 `config/runtime.exs` reads `BURBLE_CORS_ORIGINS` into `_cors_origins_env` and
@@ -628,3 +639,16 @@ verifications, before merge, are:
 cd server && mix compile --warnings-as-errors && mix format --check-formatted && mix test
 cd client/web && deno task res:build && deno task test
 ```
+
+---
+
+## Follow-up (round 2, 2026-10-21)
+
+`MNT-16` was implemented rather than re-documented; the design is in
+`docs/decisions/0016-peer-held-group-keys.adoc` and the status is stated in
+`README.adoc` under *Encryption: what is true today*.
+
+A survey of the hyperpolymath type-theory / reversibility repositories
+(`*-types`, `absolute-zero`, `januskey`), with concrete enhancement proposals
+for Burble, is in
+`docs/reports/design-enhancements-2026-10-21.md`.
