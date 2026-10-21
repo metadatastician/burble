@@ -5,9 +5,21 @@
 #
 # web-client-tests.yml — web-client test suite (Bun first, Deno retained)
 #
-# Runs the web-client tests at client/web/tests/ on every PR (10 suites as of
-# 2026-10-21: room names, relay rendezvous + CORS, signaling, WebRTC offer/
-# answer, AI bridge API + security + round-trip).
+# Bun is the estate's default runner as of 2026-10. The gating job below runs
+# the *whole* suite at client/web/tests/ — 12 files, 97 tests — including the
+# four suites that spawn helper servers (relay rendezvous, AI bridge API,
+# bridge security, bridge round-trip). Those used to be Deno-only because they
+# called `new Deno.Command("deno", …)`; they now go through `spawnServer()` in
+# tests/runner.js, which uses `Bun.spawn` under Bun and `Deno.Command` under
+# Deno. The servers themselves (signaling/relay.js,
+# client/web/burble-ai-bridge.js) go through signaling/runtime.js for the same
+# reason: one code path, both runtimes.
+#
+# The Deno job is kept, deliberately, as a compatibility check: runtime.js is
+# only correct if it works on both runtimes, and Deno Deploy is still a
+# supported home for the relay. It is advisory because a Deno failure means
+# "compatibility regressed", not "the product is broken".
+#
 # Tests exercise the compiled ReScript output (*.res.mjs) for now;
 # AffineScript-output parity is tracked by affinescript-canary.yml
 # and graduates to required-for-merge when STATE.a2ml Phase 5 closes.
@@ -21,11 +33,15 @@ on:
     branches: ['**']
     paths:
       - 'client/web/**'
+      - 'client/lib/**'
+      - 'signaling/**'
       - '.github/workflows/web-client-tests.yml'
   push:
     branches: [main, master]
     paths:
       - 'client/web/**'
+      - 'client/lib/**'
+      - 'signaling/**'
       - '.github/workflows/web-client-tests.yml'
   workflow_dispatch:
 permissions:
@@ -37,40 +53,63 @@ concurrency:
 env:
   DENO_VERSION: 'v2.x'
 jobs:
-  # Bun is the estate's default runner as of 2026-10. This job runs the E2EE
-  # suite — the newest code and the one place where a crypto regression is
-  # silent — and it gates.
-  #
-  # The rest of tests/ still runs under Deno in the job below because those
-  # suites spawn helper servers with `new Deno.Command("deno", …)`. Porting them
-  # is a mechanical change to that one call site per file, and it is tracked
-  # rather than pretended: a job that half-runs the suite under Bun and calls it
-  # green would be worse than saying which files are covered.
-  bun-e2ee:
-    name: Bun test — E2EE (client/web)
+  bun-tests:
+    name: Bun test — client/web (gating)
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7.0.1
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2.2.0
-      - name: Run the E2EE suite
+      # Two manifests, two installs: client/lib is the published package, so it
+      # carries its own pin of the ReScript toolchain plus `phoenix`; client/web
+      # consumes those artifacts. Both locks are committed, so `--frozen-lockfile`
+      # turns "someone edited package.json and forgot the lock" into a red job
+      # rather than a surprise at release time.
+      - name: Install dependencies (client/web)
         working-directory: client/web
-        run: bun test tests/e2ee_test.js tests/e2ee_session_test.js
-  deno-tests:
-    name: Deno test — client/web (advisory)
+        run: bun install --frozen-lockfile
+      - name: Install dependencies (client/lib)
+        working-directory: client/lib
+        run: bun install --frozen-lockfile
+      - name: Build ReScript (client/web)
+        working-directory: client/web
+        run: bun run res:build
+      # client/lib ships its compiled output in-tree (deno.json `publish.include`
+      # lists src/**/*.res.mjs), and its README tells contributors not to
+      # hand-edit it. Rebuild here and fail on drift, so "don't hand-edit"
+      # is enforced rather than merely requested.
+      - name: Verify client/lib artifacts match sources
+        working-directory: client/lib
+        run: |
+          bun run res:build
+          if ! git diff --exit-code --stat -- src; then
+            echo "::error title=Stale client/lib artifacts::src/**/*.res.mjs does not match src/**/*.res. Run 'bun run res:build' in client/lib and commit the result."
+            exit 1
+          fi
+      - name: Run the web-client suite
+        working-directory: client/web
+        run: bun test tests/
+      - name: Summarise
+        if: always()
+        run: |
+          echo "## Web client test run (Bun)" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "All suites under \`client/web/tests/\` run under Bun, including" >> "$GITHUB_STEP_SUMMARY"
+          echo "the four that spawn relay/bridge helper servers." >> "$GITHUB_STEP_SUMMARY"
+          echo "Tests exercise the compiled ReScript output (\`*.res.mjs\`). The" >> "$GITHUB_STEP_SUMMARY"
+          echo "parallel \`.affine\` source tree is exercised separately by" >> "$GITHUB_STEP_SUMMARY"
+          echo "\`affinescript-canary.yml\`; this workflow graduates to gating the" >> "$GITHUB_STEP_SUMMARY"
+          echo ".affine build once STATE.a2ml Phase 5 closes." >> "$GITHUB_STEP_SUMMARY"
+  # Compatibility, not precedence: Bun is the default everywhere, but the relay
+  # and the bridge still have to run on Deno (Deno Deploy, and anyone who has
+  # not migrated). Advisory, so a Deno-only regression is reported rather than
+  # blocking work on the Bun-first path.
+  deno-compat:
+    name: Deno compatibility — client/web (advisory)
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    # Advisory mode. The stale-import reason this originally carried no longer
-    # applies: signaling_test.js and voice_test.js import the committed
-    # client/lib/src/BurbleSignaling.res.mjs and BurbleVoice.res.mjs, which
-    # exist (the client/web-internal modules are Room.res / Signaling.res /
-    # WebRTC.res, and those tests import those). Remaining blockers to flipping
-    # this to gating are environmental rather than code: the Deno test task
-    # needs npm:phoenix and @rescript/core resolvable, so it must run after
-    # `deno task res:build` (it does) and with the repo's deno.json import map
-    # intact. Verify a green run, then drop continue-on-error. Tracked on #48.
     continue-on-error: true
     steps:
       - name: Checkout repository
@@ -79,19 +118,14 @@ jobs:
         uses: denoland/setup-deno@v2.0.5
         with:
           deno-version: ${{ env.DENO_VERSION }}
+      # `res:build:deno` is the Deno-native compile step; the default
+      # `res:build` task delegates to Bun (Bun-first estate).
       - name: Build ReScript (compiles .res to .res.mjs for tests)
         working-directory: client/web
-        run: deno task res:build
-      - name: Run web-client tests
+        run: deno task res:build:deno
+      # Run the Deno-native entry point directly rather than `deno task test`:
+      # the task delegates to Bun (Bun-first estate), and this job's whole point
+      # is to prove the *Deno* path still works.
+      - name: Run web-client tests on Deno
         working-directory: client/web
-        run: deno task test
-      - name: Summarise
-        if: always()
-        run: |
-          echo "## Web client test run" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "Tests live under \`client/web/tests/\` and exercise the compiled" >> "$GITHUB_STEP_SUMMARY"
-          echo "ReScript output (\`*.res.mjs\`). The parallel \`.affine\` source" >> "$GITHUB_STEP_SUMMARY"
-          echo "tree is exercised separately by \`affinescript-canary.yml\`;" >> "$GITHUB_STEP_SUMMARY"
-          echo "this workflow graduates to gating the .affine build once" >> "$GITHUB_STEP_SUMMARY"
-          echo "STATE.a2ml Phase 5 closes." >> "$GITHUB_STEP_SUMMARY"
+        run: deno task test:deno
