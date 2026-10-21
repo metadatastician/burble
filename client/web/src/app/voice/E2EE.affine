@@ -1,22 +1,40 @@
 // SPDX-License-Identifier: MPL-2.0
 //
-// E2EE.affine — DISABLED placeholder. The real implementation is e2ee.js.
+// E2EE.affine — DISABLED placeholder. The implementation is client/web/e2ee.js.
 //
-// See E2EE.res for the full account: this module claimed AES-256-GCM and
-// encrypted with a repeating-key XOR against the local private key, nothing
-// imported it, and its generated output does not even parse. It is kept as a
-// failing stub so the path sends the next reader to the real module.
+// This module used to claim AES-256-GCM with HKDF-SHA256 and encrypt each frame
+// by XORing it with the local private key, repeated. It derived its key from one
+// peer's private key with no agreement step, nothing imported it, and the build
+// artifact it produced referenced three identifiers that did not exist. It was
+// harmless by luck, not design.
 //
-// The real implementation is client/web/e2ee.js (WebCrypto X25519 +
-// HKDF-SHA256 + AES-256-GCM), pinned against the server's output by
-// tests/fixtures/e2ee-vectors.json. Frames are not yet encrypted on the call
-// path — the WebRTC Encoded Transform wiring is not written (ADR-0016 §Gaps).
+// It is kept as a failing stub so that a call site fails loudly instead of
+// transmitting plaintext, and so the next reader is sent to the real module.
+//
+//   real implementation   client/web/e2ee.js       (WebCrypto, 44 tests)
+//   key exchange          client/web/e2ee-session.js
+//   protocol              docs/decisions/0016-peer-held-group-keys.adoc
+//
+// Frames are NOT yet encrypted on the call path: nothing attaches the Encoded
+// Transform to a peer connection. ADR-0016 §Gaps tracks that, and the README
+// says so.
+//
+// NOTE ON SYNTAX: this file was previously written in ReScript. Renaming a
+// `.res` to `.affine` does not make it AffineScript — see the upstream
+// ON-RAMP.adoc, which documents exactly that anti-pattern. Everything below is
+// AffineScript, and `affinescript check` is the only thing that can say so.
 
-/// E2EE is not available from this module.
-type state = Disabled
+module E2EE;
 
-let disabledMessage = "[Burble:E2EE] client/web/src/app/voice/E2EE is a disabled placeholder; use client/web/e2ee.js"
+use prelude::{Result, Err};
 
-/// Always fails. Kept so any existing call site fails loudly rather than
-/// transmitting plaintext.
-let initialize = (): result<state, string> => raise(Failure(disabledMessage))
+// The message every disabled entry point returns.
+pub fn disabled_message() -> String {
+  "[Burble:E2EE] client/web/src/app/voice/E2EE is a disabled placeholder; use client/web/e2ee.js"
+}
+
+// Always fails. Kept so an existing call site breaks at the call rather than
+// quietly sending frames in the clear.
+pub fn initialize() -> Result<Bool, String> {
+  Err(disabled_message())
+}

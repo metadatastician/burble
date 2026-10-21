@@ -102,12 +102,16 @@ jobs:
           failed=0
           total=0
           tmp=$(mktemp)
+          list=$(mktemp)
           while IFS= read -r f; do
             total=$((total+1))
             if ! affinescript check "$f" >"$tmp" 2>&1; then
               echo "::warning file=$f::affinescript check failed"
               echo "--- $f ---"
               cat "$tmp"
+              # GitHub caps annotations at ten per check run, so the annotation
+              # stream cannot tell you how many files failed. Keep the full list.
+              echo "- \`$f\` — $(head -1 "$tmp" | tr -d '`' | cut -c1-160)" >> "$list"
               failed=$((failed+1))
             fi
           done < <(find . -name '*.affine' -not -path './node_modules/*' -not -path './_build/*' -not -path './.git/*')
@@ -125,10 +129,19 @@ jobs:
           if [ "$failed" -gt 0 ]; then
             {
               echo ""
-              echo "Canary advisory: $failed file(s) failed compilation. This does not block the merge — see annotations for details."
+              echo "Canary advisory: $failed of $total file(s) failed compilation. This does not block the merge."
+              echo ""
+              echo "Annotations are capped at ten, so this is the complete list:"
+              echo ""
+              cat "$list"
+              echo ""
+              echo "A file listed here is not AffineScript. Renaming a \`.res\` does not"
+              echo "make one — see upstream \`docs/ON-RAMP.adoc\`."
             } >> "$GITHUB_STEP_SUMMARY"
+            rm -f "$list"
             exit 1
           fi
+          rm -f "$list"
           {
             echo ""
             echo "All .affine files compiled cleanly."
