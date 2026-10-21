@@ -32,7 +32,6 @@ async function updateBadge() {
   }
 }
 
-/** Schedule bridge status polling every 30 seconds; Chrome API errors reject the promise. */
 async function schedule() {
   // create() with an existing name is a no-op, so this is safe on every wake.
   await chrome.alarms.create(ALARM_NAME, { periodInMinutes: POLL_MINUTES });

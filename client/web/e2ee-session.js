@@ -38,7 +38,7 @@ export const STATUS = Object.freeze({
   FAILED: "failed"
 });
 
-/** Return the lowest peer id in string sort order, or null for an empty set. */
+/** Return the lowest peer id using string sort order, or null for an empty set. */
 export function leaderOf(peerIds) {
   const ids = [...peerIds].sort();
   return ids.length === 0 ? null : ids[0];
@@ -58,9 +58,8 @@ export class E2EESession {
   #sealedSent = new Set();
 
   /**
-   * Create a session; channel replies must use the adapter shape below.
-   * Throws TypeError for empty/non-string ids or a missing channel.push function.
-   * Status changes invoke `onStatus` synchronously; callback errors propagate.
+   * Create local key-exchange state; callers must forward channel broadcasts
+   * to `onKeySet` and `onSealedKey`. Invalid ids or a missing `push` throw `TypeError`.
    *
    * @param {object} options
    * @param {string} options.roomId
@@ -92,7 +91,6 @@ export class E2EESession {
     return this.#localId;
   }
 
-  /** Last failure recorded in FAILED status; retained across clear() and restarts. */
   get lastError() {
     return this.#lastError;
   }
@@ -102,7 +100,6 @@ export class E2EESession {
     return this.#epochs.hasRoomKey();
   }
 
-  /** Copy of the peer-id to base64 public-key map. */
   get keySet() {
     return new Map(this.#keySet);
   }
@@ -117,7 +114,6 @@ export class E2EESession {
     this.#onStatus?.(status, detail);
   }
 
-  /** Return reply data; reject channel failures or replies whose `ok` is not true. */
   async #push(event, payload) {
     const reply = await this.#channel.push(event, payload);
     if (!reply || reply.ok !== true) {
@@ -130,8 +126,10 @@ export class E2EESession {
   /**
    * Join the key exchange: publish a public key, then fetch the room's set.
    *
-   * Generates a fresh keypair on each call; epoch broadcasts do not re-register it.
-   * Resolves to {status, epoch}. On crypto/channel failure, sets FAILED and rethrows.
+   * Generates a fresh keypair on each call; epoch broadcasts alone do not
+   * regenerate or re-register it. Resolves to the current status and epoch.
+   * Crypto and channel errors set FAILED, are retained in `lastError`, and
+   * are rethrown.
    */
   async start() {
     this.#setStatus(STATUS.REGISTERING);
@@ -154,8 +152,8 @@ export class E2EESession {
   }
 
   /**
-   * Fetch public keys and return onKeySet's {status, epoch} result.
-   * Call start() before leader distribution; channel and key-distribution errors propagate.
+   * Fetch and process the room's public keys after `start()` has begun.
+   * Returns the resulting status and epoch; channel and processing errors propagate.
    */
   async refreshKeySet() {
     const data = await this.#push("e2ee_key_set", {});
@@ -167,8 +165,9 @@ export class E2EESession {
    *
    * If the epoch moved, every cached key goes: the frame cryptors, the room
    * key, and the record of which peers we already sealed to.
-   * Retains the session keypair. Resolves to {status, epoch}; negative integer epochs and
-   * leader distribution errors reject the promise. Equal/older epochs still replace the key set.
+   * The local keypair is retained. Same or older epochs do not rewind the
+   * epoch, but their public key set still replaces the cached set.
+   * Returns the resulting status and epoch; leader distribution errors propagate.
    */
   async onKeySet({ epoch, public_keys }) {
     const moved = this.#adoptEpoch(epoch);
@@ -205,11 +204,11 @@ export class E2EESession {
   /**
    * Handle an `e2ee_sealed_key` broadcast.
    *
-   * Ignores other recipients, self/missing senders, stale epochs and unknown senders.
-   * Refreshes keys at most once for a future epoch or an unknown sender.
-   * Returns {status: READY, epoch}, {ignored, ...}, or {error: message}.
-   * Refresh failures are caught; decoding/decryption failures set AWAITING_KEY
-   * and return an error rather than rejecting. Accepts any known sender, not just the leader.
+   * Returns an ignored reason for other recipients, self/missing senders,
+   * stale epochs, or unresolved senders/epochs after at most one refresh.
+   * Refresh errors are caught. A known sender need not be the leader.
+   * Successful opening installs the room key and returns READY and the epoch;
+   * decoding or crypto errors return `{error: message}` and set AWAITING_KEY.
    */
   async onSealedKey({ from, to, epoch, blob }, { retried = false } = {}) {
     if (to && to !== this.#localId) return { ignored: "not-for-me" };
@@ -338,8 +337,9 @@ export class E2EESession {
   }
 
   /**
-   * Return a cryptor cached by remoteId; null permits an SFU receive path.
-   * Throws without a room key or for invalid FrameCryptor options.
+   * Return a cached cryptor, or create one using `remoteId` as the sender pin
+   * (null for SFU reception). `onError` is used only on creation.
+   * Throws if no room key is held; constructor validation errors propagate.
    */
   cryptorFor(remoteId, { onError = null } = {}) {
     if (!this.hasRoomKey) throw new Error("no room key for this epoch yet");
@@ -360,19 +360,23 @@ export class E2EESession {
   }
 
   /**
-   * Attach media transforms for role "sender", "receiver" or "both" (default).
+   * Attach media transforms to this connection.
    *
    * Returns the attachment result. `ok: false` means the media on this
    * connection is NOT end-to-end encrypted and the caller must not describe it
    * as if it were.
-   * Throws without a room key or on synchronous attachment errors; does not close the connection.
+   * `role` selects current senders, receivers, or both. Missing room keys,
+   * argument validation, and synchronous attachment errors propagate.
    */
   attach(pc, remoteId, { role = "both", onError = null } = {}) {
     const cryptor = this.cryptorFor(remoteId, { onError });
     return E2EE.attachFrameCrypto(pc, { cryptor, role, onError });
   }
 
-  /** Drop keys and cached cryptors and set IDLE; retains the epoch and lastError. Call on leave/page hide. */
+  /**
+   * Clear local keys and caches and set IDLE; retain the epoch and last error.
+   * Call on leave or page hide.
+   */
   clear() {
     this.#keypair = null;
     this.#keySet.clear();

@@ -3,7 +3,7 @@
 # This workflow is managed by gh actions-lock.
 # Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
 #
-# web-client-tests.yml — Deno-based web-client test suite
+# web-client-tests.yml — web-client test suite (Bun first, Deno retained)
 #
 # Runs the web-client tests at client/web/tests/ on every PR (10 suites as of
 # 2026-10-21: room names, relay rendezvous + CORS, signaling, WebRTC offer/
@@ -37,6 +37,27 @@ concurrency:
 env:
   DENO_VERSION: 'v2.x'
 jobs:
+  # Bun is the estate's default runner as of 2026-10. This job runs the E2EE
+  # suite — the newest code and the one place where a crypto regression is
+  # silent — and it gates.
+  #
+  # The rest of tests/ still runs under Deno in the job below because those
+  # suites spawn helper servers with `new Deno.Command("deno", …)`. Porting them
+  # is a mechanical change to that one call site per file, and it is tracked
+  # rather than pretended: a job that half-runs the suite under Bun and calls it
+  # green would be worse than saying which files are covered.
+  bun-e2ee:
+    name: Bun test — E2EE (client/web)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7.0.1
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2.2.0
+      - name: Run the E2EE suite
+        working-directory: client/web
+        run: bun test tests/e2ee_test.js tests/e2ee_session_test.js
   deno-tests:
     name: Deno test — client/web (advisory)
     runs-on: ubuntu-latest

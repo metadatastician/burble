@@ -9,6 +9,7 @@
 // opaque SDP blobs.
 
 import assert from "node:assert";
+import { test } from "./runner.js";
 
 const PORT = 7601;
 const BASE = `http://127.0.0.1:${PORT}`;
@@ -31,7 +32,7 @@ function stopRelay(proc) {
   try { proc.kill("SIGTERM"); } catch (_) {}
 }
 
-Deno.test({
+test({
   name: "relay rendezvous: creator posts offer, joiner fetches it and answers, creator fetches answer",
   async fn() {
     const relay = await startRelay();
@@ -67,7 +68,7 @@ Deno.test({
   sanitizeOps: false,
 });
 
-Deno.test({
+test({
   name: "relay hardening: an oversized PUT is rejected with 413",
   async fn() {
     const relay = await startRelay({ RELAY_MAX_BODY: "1024" });
@@ -85,7 +86,7 @@ Deno.test({
   sanitizeOps: false,
 });
 
-Deno.test({
+test({
   name: "relay hardening: new rooms are refused once the room ceiling is reached",
   async fn() {
     const relay = await startRelay({ RELAY_MAX_ROOMS: "2" });
@@ -110,7 +111,7 @@ Deno.test({
   sanitizeOps: false,
 });
 
-Deno.test({
+test({
   name: "relay: health endpoint reports ok and room count",
   async fn() {
     const relay = await startRelay();
@@ -129,7 +130,7 @@ Deno.test({
   sanitizeOps: false,
 });
 
-Deno.test({
+test({
   name: "relay: CORS header is only emitted for an allowed origin",
   async fn() {
     const relay = await startRelay({ ALLOWED_ORIGINS: "https://burble.example.com" });

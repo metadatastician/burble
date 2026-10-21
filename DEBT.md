@@ -364,6 +364,55 @@ proof are accepted and recorded as `proven: false`, so turning the switch on
 cannot silently break an older client — it fails loudly. No shipped client signs
 yet.
 
+### CODE-1c — the `.affine` tree is ReScript with a different extension · HIGH · OPEN 2026-10-21
+
+Every `.res` file has an `.affine` sibling (34/34), which looks like a migration
+in progress. It is not: the `.affine` files are ReScript source with the
+extension changed, and ReScript does not parse as AffineScript. Upstream
+`docs/ON-RAMP.adoc` names this exact anti-pattern —
+
+> `.res` written in ReScript is not a face, and renaming `Foo.res` to
+> `Foo.affine` does not make it one — it produces a file that fails to parse.
+
+Measured on `affinescript-canary.yml` for this branch: **35 of 37 `.affine` files
+report `affinescript check failed`**. The number had never been visible — GitHub
+caps annotations at ten per check run, and the job log archive is not always
+reachable, so the canary reported a handful of files and hid the rest. It now
+emits the whole result as one annotation.
+
+Two things hid it:
+
+1. **The canary is advisory.** `continue-on-error: true` on the compile step, and
+   the step `exit 1`s internally, so the job shows green while reporting
+   failures. A green canary has never meant "these compile".
+2. **`client/web/MIGRATION.md` said the compiler was unavailable** — true when
+   written (2026-04-21), false since a pinned CLI landed. The "design stub"
+   convention it licensed is what produced the unparseable files.
+
+Corrected in this branch: `MIGRATION.md` states that the compiler exists, that
+`.affine` must be valid AffineScript, and that it is not on the app's build path;
+`src/app/voice/E2EE.affine` (written here, and wrong in exactly this way) is
+rewritten as real AffineScript and **verified by the canary** — it is one of the
+two files that compile; the canary now emits the complete failure list as one
+annotation instead of being capped at ten.
+
+The rewrite is also the worked answer for the other 35: the failure was not the
+function bodies but `use prelude::{Result, Err};`. A consumer file in this repo
+cannot resolve the upstream `prelude` module, so it must use only builtins and
+declare host functions with `pub extern fn` (the shape of upstream's CI-gated
+consumer example). Copying `stdlib/*.affine` verbatim does not work from here.
+
+**Still open:** the other `.affine` files are unparseable, and the canary is still
+advisory. Flipping it to gating turns the build red for files nobody has touched;
+that needs the migration done or the files deleted, which is a decision rather
+than a fix.
+
+**Blocker for the E2EE module specifically:** the client crypto is promise-based,
+AffineScript's `extern fn` is synchronous on the wasm target, and the Bun-ESM
+target's async externs are partial (upstream #122/#103). The pure parts — frame
+header, replay window, leader election, AAD, epoch bookkeeping — are portable
+now; the WebCrypto boundary is not.
+
 ### CODE-1a — the client's E2EE module was not encryption · RESOLVED 2026-10-21
 
 `client/web/src/app/voice/E2EE.res` opened with *"Algorithm: AES-256-GCM / Key

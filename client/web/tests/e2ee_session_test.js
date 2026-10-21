@@ -17,6 +17,7 @@ import assert from "node:assert";
 
 import * as E2EE from "../e2ee.js";
 import { E2EESession, STATUS, leaderOf } from "../e2ee-session.js";
+import { test } from "./runner.js";
 
 // ---------------------------------------------------------------------------
 // A faithful-enough `RoomChannel`
@@ -130,7 +131,7 @@ async function join(room, peerId) {
 // Leadership
 // ---------------------------------------------------------------------------
 
-Deno.test("leaderOf is the lowest peer id, independent of insertion order", () => {
+test("leaderOf is the lowest peer id, independent of insertion order", () => {
   assert.strictEqual(leaderOf(["zoe", "alice", "bob"]), "alice");
   assert.strictEqual(leaderOf(["bob", "zoe"]), "bob");
   assert.strictEqual(leaderOf([]), null);
@@ -140,7 +141,7 @@ Deno.test("leaderOf is the lowest peer id, independent of insertion order", () =
 // Two peers
 // ---------------------------------------------------------------------------
 
-Deno.test("two peers end up with the same room key, made by the leader", async () => {
+test("two peers end up with the same room key, made by the leader", async () => {
   const room = new FakeRoom();
   const { session: alice } = await join(room, "alice");
   const { session: bob } = await join(room, "bob");
@@ -162,7 +163,7 @@ Deno.test("two peers end up with the same room key, made by the leader", async (
   assert.deepStrictEqual(await alice.cryptorFor("bob").open(back), new Uint8Array([5, 6]));
 });
 
-Deno.test("the server only ever holds public values", async () => {
+test("the server only ever holds public values", async () => {
   const room = new FakeRoom();
   await join(room, "alice");
   await join(room, "bob");
@@ -177,7 +178,7 @@ Deno.test("the server only ever holds public values", async () => {
   }
 });
 
-Deno.test("a solo peer waits rather than inventing a room key", async () => {
+test("a solo peer waits rather than inventing a room key", async () => {
   const room = new FakeRoom();
   const { session } = await join(room, "alice");
 
@@ -189,7 +190,7 @@ Deno.test("a solo peer waits rather than inventing a room key", async () => {
 // Membership changes
 // ---------------------------------------------------------------------------
 
-Deno.test("a third peer bumps the epoch and the leader redistributes", async () => {
+test("a third peer bumps the epoch and the leader redistributes", async () => {
   const room = new FakeRoom();
   const { session: alice } = await join(room, "alice");
   const { session: bob } = await join(room, "bob");
@@ -210,7 +211,7 @@ Deno.test("a third peer bumps the epoch and the leader redistributes", async () 
   assert.deepStrictEqual(await alice.cryptorFor("carol").open(wire), new Uint8Array([9]));
 });
 
-Deno.test("a blob for another peer is ignored, not attempted", async () => {
+test("a blob for another peer is ignored, not attempted", async () => {
   const room = new FakeRoom();
   const { session: alice } = await join(room, "alice");
   await join(room, "bob");
@@ -225,7 +226,7 @@ Deno.test("a blob for another peer is ignored, not attempted", async () => {
   assert.deepStrictEqual(result, { ignored: "not-for-me" });
 });
 
-Deno.test("a blob from a departed epoch is dropped", async () => {
+test("a blob from a departed epoch is dropped", async () => {
   const room = new FakeRoom();
   const { session: alice } = await join(room, "alice");
   await join(room, "bob");
@@ -244,7 +245,7 @@ Deno.test("a blob from a departed epoch is dropped", async () => {
 // Failure handling
 // ---------------------------------------------------------------------------
 
-Deno.test("a refused registration surfaces as a failed session, not a hang", async () => {
+test("a refused registration surfaces as a failed session, not a hang", async () => {
   const room = new FakeRoom();
   const channel = {
     push: async (event) =>
@@ -260,14 +261,14 @@ Deno.test("a refused registration surfaces as a failed session, not a hang", asy
   assert.match(session.lastError.message, /invalid_public_key/);
 });
 
-Deno.test("cryptorFor refuses to hand out a cryptor before there is a key", async () => {
+test("cryptorFor refuses to hand out a cryptor before there is a key", async () => {
   const room = new FakeRoom();
   const { session } = await join(room, "alice");
 
   assert.throws(() => session.cryptorFor("bob"), /no room key/);
 });
 
-Deno.test("attach reports honestly that encoded transforms are unavailable here", async () => {
+test("attach reports honestly that encoded transforms are unavailable here", async () => {
   const room = new FakeRoom();
   await join(room, "alice");
   const { session: bob } = await join(room, "bob");
@@ -279,7 +280,7 @@ Deno.test("attach reports honestly that encoded transforms are unavailable here"
   assert.match(result.results[0].reason, /encoded-transform-unavailable/);
 });
 
-Deno.test("clear drops the room key and every cached cryptor", async () => {
+test("clear drops the room key and every cached cryptor", async () => {
   const room = new FakeRoom();
   const { session: alice } = await join(room, "alice");
   await join(room, "bob");

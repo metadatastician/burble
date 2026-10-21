@@ -9,6 +9,7 @@
 // Closes part of #48 acceptance bullet 1 (media negotiation happy-path).
 
 import assert from "node:assert";
+import { test } from "./runner.js";
 
 // Stub RTCPeerConnection globally before importing WebRTC.res.mjs so the
 // module's `new RTCPeerConnection(...)` resolves to the stub.
@@ -68,7 +69,7 @@ const WebRTC = await import("../src/WebRTC.res.mjs");
 // createPC + default ICE servers
 // ---------------------------------------------------------------------------
 
-Deno.test("WebRTC.createPC instantiates an RTCPeerConnection with default STUN servers", () => {
+test("WebRTC.createPC instantiates an RTCPeerConnection with default STUN servers", () => {
   stubInstances.length = 0;
   const pc = WebRTC.createPC();
   assert.ok(pc instanceof StubRTCPeerConnection, "createPC must return a peer connection");
@@ -85,7 +86,7 @@ Deno.test("WebRTC.createPC instantiates an RTCPeerConnection with default STUN s
 // Offer/answer happy-path (the media-negotiation lifecycle)
 // ---------------------------------------------------------------------------
 
-Deno.test("WebRTC happy-path: createOffer → setLocalDescription → setRemoteDescription (answer)", async () => {
+test("WebRTC happy-path: createOffer → setLocalDescription → setRemoteDescription (answer)", async () => {
   stubInstances.length = 0;
   const pc = WebRTC.createPC();
 
@@ -102,7 +103,7 @@ Deno.test("WebRTC happy-path: createOffer → setLocalDescription → setRemoteD
   assert.deepStrictEqual(pc.remoteDescription, remoteAnswer, "remote description must round-trip");
 });
 
-Deno.test("WebRTC callee-side happy-path: receive offer → createAnswer → setLocalDescription", async () => {
+test("WebRTC callee-side happy-path: receive offer → createAnswer → setLocalDescription", async () => {
   stubInstances.length = 0;
   const pc = WebRTC.createPC();
 
@@ -121,7 +122,7 @@ Deno.test("WebRTC callee-side happy-path: receive offer → createAnswer → set
 // waitForIceGathering — happy path (already complete)
 // ---------------------------------------------------------------------------
 
-Deno.test("WebRTC.waitForIceGathering resolves immediately when state is 'complete'", async () => {
+test("WebRTC.waitForIceGathering resolves immediately when state is 'complete'", async () => {
   stubInstances.length = 0;
   const pc = WebRTC.createPC();
   // Set the stub state directly to mimic immediate-complete.
@@ -132,7 +133,7 @@ Deno.test("WebRTC.waitForIceGathering resolves immediately when state is 'comple
   assert.ok(elapsed < 50, `should resolve immediately, took ${elapsed.toFixed(2)}ms`);
 });
 
-Deno.test("WebRTC.waitForIceGathering resolves when state transitions to 'complete'", async () => {
+test("WebRTC.waitForIceGathering resolves when state transitions to 'complete'", async () => {
   stubInstances.length = 0;
   const pc = WebRTC.createPC();
   pc.iceGatheringState = "gathering";
@@ -153,7 +154,7 @@ Deno.test("WebRTC.waitForIceGathering resolves when state transitions to 'comple
 // Data-channel + add-track sanity (the surfaces media negotiation depends on)
 // ---------------------------------------------------------------------------
 
-Deno.test("RTCPeerConnection.createDataChannel records the channel on the peer", () => {
+test("RTCPeerConnection.createDataChannel records the channel on the peer", () => {
   stubInstances.length = 0;
   const pc = WebRTC.createPC();
   const dc = pc.createDataChannel("control", {});
@@ -161,7 +162,7 @@ Deno.test("RTCPeerConnection.createDataChannel records the channel on the peer",
   assert.strictEqual(pc._dataChannels.length, 1);
 });
 
-Deno.test("RTCPeerConnection.addTrack is callable without throw", () => {
+test("RTCPeerConnection.addTrack is callable without throw", () => {
   stubInstances.length = 0;
   const pc = WebRTC.createPC();
   // Track + stream are opaque types in ReScript; pass plain objects.

@@ -15,6 +15,7 @@
 // aren't mistaken for live ones.
 
 import assert from "node:assert";
+import { test } from "./runner.js";
 
 // Use non-default ports so this suite can run even if the user has a normal
 // bridge on 6474.
@@ -101,7 +102,7 @@ async function drainRecv(httpPort, timeoutMs = 3000) {
   throw new Error(`/recv on :${httpPort} drained nothing within ${timeoutMs}ms`);
 }
 
-Deno.test({
+test({
   name: "AI Bridge round-trip: POST /send on A reaches GET /recv on B",
   async fn() {
     const bridgeA = await startBridge(BRIDGE_A_HTTP);
@@ -151,7 +152,7 @@ Deno.test({
   sanitizeOps: false,
 });
 
-Deno.test({
+test({
   name: "AI Bridge round-trip: B → A (reverse direction)",
   async fn() {
     const bridgeA = await startBridge(BRIDGE_A_HTTP);
@@ -187,7 +188,7 @@ Deno.test({
   sanitizeOps: false,
 });
 
-Deno.test({
+test({
   name: "AI Bridge heartbeat: bridge sends ping, mock page's pong keeps socket alive",
   async fn() {
     const bridge = await startBridge(BRIDGE_A_HTTP);
@@ -228,7 +229,7 @@ Deno.test({
 // Multi-message ordering: 100 messages burst, verify all arrive in order
 // ---------------------------------------------------------------------------
 
-Deno.test({
+test({
   name: "AI Bridge ordering: 100-message burst A → B arrives in order, no drops",
   async fn() {
     const bridgeA = await startBridge(BRIDGE_A_HTTP);
@@ -282,7 +283,7 @@ Deno.test({
 // Reconnect-resume: drop bridge WS mid-session, verify queue survives
 // ---------------------------------------------------------------------------
 
-Deno.test({
+test({
   name: "AI Bridge reconnect: messages queued during WS drop are preserved on reconnect",
   async fn() {
     const bridge = await startBridge(BRIDGE_A_HTTP);

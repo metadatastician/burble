@@ -154,10 +154,6 @@ defmodule Burble.Media.E2EE do
   @doc """
   Register a room. No key material is created — epoch 0 starts empty and waits
   for peers to publish their public keys.
-
-  Returns `{:ok, %{epoch: 0}}`, or `{:error, :room_exists}` for an existing room.
-  As with the other coordinator calls, an unavailable process or timeout exits
-  the caller rather than returning an error tuple.
   """
   @spec init_room(String.t()) :: {:ok, %{epoch: non_neg_integer()}} | {:error, term()}
   def init_room(room_id) when is_binary(room_id) do
@@ -173,11 +169,13 @@ defmodule Burble.Media.E2EE do
   @doc """
   Record a peer's X25519 public key.
 
-  Adding a peer or replacing its key bumps the epoch and drops sealed blobs
-  only if any blob exists. An identical key leaves the state unchanged.
+  If the room's key has already been distributed (any sealed blob exists) and
+  the peer set changed, the epoch is bumped and every sealed blob is dropped —
+  the new member cannot read the old key and the old key is no longer current.
 
-  Uses no key proof; returns `{:error, :missing_key_proof}` when
-  `:e2ee_require_key_proof` is enabled. See `register_peer_key/5` for validation.
+  Registers without a proof; returns `{:error, :missing_key_proof}` when
+  `:e2ee_require_key_proof` is enabled. See `register_peer_key/5` for validation
+  and the returned registration metadata.
   """
   @spec register_peer_key(String.t(), String.t(), binary()) ::
           {:ok, %{epoch: non_neg_integer(), peer_count: non_neg_integer()}} | {:error, term()}
@@ -186,22 +184,28 @@ defmodule Burble.Media.E2EE do
   end
 
   @doc """
-  Record a peer's X25519 public key, with an optional Ed25519 signature.
+  Record a peer's X25519 public key with an optional Ed25519 signature.
 
   `identity_key` is a raw Ed25519 public key and `signature` is that key's
   signature over `room_id <> "|" <> peer_id <> "|" <> base64(public_key)`.
-  Verification checks the Ed25519 signature, not possession of the X25519
-  private key. A nil identity key is accepted as unproven unless
-  `:e2ee_require_key_proof` is enabled; invalid supplied proofs are rejected.
+  Verification authenticates the payload under `identity_key`; it does not
+  prove possession of the X25519 private key.
 
   It is **not** proof of identity: nothing binds `identity_key` to the account,
-  and a signer can sign any X25519 public key.
+  so a supplied identity key does not establish who registered the key.
   That binding is the missing half, tracked in DEBT (CODE-1b).
 
-  Returns `{:ok, %{epoch: epoch, peer_count: count}}`. Errors are `:no_room`,
-  `:invalid_public_key` (not 32 bytes), `:invalid_peer_id` (not 1–128 bytes),
-  `:room_full` (512 registered peers, including re-registration attempts),
-  `:missing_key_proof` or `:invalid_key_proof`.
+  Returns `{:ok, %{epoch: epoch, peer_count: count}}`. Public keys must be
+  32 bytes and peer ids 1–128 bytes; failures return `:invalid_public_key` or
+  `:invalid_peer_id` in an error tuple. Unknown rooms return `:no_room` and
+  rooms with 512 peers return `:room_full`, including re-registration attempts.
+  A changed key or new peer invalidates existing sealed blobs and advances
+  the epoch if any blobs exist; an unchanged key leaves state intact.
+
+  A nil identity key is accepted as unproven unless `:e2ee_require_key_proof`
+  is enabled, which returns `{:error, :missing_key_proof}`. Otherwise the
+  identity key must be 32 bytes and its signature 64 bytes; malformed or
+  unverifiable proofs return `{:error, :invalid_key_proof}`.
   """
   @spec register_peer_key(String.t(), String.t(), binary(), binary() | nil, binary() | nil) ::
           {:ok, %{epoch: non_neg_integer(), peer_count: non_neg_integer()}} | {:error, term()}
@@ -227,8 +231,8 @@ defmodule Burble.Media.E2EE do
   @doc """
   Force a rotation (used by the periodic `Burble.Security.KeyRotation` sweep).
 
-  Increments the epoch and drops sealed blobs, retaining registered public keys.
-  Returns `{:ok, new_epoch}` or `{:error, :no_room}`; does not generate a room key.
+  Advances the epoch and discards sealed blobs while retaining public keys.
+  Returns `{:ok, new_epoch}` or `{:error, :no_room}`.
   """
   @spec request_rotation(String.t()) :: {:ok, non_neg_integer()} | {:error, term()}
   def request_rotation(room_id) do
@@ -238,7 +242,8 @@ defmodule Burble.Media.E2EE do
   @doc """
   Public key set for a room: everything a peer needs to derive pairwise keys.
 
-  Contains no secret material by construction.
+  Returns `{:ok, %{room_id: room_id, epoch: epoch, peers: public_keys}}` or
+  `{:error, :no_room}`. Contains no secret material by construction.
   """
   @spec key_set(String.t()) :: {:ok, key_set()} | {:error, term()}
   def key_set(room_id) do
@@ -248,20 +253,19 @@ defmodule Burble.Media.E2EE do
   @doc """
   Store an opaque sealed room key from `from` to `to`.
 
-  `from` must identify the authenticated sender. The channel passes the socket's
-  user id, never a client-supplied field; this API does not authenticate callers.
+  `from` is the **authenticated** sender — the channel passes the socket's
+  user id, never a client-supplied field — so a peer cannot deposit a blob
+  attributed to someone else, and the recipient sees who really sent it.
 
-  The server does not decide who the leader is. Every participant derives that
-  from the key set (lowest peer id), and a receiver is free to ignore a blob
-  from anyone else — enforcing it here would mean the server holding a policy
-  it can get wrong during a membership change, and refusing a legitimate
-  publish is a worse failure than relaying one that peers discard.
+  The caller must authenticate `from`; this function checks membership but
+  does not enforce leadership or validate the blob's cryptographic contents.
+  Both ids must be 1–128 bytes and registered in the room. Blobs must be
+  1–512 bytes and use the current epoch. Only one blob per recipient is
+  accepted in an epoch; it is stored with its sender for `sealed_for/2`.
 
-  Returns `:ok`, or an error for an unknown room (`:no_room`), invalid peer ids
-  (`:invalid_peer_id`), a mismatched epoch (`:stale_epoch`), or a second blob for
-  the recipient (`:already_published`). Empty/non-binary blobs, blobs larger
-  than 512 bytes and unregistered senders/recipients return `:invalid_sealed_blob`.
-  Leadership and ciphertext contents are not verified.
+  Returns `:ok` or an error tuple with `:no_room`, `:invalid_peer_id`,
+  `:invalid_sealed_blob` (including unregistered peers), `:stale_epoch`, or
+  `:already_published`.
   """
   @spec publish_sealed(String.t(), String.t(), String.t(), non_neg_integer(), binary()) ::
           :ok | {:error, term()}
@@ -285,8 +289,9 @@ defmodule Burble.Media.E2EE do
   @doc """
   Fetch the sealed room key addressed to `peer_id` for the current epoch.
 
-  Returns `{:ok, %{epoch: epoch, from: sender_id, blob: blob}}` without consuming
-  the blob, or `{:error, reason}` with `:no_room`, `:not_found` or `:stale_epoch`.
+  Returns `{:ok, %{epoch: epoch, from: sender_id, blob: blob}}` without
+  consuming it, or `{:error, reason}` for `:no_room`, `:not_found`, or
+  `:stale_epoch`.
   """
   @spec sealed_for(String.t(), String.t()) ::
           {:ok, %{epoch: non_neg_integer(), blob: binary()}} | {:error, term()}
@@ -329,9 +334,11 @@ defmodule Burble.Media.E2EE do
   other peer's public key. The result is identical on both sides and known to
   neither the server nor any third peer.
 
-  Returns `{:ok, key}` with 32 bytes or a tagged error for invalid key lengths,
-  peer ids or X25519 agreement. Errors converting `epoch` with `Integer.to_string/1`,
-  hashing `room_id` or deriving the key propagate to the caller.
+  Returns `{:ok, key}` with 32 key bytes. Keys of the wrong size and peer ids
+  outside 1–128 bytes return validation error tuples. Agreement errors are
+  converted to `{:error, reason}`, including rejection of all-zero secrets.
+  `epoch` must be an integer and `room_id` valid iodata; errors encoding this
+  context or deriving the key propagate to the caller.
   """
   @spec pairwise_key(
           binary(),
@@ -362,9 +369,9 @@ defmodule Burble.Media.E2EE do
   AAD binds the blob to the room, the epoch and both identities, so a blob
   cannot be replayed into another room, epoch or recipient.
 
-  Returns `{:ok, {ciphertext, iv, tag}}`, or a tagged error for keys that are
-  not 32 bytes or peer ids outside 1–128 bytes. AAD construction and crypto
-  errors propagate.
+  Returns `{:ok, {ciphertext, iv, tag}}`, or an error tuple for group/pairwise
+  keys other than 32 bytes or peer ids outside 1–128 bytes. Context encoding
+  and crypto errors propagate to the caller.
   """
   @spec seal_group_key(
           group_key(),
@@ -393,10 +400,10 @@ defmodule Burble.Media.E2EE do
 
   Returns `{:error, :open_failed}` for a wrong key, wrong epoch, wrong room or
   tampered blob — the AAD check covers all four.
-  Also returns `:open_failed` for invalid key/IV/tag lengths or plaintext other
-  than 32 bytes. Non-binary tuple fields or another shape return
-  `{:error, :malformed_sealed_key}`. Successful results are `{:ok, group_key}`;
-  AAD construction and crypto exceptions propagate.
+  Invalid key, IV, tag, or plaintext lengths also return `{:error, :open_failed}`.
+  A value other than a tuple of three binaries returns `{:error, :malformed_sealed_key}`.
+  Success returns `{:ok, room_key}` with 32 key bytes. Context encoding and
+  crypto exceptions are not caught.
   """
   @spec open_group_key(
           sealed_key(),
@@ -436,8 +443,9 @@ defmodule Burble.Media.E2EE do
   @doc """
   Decode the wire form produced by `encode_sealed/1`.
 
-  Returns `{:ok, {ciphertext, iv, tag}}` for a binary longer than 28 bytes,
-  otherwise `{:error, :malformed_sealed_key}`. Does not require 32-byte ciphertext.
+  Returns `{:ok, {ciphertext, iv, tag}}` for a 12-byte IV, 16-byte tag, and
+  any nonempty ciphertext; it does not require exactly 32 ciphertext bytes.
+  Other inputs return `{:error, :malformed_sealed_key}`.
   """
   @spec decode_sealed(binary()) :: {:ok, sealed_key()} | {:error, :malformed_sealed_key}
   def decode_sealed(<<iv::binary-size(@iv_bytes), tag::binary-size(@tag_bytes), ct::binary>>)
@@ -449,12 +457,10 @@ defmodule Burble.Media.E2EE do
   @doc """
   Derive the per-frame key from the room key. **Peer-side.**
 
-  Returns 32 raw key bytes separated by epoch and frame counter; this function
-  does not track counters or reject replays. Unlike the browser's
-  `deriveSenderFrameKey`, the derivation does not include a sender id.
-
-  Raises `FunctionClauseError` unless the key is a 32-byte binary and epoch and
-  counter are integers. Negative integers are accepted.
+  Returns 32 key bytes separated by epoch and counter. This helper does not
+  track counters or reject replays; the caller must do so.
+  Requires a 32-byte group key and integer epoch and counter, otherwise raises
+  `FunctionClauseError`. Negative epoch and counter values are accepted.
   """
   @spec derive_frame_key(group_key(), non_neg_integer(), non_neg_integer()) :: group_key()
   def derive_frame_key(group_key, epoch, counter)

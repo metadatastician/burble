@@ -201,7 +201,8 @@ These are open, tracked, and must stay in the README until closed:
    window, an epoch tracker) and the Encoded Transform layer
    (`FrameCryptor`, `senderTransform`/`receiverTransform`, `attachFrameCrypto`);
    `client/web/e2ee-session.js` implements the exchange of §5a. Between them
-   they are covered by 44 tests against real WebCrypto.
+   they are covered by 44 tests against real WebCrypto, run under Bun (the
+   estate default) and still under Deno.
 
    What is missing is the last mile, and it is the difference between a protocol
    and a private call: `VoiceEngine.res` builds no session, attaches no
