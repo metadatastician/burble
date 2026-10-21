@@ -37,13 +37,13 @@ other, so they are derived rather than carried forward. `HIGH` is split as
 |---|---|---|
 | Build | 1 | 0 / 1 |
 | Supply chain | 4 | 1 / 2 |
-| CI/CD | 7 | 3 / 2 |
+| CI/CD | 8 | 2 / 3 |
 | Licence | 4 | 4 / 0 |
 | Documentation | 6 | 3 / 0 |
 | Code | 9 | 5 / 0 |
 | Proof | 4 | 1 / 1 |
 | Test | 3 | 1 / 0 |
-| **Total** | **38** | **18 / 6** |
+| **Total** | **39** | **17 / 7** |
 
 ---
 
@@ -271,7 +271,7 @@ advisory, nothing to keep in sync.
 "GATE NARROWED 2026-05-25 … re-arm in a follow-up". The follow-up has not
 happened.
 
-### C-6 — every external-reusable caller stopped starting at 17:18, with no file change · HIGH · OPEN
+### C-6 — every external-reusable caller stopped starting at 17:18, with no file change · HIGH · RESOLVED 2026-10-21
 
 Six workflows report `startup_failure` — zero steps, no log, no annotation —
 on every commit since `86e139dd`. The set is exactly the set of workflows that
@@ -353,7 +353,15 @@ diagnostics. **`startup_failure` with no steps or annotation on the external
 reusable callers is evidence to investigate policy, not proof of the cause.**
 The earlier YAML investigation is recorded in C-1 and `88b84ed`.
 
-### C-8 — every workflow on the branch failed to start at 18:26, for one commit only · MEDIUM · OPEN
+**Resolved 2026-10-21.** It was the pin, not the policy. The A/B is in
+`e085bb9`: one caller moved to `standards@01c9b0c9`, five stayed on
+`0d47b892`, and on that single push the moved one started and ran while the
+other five reported `startup_failure`. All seven pins moved; all six lanes now
+start and pass. `0d47b892` is lock-clean and identical to `01c9b0c9` in every
+way this repository can observe — see the amendment to ADR-0017, which now
+requires a pin to be *demonstrated callable* rather than inferred.
+
+### C-8 — every workflow on the branch failed to start at 18:26, for one commit only · MEDIUM · DID NOT RECUR
 
 At 18:26Z on 2026-10-21, all twenty workflows triggered by `9731bd0` reported
 `startup_failure` — including `lock-sync-gate.yml`, which has no `uses:`, no
@@ -382,13 +390,47 @@ afterwards. None of them is readable with the token available here (403 on
 `/actions/permissions`), and none of them leaves a log — `startup_failure` runs
 have zero jobs, so `GET /actions/runs/<id>/logs` is a 404.
 
-**Next move:** the falsifiable check is the next push to this branch. If it
-starts normally, the event was transient and this entry closes with the
-observation only; if it repeats, check Settings → Actions → General
-(*Allow all actions* vs allowance list) and the billing/spending-limit banner on
-the same page, in that order. Both are one screen.
+
+**Outcome:** the check this entry asked for was run. `6350164` (same branch,
+next push, human-authored) started thirteen workflows normally; only the six in
+C-6 failed, and those were failing for their own reason. The event did not
+recur, so it stays an observation rather than a defect. What it demonstrated is
+worth keeping: `startup_failure` is also what a repository-level condition
+looks like, and it is indistinguishable from a workflow-file fault without a
+control run. The control run is the next push.
 
 ---
+
+### C-9 — the findings grid works; two of its three "critical" signals are rule defects · MEDIUM · OPEN
+
+The Hypatia grid posted its first real verdict on 2026-10-21: `panic-attack`
+2 critical / 1 high / 44 medium / 62 minor, `hypatia` 26 high / 68 medium,
+`pons asinorum` 15 medium. That is the grid doing its job. Adjudicating the
+top of it, however:
+
+| Finding | Verdict |
+|---|---|
+| `critical` · `CommandInjection` · `rel/commands/bolt.sh` | **False positive.** The match is `burble eval "Burble.Bolt.cli_main(System.argv())" -- "$@"` — an Elixir release `eval`, matched on the word. `"$@"` is quoted; there is no shell `eval` and no injection. |
+| `critical` · `HardcodedSecret` · `server/priv/repo/init_verisimdb.sh` | **False positive as stated** — the line is `VERISIMDB_API_KEY="${VERISIMDB_API_KEY:-}"`, an environment read with an empty default. It flagged the right line for the wrong reason: the header it fed was assembled as a string for the shell to re-split, so POSIX sh passed curl `"Authorization:`, `Bearer`, `key"` as three words and the key never authenticated. **Fixed** (2026-10-21) by building the argv directly; the finding would have been correct if it had said "quoted string passed unquoted". |
+| 20 of the 26 `high` | `code_scanning_alerts/CSA003`: "code-scanning alert … is 36 days old (threshold: 30 days)". This is an ageing rule, not a defect; it counts how long *other* scanners' alerts have been open, and will report `high` forever unless those alerts are dismissed. |
+| `high` · `AtomExhaustion` · `server/test/.../circuit_breaker_test.exs` | `String.to_atom` in a test. Real rule, wrong weight: a test process cannot exhaust the atom table in any way that matters. |
+
+None of these is a reason to weaken the grid — the grid reported exactly what
+its inputs said. The refinement belongs upstream, in the rules:
+
+1. **panic-attack** — `CommandInjection` must not match a release-script `eval`
+   whose arguments are the language's own evaluator (`bin/<app> eval`, `mix
+   eval`, `iex`); and `HardcodedSecret` must not match a variable whose entire
+   value is an environment read with an empty default.
+2. **hypatia** — an ageing bucket (`CSA003`) is not the same severity class as
+   a defect, and should not colour a repository's badge the same way.
+3. Neither is Burble's to change from here; this entry is the record of the
+   adjudication and the reason the two `critical` cells do not describe two
+   live vulnerabilities.
+
+**Next move:** file the two rule refinements against `panic-attack` and one
+against `hypatia`; keep the grid purple until then, because it is telling the
+truth about its inputs.
 
 ---
 

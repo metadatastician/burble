@@ -10,6 +10,74 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — the two conformance matrices run on every pull request (2026-10-21)
+
+Both lanes now execute and both post their grid as an upserted comment on the
+pull request, which is what "in the PR system" means for a caller: the
+reusable workflow does the measuring, the caller only supplies the trigger,
+the permissions and the posting job.
+
+```
+DEED-K9 conformance   Validate DEED manifests / lint         pass
+                      Validate K9 contracts / validate      pass
+                      Post the K9 verdict grid              pass
+Hypatia Security Scan scan / Hypatia Neurosymbolic Analysis  pass
+                      Post the Hypatia verdict grid         pass
+```
+
+The K9 grid on this pull request, first run: contract typecheck 1/1, validator
+self-test 37/37, live corpus 3 pass / 8 fail. Second run, after the corpus fix
+below: 4/4, green, with the "since previous revision" baseline now embedded for
+the next comparison.
+
+### Fixed — the K9 lane was right, and seven of its eight findings were the corpus's shape (2026-10-21)
+
+The first real run of the K9 lane reported eight failures in three groups; only
+one was a component defect.
+
+- **Three templates were being validated as components.** `template-{hunt,
+  kennel,yard}.k9.ncl` failed on unfilled `TODO:` placeholders — correctly, and
+  for the wrong reason: a template is not a component. The K9 contract says so
+  in as many words (`k9_contract.ncl` §6: the estate's templates are
+  `template-*.k9.ncl.in` — *"`.in` because a template is not a component and is
+  never loaded"*). Renamed to match. Validated as a component, one still fails
+  with seven errors — that is the point.
+- **Four generated files were tracked.** `generated/k9iser/*.k9` are
+  machine-written build output, covered by a `.gitignore` rule since before they
+  were committed. Untracked; nothing in the tree reads them.
+- **One real defect, in the most-read file in the directory.**
+  `examples/setup-repo.k9.ncl` demonstrates a `'Hunt` component that requests
+  network, filesystem and subprocess access while granting no capabilities
+  (`K9-S007`), carrying no `pedigree.signature` (`K9-S009`) and describing no
+  `side_effects` (`K9-S010`). Every copy of that example would have failed the
+  gate it is meant to teach. Fixed with all three, each annotated with the
+  section it satisfies.
+
+### Fixed — a false positive that was hiding a real defect (2026-10-21)
+
+The Hypatia grid's first verdict was `critical`, on two findings. One —
+`CommandInjection` in `rel/commands/bolt.sh` — is a false positive: the match is
+`burble eval "Burble.Bolt.cli_main(System.argv())" -- "$@"`, an Elixir release
+`eval` matched on the word, with `"$@"` quoted.
+
+The other, `HardcodedSecret` in `server/priv/repo/init_verisimdb.sh`, was wrong
+about its reason and right about its line. The line is an environment read with
+an empty default. But the value it fed was assembled as a string for the shell
+to re-split:
+
+```
+AUTH_HEADER="-H \"Authorization: Bearer ${VERISIMDB_API_KEY}\""
+curl ... ${AUTH_HEADER} ...
+```
+
+POSIX sh removes quotes during *parsing*, so by the time the unquoted expansion
+reached `curl` the quotes were literal characters and it received
+`"Authorization:`, `Bearer`, `key"` — three words, one malformed header. Any
+API key set through the environment was silently ignored. The header is now
+built as a real argument list, which both fixes the authentication and removes
+the pattern that produced the finding. Both `panic-attack` rule refinements this
+suggests are recorded in DEBT C-9.
+
 ### Fixed — four workflows that were red for reasons that had nothing to do with the code (2026-10-21)
 
 The board read as "mostly red"; measured per workflow over the last twelve runs,

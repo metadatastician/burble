@@ -117,3 +117,55 @@ is clean for every action our six pins touch.
 - **Bump to `main` and re-check by hand.** That is the reflex that produced the
   breakages in the first place; without the script, the next bump is unchecked
   again.
+
+## Amendment 2026-10-21 — lock-clean is necessary, not sufficient
+
+`0d47b892` is lock-clean by every test this ADR specifies, and it **cannot be
+called**. For five hours every workflow that pinned it reported
+`startup_failure` — zero jobs, no log, no annotation — while every workflow that
+pinned nothing, or pinned a different repository, ran normally.
+
+The A/B that settled it ran inside a single commit: `e085bb9` moved
+`hypatia-scan.yml` to `01c9b0c9` and left the other five callers on `0d47b892`.
+Same push, same repository, same minute:
+
+| Workflow | Pin | Result |
+|---|---|---|
+| Hypatia Security Scan | `01c9b0c9` | started, ran to completion |
+| Governance | `0d47b892` | `startup_failure` |
+| OSSF Scorecard | `0d47b892` | `startup_failure` |
+| SPARK Theatre Gate | `0d47b892` | `startup_failure` |
+| Secret Scanner | `0d47b892` | `startup_failure` |
+| DEED-K9 conformance | `0d47b892` | `startup_failure` |
+
+What this ADR's method could not see, stated plainly:
+
+- both commits' `actions.lock` files are **identical** — 75 entries, same
+  `ref:`, same `commit:` for every one;
+- every action the called workflows use is recorded with a tag or branch `ref`
+  at both, so `scripts/check-upstream-pins.sh` — which implements decisions 1–3
+  above exactly — reports *9 pins clean* at `0d47b892`;
+- `check-lock-sync.sh` agrees, because our tree and our lock agree;
+- `0d47b892` is an ancestor of `standards`' `main` (`compare` reports
+  `behind_by: 0`), so it is not an abandoned commit either.
+
+So the property that failed is neither "the lock is valid" nor "the commit is
+reachable" as those are observable from outside GitHub. It is whether GitHub
+will resolve `uses:` at that sha, which leaves no evidence when it says no.
+
+The new decision, which supersedes decision 3's sufficiency:
+
+4. **A pin must be demonstrated callable, not inferred.** Before a new pin is
+   adopted across the callers, move *one* caller, push, and read the run. A
+   `startup_failure` with zero jobs is a pin verdict, and the cheapest test of
+   it is a sibling repository calling the same workflow at a different sha —
+   `marid` and `paint-type` were running `hypatia-scan-reusable.yml@01c9b0c9`
+   green while Burble could not start the same workflow.
+
+The pins are now `standards@01c9b0c9` (2026-10-20, `main`'s head at the time of
+writing). All seven callers moved together, including `mirror.yml`, which had
+the same fault masked by jobs gated on absent repository variables.
+
+`scripts/check-upstream-pins.sh` is unchanged: it tests what it can see, and a
+warning it cannot resolve is already reported as a warning rather than a pass.
+What changes is the claim it supports.

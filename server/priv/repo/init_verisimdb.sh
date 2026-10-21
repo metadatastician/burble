@@ -19,16 +19,45 @@ VERISIMDB_API_KEY="${VERISIMDB_API_KEY:-}"
 
 echo "==> Checking VeriSimDB connectivity at ${VERISIMDB_URL}..."
 
-# Build auth header if API key is set.
-AUTH_HEADER=""
-if [ -n "$VERISIMDB_API_KEY" ]; then
-  AUTH_HEADER="-H \"Authorization: Bearer ${VERISIMDB_API_KEY}\""
-fi
+# Auth is passed as a real curl argument, not as a string assembled for the
+# shell to re-split. POSIX sh removes quotes during PARSING, so the quotes in
+# `AUTH_HEADER="-H \"Authorization: ...\""` were literal characters by the time
+# the unquoted `${AUTH_HEADER}` reached curl: it received `"Authorization:` and
+# `Bearer ..."` as separate words, and the header was malformed whenever a key
+# was set. Two functions keep the argument list honest and quote the key.
+#
+# This also clears a `HardcodedSecret` critical from the security grid, which
+# was a false positive: there is no secret here, only an empty default for an
+# environment variable. The finding was wrong about the reason and right about
+# the line.
+curl_health() {
+  if [ -n "$VERISIMDB_API_KEY" ]; then
+    curl -s -o /dev/null -w "%{http_code}" \
+      -H "Authorization: Bearer ${VERISIMDB_API_KEY}" \
+      "${VERISIMDB_URL}/health" 2>/dev/null || echo "000"
+  else
+    curl -s -o /dev/null -w "%{http_code}" \
+      "${VERISIMDB_URL}/health" 2>/dev/null || echo "000"
+  fi
+}
+
+curl_create_octad() {
+  if [ -n "$VERISIMDB_API_KEY" ]; then
+    curl -s -w "\n%{http_code}" \
+      -H "Authorization: Bearer ${VERISIMDB_API_KEY}" \
+      -H "Content-Type: application/json" \
+      -X POST -d "$1" \
+      "${VERISIMDB_URL}/api/v1/octads" 2>/dev/null || echo "error"
+  else
+    curl -s -w "\n%{http_code}" \
+      -H "Content-Type: application/json" \
+      -X POST -d "$1" \
+      "${VERISIMDB_URL}/api/v1/octads" 2>/dev/null || echo "error"
+  fi
+}
 
 # Health check.
-HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
-  ${AUTH_HEADER} \
-  "${VERISIMDB_URL}/health" 2>/dev/null || echo "000")
+HTTP_CODE=$(curl_health)
 
 if [ "$HTTP_CODE" = "000" ]; then
   echo "ERROR: Cannot reach VeriSimDB at ${VERISIMDB_URL}"
@@ -62,12 +91,7 @@ BODY=$(cat <<EOJSON
 EOJSON
 )
 
-RESULT=$(curl -s -w "\n%{http_code}" \
-  ${AUTH_HEADER} \
-  -H "Content-Type: application/json" \
-  -X POST \
-  -d "$BODY" \
-  "${VERISIMDB_URL}/api/v1/octads" 2>/dev/null || echo "error")
+RESULT=$(curl_create_octad "$BODY")
 
 RESULT_CODE=$(echo "$RESULT" | tail -1)
 
