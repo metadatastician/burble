@@ -115,6 +115,12 @@ export function serve(options, handler) {
     port: options.port,
     hostname: options.hostname,
 
+    /**
+     * Dispatch one request, handing the handler a `ctx` that can upgrade it.
+     * Resolves to the handler's response, or `undefined` once an upgrade has
+     * taken the connection over — Bun rejects a Response at that point. Handler
+     * and upgrade errors propagate out of here as a rejected request.
+     */
     async fetch(req, server) {
       let pending = null;
 
@@ -154,6 +160,7 @@ export function serve(options, handler) {
     },
 
     websocket: {
+      /** Bind the native socket and mark the facade open before `onopen`. */
       open(ws) {
         const holder = ws.data;
         holder.ws = ws;
@@ -166,11 +173,13 @@ export function serve(options, handler) {
         const data = typeof message === "string" ? message : new TextDecoder().decode(message);
         holder.socket?.onmessage?.({ data });
       },
+      /** Mark the facade closed, then report `{ code, reason }` to `onclose`. */
       close(ws, code, reason) {
         const holder = ws.data;
         holder.state = CLOSED;
         holder.socket?.onclose?.({ code, reason });
       },
+      /** Forward Bun's socket error unchanged to the facade's `onerror`. */
       error(ws, error) {
         ws.data?.socket?.onerror?.(error);
       }
