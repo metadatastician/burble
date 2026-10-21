@@ -74,5 +74,9 @@ New ADRs copy `0000-template.adoc` and take the next number.
 
 | link:0016-peer-held-group-keys.adoc[0016]
 | Peer-held group keys: the server coordinates, the peers hold
-| Proposed (part-way — browser side not shipped)
+| Proposed (part-way — neither half is on the call path)
+
+| link:0017-upstream-pin-lock-cleanliness.adoc[0017]
+| Reusable-workflow pins are checked against the callee's lockfile
+| Accepted
 |===

@@ -13,6 +13,16 @@ name: Lock Sync Gate
 # lockfile entry to go stale and is structurally immune to the very failure it
 # detects. Do not add a `uses:` to this file.
 #
+# The `upstream-pins` job below exists because the same class of failure also
+# arrives from the OTHER SIDE of a reusable-workflow call. `uses:
+# org/repo/.github/workflows/x.yml@<sha>` is validated at startup against the
+# callee's own actions.lock at that sha; a record there whose `ref:` is the
+# commit sha (standards#1271) kills the caller's job in "Set up job" while the
+# caller's tree is perfectly consistent. That is what made Hypatia, Validate
+# Hypatia Baseline and Scorecard red on `main` for three weeks in October 2026.
+# scripts/check-upstream-pins.sh reads the callee at the pinned sha and fails on
+# it. See docs/decisions/0017-upstream-pin-lock-cleanliness.adoc.
+#
 # There is also no `paths:` filter, on purpose: a filtered workflow never
 # reports on pull requests that miss the filter, which deadlocks any branch
 # ruleset that requires this check.
@@ -53,3 +63,27 @@ jobs:
           test -x scripts/check-lock-sync.sh \
             || { echo "::error::scripts/check-lock-sync.sh missing or not executable"; exit 1; }
           ./scripts/check-lock-sync.sh
+
+  upstream-pins:
+    name: reusable-workflow pins are lock-clean upstream
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out without actions/checkout
+        env:
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          git init -q .
+          git remote add origin "https://github.com/${REPO}.git"
+          git fetch -q --depth 1 origin "${SHA}"
+          git checkout -q FETCH_HEAD
+          echo "checked out ${SHA}"
+
+      - name: Verify every pinned reusable workflow is lock-clean at its sha
+        run: |
+          set -euo pipefail
+          test -x scripts/check-upstream-pins.sh \
+            || { echo "::error::scripts/check-upstream-pins.sh missing or not executable"; exit 1; }
+          ./scripts/check-upstream-pins.sh
