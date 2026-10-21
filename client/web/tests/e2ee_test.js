@@ -21,6 +21,7 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
 import * as E2EE from "../e2ee.js";
+import { test } from "./runner.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const vectors = JSON.parse(readFileSync(join(here, "fixtures", "e2ee-vectors.json"), "utf8"));
@@ -32,7 +33,7 @@ const hexOut = E2EE.toHex;
 // Is the platform capable at all?
 // ---------------------------------------------------------------------------
 
-Deno.test("E2EE.isSupported reports WebCrypto availability", () => {
+test("E2EE.isSupported reports WebCrypto availability", () => {
   assert.strictEqual(E2EE.isSupported(), true);
 });
 
@@ -40,7 +41,7 @@ Deno.test("E2EE.isSupported reports WebCrypto availability", () => {
 // 1. Cross-language vectors
 // ---------------------------------------------------------------------------
 
-Deno.test("vectors: the RFC 7748 private key imports through the PKCS#8 wrapper", async () => {
+test("vectors: the RFC 7748 private key imports through the PKCS#8 wrapper", async () => {
   // WebCrypto has no "derive public from private" and will not import a raw
   // X25519 private key, so the wrapper is the only thing to check here: it must
   // round-trip byte-for-byte. Agreement with the fixture's public key is
@@ -53,7 +54,7 @@ Deno.test("vectors: the RFC 7748 private key imports through the PKCS#8 wrapper"
   await assert.rejects(E2EE.exportPrivateKey(sealed));
 });
 
-Deno.test("vectors: pairwiseKey matches the Elixir implementation", async () => {
+test("vectors: pairwiseKey matches the Elixir implementation", async () => {
   const priv = await E2EE.importPrivateKey(hex(vectors.rfc7748_private_a));
 
   const got = await E2EE.pairwiseKey(
@@ -68,7 +69,7 @@ Deno.test("vectors: pairwiseKey matches the Elixir implementation", async () => 
   assert.strictEqual(hexOut(got), vectors.pairwise_key);
 });
 
-Deno.test("vectors: pairwiseKey is symmetric", async () => {
+test("vectors: pairwiseKey is symmetric", async () => {
   const privA = await E2EE.importPrivateKey(hex(vectors.rfc7748_private_a));
   const privB = await E2EE.importPrivateKey(hex(vectors.rfc7748_private_b));
 
@@ -79,7 +80,7 @@ Deno.test("vectors: pairwiseKey is symmetric", async () => {
   assert.strictEqual(hexOut(ab), vectors.pairwise_key);
 });
 
-Deno.test("vectors: openGroupKey opens the blob the Elixir side sealed", async () => {
+test("vectors: openGroupKey opens the blob the Elixir side sealed", async () => {
   const pairwise = hex(vectors.pairwise_key);
   const wire = E2EE.decodeSealed(vectors.sealed_wire_b64);
 
@@ -95,7 +96,7 @@ Deno.test("vectors: openGroupKey opens the blob the Elixir side sealed", async (
   assert.strictEqual(hexOut(opened), vectors.group_key);
 });
 
-Deno.test("vectors: deriveFrameKey matches the Elixir implementation", async () => {
+test("vectors: deriveFrameKey matches the Elixir implementation", async () => {
   const groupKey = hex(vectors.group_key);
 
   for (const [counter, expected] of [
@@ -107,7 +108,7 @@ Deno.test("vectors: deriveFrameKey matches the Elixir implementation", async () 
   }
 });
 
-Deno.test("vectors: the protocol description in the fixture matches this module", () => {
+test("vectors: the protocol description in the fixture matches this module", () => {
   // Guards against a fixture regenerated with different labels while the client
   // stayed on the old ones — the failure mode the vectors exist to prevent.
   assert.ok(vectors.protocol.pairwise.includes(E2EE.CONSTANTS.LABEL_PAIRWISE));
@@ -130,7 +131,7 @@ async function pair(roomId, epoch) {
   return { a, b, aKey, bKey };
 }
 
-Deno.test("seal/open round-trips the room key", async () => {
+test("seal/open round-trips the room key", async () => {
   const { aKey, bKey } = await pair("room-1", 0);
   const groupKey = E2EE.randomGroupKey();
 
@@ -142,7 +143,7 @@ Deno.test("seal/open round-trips the room key", async () => {
   assert.deepStrictEqual(opened, groupKey);
 });
 
-Deno.test("AAD rejects a blob replayed into another room, epoch or direction", async () => {
+test("AAD rejects a blob replayed into another room, epoch or direction", async () => {
   const { aKey, bKey } = await pair("room-1", 0);
   const wire = await E2EE.sealGroupKey(E2EE.randomGroupKey(), aKey, "room-1", 0, "alice", "bob");
 
@@ -151,7 +152,7 @@ Deno.test("AAD rejects a blob replayed into another room, epoch or direction", a
   await assert.rejects(E2EE.openGroupKey(wire, bKey, "room-1", 0, "bob", "alice"), /operation failed|decrypt/i);
 });
 
-Deno.test("a tampered sealed blob does not open", async () => {
+test("a tampered sealed blob does not open", async () => {
   const { aKey, bKey } = await pair("room-1", 0);
   const wire = await E2EE.sealGroupKey(E2EE.randomGroupKey(), aKey, "room-1", 0, "alice", "bob");
 
@@ -161,7 +162,7 @@ Deno.test("a tampered sealed blob does not open", async () => {
   await assert.rejects(E2EE.openGroupKey(tampered, bKey, "room-1", 0, "alice", "bob"), /operation failed|decrypt/i);
 });
 
-Deno.test("the wrong pairwise key does not open a blob", async () => {
+test("the wrong pairwise key does not open a blob", async () => {
   const { aKey } = await pair("room-1", 0);
   const other = await pair("room-1", 0);
 
@@ -169,7 +170,7 @@ Deno.test("the wrong pairwise key does not open a blob", async () => {
   await assert.rejects(E2EE.openGroupKey(wire, other.bKey, "room-1", 0, "alice", "bob"), /operation failed|decrypt/i);
 });
 
-Deno.test("malformed inputs are rejected before any crypto happens", async () => {
+test("malformed inputs are rejected before any crypto happens", async () => {
   const { aKey } = await pair("room-1", 0);
 
   await assert.rejects(E2EE.sealGroupKey(new Uint8Array(16), aKey, "r", 0, "a", "b"), RangeError);
@@ -183,7 +184,7 @@ Deno.test("malformed inputs are rejected before any crypto happens", async () =>
 // 3. Frames: sender attribution and replay
 // ---------------------------------------------------------------------------
 
-Deno.test("frames round-trip and are bound to sender, epoch and counter", async () => {
+test("frames round-trip and are bound to sender, epoch and counter", async () => {
   const groupKey = E2EE.randomGroupKey();
   const frame = new TextEncoder().encode("opus-frame-bytes");
 
@@ -204,7 +205,7 @@ Deno.test("frames round-trip and are bound to sender, epoch and counter", async 
   await assert.rejects(E2EE.decryptFrame(key, wire, "room-1", 2, "alice", 8), /operation failed|decrypt/i);
 });
 
-Deno.test("a peer cannot derive another peer's frame key from the group key", async () => {
+test("a peer cannot derive another peer's frame key from the group key", async () => {
   const groupKey = E2EE.randomGroupKey();
 
   const alice = await E2EE.deriveSenderFrameKey(groupKey, 0, "alice", 0);
@@ -221,7 +222,7 @@ Deno.test("a peer cannot derive another peer's frame key from the group key", as
   assert.deepStrictEqual(await E2EE.decryptFrame(alice, wire, "room-1", 0, "alice", 0), frame);
 });
 
-Deno.test("ReplayWindow accepts new counters, refuses repeats and ancient ones", () => {
+test("ReplayWindow accepts new counters, refuses repeats and ancient ones", () => {
   const w = new E2EE.ReplayWindow(4);
 
   assert.strictEqual(w.accept(0), true);
@@ -241,7 +242,7 @@ Deno.test("ReplayWindow accepts new counters, refuses repeats and ancient ones",
 // 4. Epoch handling
 // ---------------------------------------------------------------------------
 
-Deno.test("KeyEpoch drops key material when the epoch advances", async () => {
+test("KeyEpoch drops key material when the epoch advances", async () => {
   const epoch = new E2EE.KeyEpoch("room-1");
   const groupKey = E2EE.randomGroupKey();
 
@@ -253,7 +254,7 @@ Deno.test("KeyEpoch drops key material when the epoch advances", async () => {
   assert.strictEqual(epoch.epoch, 1);
 });
 
-Deno.test("KeyEpoch ignores a stale epoch rather than rewinding", async () => {
+test("KeyEpoch ignores a stale epoch rather than rewinding", async () => {
   const epoch = new E2EE.KeyEpoch("room-1");
 
   epoch.advanceTo(3);
@@ -262,7 +263,7 @@ Deno.test("KeyEpoch ignores a stale epoch rather than rewinding", async () => {
   assert.strictEqual(epoch.advanceTo(3), false);
 });
 
-Deno.test("KeyEpoch.rotate produces a fresh keypair and clears the room key", async () => {
+test("KeyEpoch.rotate produces a fresh keypair and clears the room key", async () => {
   const epoch = new E2EE.KeyEpoch("room-1");
   epoch.setRoomKey(E2EE.randomGroupKey());
 
@@ -274,7 +275,7 @@ Deno.test("KeyEpoch.rotate produces a fresh keypair and clears the room key", as
   assert.strictEqual(epoch.hasRoomKey(), false);
 });
 
-Deno.test("KeyEpoch.frameKey requires a room key for the current epoch", async () => {
+test("KeyEpoch.frameKey requires a room key for the current epoch", async () => {
   const epoch = new E2EE.KeyEpoch("room-1");
   await assert.rejects(epoch.frameKey("alice", 0), /no room key/);
 
@@ -293,7 +294,7 @@ Deno.test("KeyEpoch.frameKey requires a room key for the current epoch", async (
 // than papered over.
 // ---------------------------------------------------------------------------
 
-Deno.test("encodeFrameHeader/decodeFrameHeader round-trip sender, epoch and counter", () => {
+test("encodeFrameHeader/decodeFrameHeader round-trip sender, epoch and counter", () => {
   const bare = E2EE.encodeFrameHeader(7, 123456);
   assert.strictEqual(bare.length, E2EE.CONSTANTS.FRAME_HEADER_BYTES);
 
@@ -311,7 +312,7 @@ Deno.test("encodeFrameHeader/decodeFrameHeader round-trip sender, epoch and coun
   assert.strictEqual(E2EE.decodeFrameHeader(bare).senderId, null);
 });
 
-Deno.test("decodeFrameHeader refuses a short frame and an unknown version", () => {
+test("decodeFrameHeader refuses a short frame and an unknown version", () => {
   assert.throws(() => E2EE.decodeFrameHeader(new Uint8Array([1, 0, 0])), /shorter than its header/);
 
   const bumped = E2EE.encodeFrameHeader(0, 0);
@@ -319,13 +320,13 @@ Deno.test("decodeFrameHeader refuses a short frame and an unknown version", () =
   assert.throws(() => E2EE.decodeFrameHeader(bumped), /unsupported frame version 2/);
 });
 
-Deno.test("frame counters and epochs must be uint32", () => {
+test("frame counters and epochs must be uint32", () => {
   assert.throws(() => E2EE.encodeFrameHeader(-1, 0), /uint32/);
   assert.throws(() => E2EE.encodeFrameHeader(0, 2 ** 32), /uint32/);
   assert.throws(() => E2EE.encodeFrameHeader(1.5, 0), /uint32/);
 });
 
-Deno.test("sealFrame embeds its header and opens with the derived key", async () => {
+test("sealFrame embeds its header and opens with the derived key", async () => {
   const groupKey = E2EE.randomGroupKey();
   const plaintext = new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8]);
 
@@ -359,7 +360,7 @@ function pairOfCryptors() {
   };
 }
 
-Deno.test("FrameCryptor seals and opens between two peers", async () => {
+test("FrameCryptor seals and opens between two peers", async () => {
   const { alice, bob } = pairOfCryptors();
   const plaintext = new Uint8Array([9, 9, 9]);
 
@@ -371,7 +372,7 @@ Deno.test("FrameCryptor seals and opens between two peers", async () => {
   assert.strictEqual(bob.sentCount, 0);
 });
 
-Deno.test("FrameCryptor refuses a replay, a foreign sender and a tampered frame", async () => {
+test("FrameCryptor refuses a replay, a foreign sender and a tampered frame", async () => {
   const { alice, bob } = pairOfCryptors();
   const wire = await alice.seal(new Uint8Array([1]));
 
@@ -391,7 +392,7 @@ Deno.test("FrameCryptor refuses a replay, a foreign sender and a tampered frame"
   await assert.rejects(bob3.open(wire3), /OperationError|decrypt/i);
 });
 
-Deno.test("a frame that fails to decrypt does not consume its counter", async () => {
+test("a frame that fails to decrypt does not consume its counter", async () => {
   const { alice, bob } = pairOfCryptors();
   const good = await alice.seal(new Uint8Array([7, 7]));
 
@@ -403,7 +404,7 @@ Deno.test("a frame that fails to decrypt does not consume its counter", async ()
   assert.deepStrictEqual(await bob.open(good), new Uint8Array([7, 7]));
 });
 
-Deno.test("FrameCryptor refuses frames from another epoch", async () => {
+test("FrameCryptor refuses frames from another epoch", async () => {
   const groupKey = E2EE.randomGroupKey();
   const aliceEpochs = new E2EE.KeyEpoch("room-1");
   const bobEpochs = new E2EE.KeyEpoch("room-1");
@@ -425,7 +426,7 @@ Deno.test("FrameCryptor refuses frames from another epoch", async () => {
   await assert.rejects(bob.open(epochZero), /from epoch 0, current is 1/);
 });
 
-Deno.test("senderTransform and receiverTransform carry frames between stream pairs", async () => {
+test("senderTransform and receiverTransform carry frames between stream pairs", async () => {
   const { alice, bob } = pairOfCryptors();
   const plaintext = new Uint8Array([0xde, 0xad, 0xbe, 0xef]);
 
@@ -452,7 +453,7 @@ Deno.test("senderTransform and receiverTransform carry frames between stream pai
   assert.deepStrictEqual(new Uint8Array(opened.value.data), plaintext);
 });
 
-Deno.test("a frame the transform cannot seal is dropped, never forwarded in the clear", async () => {
+test("a frame the transform cannot seal is dropped, never forwarded in the clear", async () => {
   const errors = [];
   const broken = {
     seal: async () => {
@@ -477,7 +478,7 @@ Deno.test("a frame the transform cannot seal is dropped, never forwarded in the 
   assert.match(errors[0].message, /key unavailable/);
 });
 
-Deno.test("attachFrameCrypto fails closed when encoded transforms are unavailable", () => {
+test("attachFrameCrypto fails closed when encoded transforms are unavailable", () => {
   const fakePc = {
     getSenders: () => [{}],
     getReceivers: () => [{ createEncodedStreams: () => null }]
@@ -494,7 +495,7 @@ Deno.test("attachFrameCrypto fails closed when encoded transforms are unavailabl
   }
 });
 
-Deno.test("attachFrameCrypto wires a fake peer connection end to end", async () => {
+test("attachFrameCrypto wires a fake peer connection end to end", async () => {
   const { alice, bob } = pairOfCryptors();
   const plaintext = new Uint8Array([42, 43, 44]);
 
@@ -532,7 +533,7 @@ Deno.test("attachFrameCrypto wires a fake peer connection end to end", async () 
   assert.deepStrictEqual(new Uint8Array(opened.value.data), plaintext);
 });
 
-Deno.test("an SFU receive path attributes frames by their header, not by connection", async () => {
+test("an SFU receive path attributes frames by their header, not by connection", async () => {
   // One receive path, many speakers: this is what an SFU looks like to a
   // client, and it is why the sender id is in the frame.
   const groupKey = E2EE.randomGroupKey();
@@ -554,7 +555,7 @@ Deno.test("an SFU receive path attributes frames by their header, not by connect
   await assert.rejects(carol.open(fromAlice), /replay or outside the window/);
 });
 
-Deno.test("a frame whose header claims another speaker does not decrypt", async () => {
+test("a frame whose header claims another speaker does not decrypt", async () => {
   const { alice, bob } = pairOfCryptors();
   const wire = await alice.seal(new Uint8Array([4, 2]));
 

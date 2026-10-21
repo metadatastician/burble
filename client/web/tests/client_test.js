@@ -1,7 +1,8 @@
 import assert from "node:assert";
 import * as Signaling from "../../lib/src/BurbleSignaling.res.mjs";
+import { test } from "./runner.js";
 
-Deno.test("BurbleSignaling default state", () => {
+test("BurbleSignaling default state", () => {
   const callbacks = {
     onEvent: () => {},
     onJoined: () => {},
