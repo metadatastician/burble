@@ -89,7 +89,12 @@ async function rawUpgradeStatus(port, origin) {
 
     // A refused upgrade answers with headers only; do not hang if the server
     // switches protocols instead of replying with a status line.
-    setTimeout(() => finish(0), 2000).unref?.();
+    setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      try { socket.destroy(); } catch (_) {}
+      reject(new Error(`rawUpgradeStatus: no status line from port ${port} within 2000 ms`));
+    }, 2000).unref?.();
   });
 }
 
