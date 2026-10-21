@@ -10,6 +10,53 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed — four workflows that were red for reasons that had nothing to do with the code (2026-10-21)
+
+The board read as "mostly red"; measured per workflow over the last twelve runs,
+it is 18 green, 6 that never start (DEBT C-6), 2 that never could have passed,
+and 5 dormant. Of the reds, only one was a fault in this repository's code, and
+none was a fault in this repository's YAML.
+
+- **`pages.yml` deleted.** It deployed the same `github-pages` environment as
+  `casket-pages.yml`, on the same `push: main` trigger, and had exactly one run
+  in its history — a `startup_failure` in July. `casket-pages` is the deployer
+  that works. Two workflow files racing for one environment is a coin flip, not
+  a fallback; if the Ddraig site generator is wanted it has to *replace*
+  casket-ssg, not run beside it. Its other effect was to `mkdir -p src` and copy
+  the README there, in a tree where `src/` holds the Idris ABI modules.
+- **`publish-verisimdb.yml` loses its weekly cron.** It builds and publishes an
+  image for `hyperpolymath/nextgen-databases` — a different project — from this
+  repository's CI, and 9 of its last 12 runs failed on that dependency. Monday
+  04:00 turned burble's board red over something burble cannot fix. The manual
+  dispatch stays.
+- **CodeQL stops cancelling its own `main` scan.** `cancel-in-progress: true`
+  applied to `push` as well, so a second push killed the analysis that uploads
+  the code-scanning baseline the next pull request is compared against — its
+  history was success 5 / cancelled 5. Now scoped to `pull_request`, where
+  cancelling a superseded run is always safe.
+- **`tests/ci/foundation_ci_fixes_test.sh` repaired and wired in.** It pinned
+  eight revision hashes, every one of which had moved, so it failed 5 of its 15
+  assertions against a healthy tree — and nothing ran it. The revision
+  assertions were duplicating `check-lock-sync.sh` and
+  `check-upstream-pins.sh` (which cover them more strictly), so they are gone;
+  the checks nothing else makes — Dependabot volume caps, CodeQL
+  `persist-credentials`, 40-hex `uses:` pins — stay, and now run as a step of
+  `lock-sync-gate.yml`. That step immediately caught the two new conformance
+  lanes using `actions/download-artifact@v8.0.2`, a movable tag; both are now
+  pinned to the sha the lock already recorded for it.
+
+### Changed — `no-js-scan` reports the trend, not just the total (2026-10-21)
+
+The gate is non-blocking on purpose: `NO-JAVASCRIPT-SOURCE-POLICY.adoc` flips a
+repository from warn to block once its surface reaches zero, and burble's is
+25 files. Arming it would have been red on every run from the day it landed.
+
+What it could not do was say anything about direction, and the policy records
+burble at **14** files on 2026-06-02 — so the surface has grown 79% during
+forty-five consecutive green runs. It now fetches the base commit, lists the
+files this change adds, and annotates them, while still exiting 0. Making *growth*
+blocking needs a third state in the upstream policy (DEBT C-2).
+
 ### Fixed — three checks were red on `main` because of a lockfile one hop away (2026-10-21)
 
 `Validate Hypatia Baseline`, `Hypatia Neurosymbolic Analysis` and

@@ -36,14 +36,14 @@ other, so they are derived rather than carried forward. `HIGH` is split as
 | Domain | Items | HIGH (open / resolved) |
 |---|---|---|
 | Build | 1 | 0 / 1 |
-| Supply chain | 4 | 2 / 1 |
-| CI/CD | 6 | 4 / 1 |
-| Licence | 4 | 2 / 2 |
-| Documentation | 6 | 2 / 1 |
+| Supply chain | 4 | 1 / 2 |
+| CI/CD | 7 | 3 / 2 |
+| Licence | 4 | 4 / 0 |
+| Documentation | 6 | 3 / 0 |
 | Code | 9 | 5 / 0 |
-| Proof | 4 | 2 / 0 |
+| Proof | 4 | 1 / 1 |
 | Test | 3 | 1 / 0 |
-| **Total** | **37** | **18 / 6** |
+| **Total** | **38** | **18 / 6** |
 
 ---
 
@@ -145,40 +145,91 @@ currently vendors rather than fetches.
 
 ## CI/CD
 
-### C-1 — eight workflows have NEVER produced a single success · HIGH
+### C-1 — six workflows have NEVER started, and four more have not run since the summer · HIGH
+
+Re-measured 2026-10-21 18:30Z, last twelve runs per workflow, excluding the
+20-run mass event at 18:26 (C-8). The previous version of this entry counted
+the whole history, which conflated three different failures: a workflow that
+never *starts*, one that starts and fails, and one that has not been *triggered*
+in months. Only the first is a workflow defect.
 
 ```
-gh run list --repo metadatastician/burble --workflow <w>.yml --limit 100 \
-  --json conclusion | jq 'group_by(.conclusion)|map({(.[0].conclusion):length})|add'
+for w in .github/workflows/*.yml; do
+  gh api "repos/metadatastician/burble/actions/workflows/$(basename $w)/runs?per_page=12" \
+    --jq '[.workflow_runs[].conclusion // .status] | group_by(.) | map("\(.[0]):\(length)") | join(",")'
+done
 ```
 
-| Workflow | Conclusions (last ≤100) |
+**Never starts (6) — `startup_failure`, zero jobs, no log, no annotation.**
+Every one of them calls a reusable workflow in another repository; see C-6.
+
+| Workflow | Last 12 |
 |---|---|
-| `governance.yml` | failure 99, startup_failure 1 |
-| `instant-sync.yml` | failure 98, startup_failure 2 — logs `Bad credentials` (expired PAT) |
-| `secret-scanner.yml` | failure 95, startup_failure 5 |
-| `install-roundtrip.yml` | failure 47, startup_failure 3, cancelled 9 |
-| `pages.yml` | startup_failure 1 (one run, ever) |
-| `publish-verisimdb.yml` | failure 12, startup_failure 1 |
-| `release.yml` | failure 1 |
-| `push-email-notify.yml` | skipped 93, startup_failure 7 — never ran a real job |
+| `governance.yml` | startup_failure 11, failure 1 |
+| `hypatia-scan.yml` | startup_failure 11, failure 1 |
+| `scorecard.yml` | startup_failure 11, failure 1 |
+| `secret-scanner.yml` | startup_failure 11, success 1 |
+| `spark-theatre-gate.yml` | startup_failure 11, success 1 |
+| `conformance.yml` | startup_failure 5 (new; never run) |
 
-Five more sit above 80% red. **`secret-scanner` is a security gate that has
-never once run clean.** Red is the normal state here, which means nobody can
-be reading the board — the signal is gone.
+**Starts and fails (2).**
 
-**Next move:** triage as a batch, not individually. Six of these are
-reusable-callers whose lockfile entries were missing until #190; re-measure
-after it merges and only then chase what remains.
+| Workflow | Last 12 | Why |
+|---|---|---|
+| `publish-verisimdb.yml` | failure 9, startup_failure 3 | Weekly build of `nextgen-databases`' image from this tree — nothing here can fix it. Weekly cron removed 2026-10-21; dispatch kept. |
+| `instant-sync.yml` | failure 10, startup_failure 2 | `FARM_DISPATCH_TOKEN` present but expired (`Bad credentials`). The guard checks presence, not validity. Dormant since 2026-07-20. |
 
-### C-2 — `no-js-scan` is structurally incapable of failing · HIGH
+**Dormant — not red, not green either (3).**
 
-`no-js-scan.yml:99` ends `exit 0`, commented `# Warn-first: never fail the
-build.` History: **24 runs, 24 successes** — because it cannot be anything
-else.
+| Workflow | Last run | Why |
+|---|---|---|
+| `install-tests.yml` | 2026-09-12 success | Path-filtered to installer files; nothing has touched them. Green when it runs. |
+| `install-roundtrip.yml` | 2026-09-12 success | Same. |
+| `mirror.yml` | never ran a job | 12/12 `skipped`: `mirror-reusable.yml` gates every forge on a repo variable (`GITLAB_MIRROR_ENABLED`, …) and none is set here. Opt-in by design, but it means burble is mirrored nowhere. |
+| `release.yml` | 2026-03-22 failure | One run, ever. Untested, not a red streak. |
+| `push-email-notify.yml` | 2026-07-20 skipped | Dormant by design (`PUSH_EMAIL_ENABLED` unset). |
 
-**Next move:** either arm it or delete it. A gate that cannot fail is worse
-than no gate: it converts an unknown into a false assurance.
+**Green (18)** — `boj-build`, `casket-pages`, `codeql`, `dependency-audit`,
+`dogfood-gate`, `elixir-ci`, `idris-abi`, `joinery-native`, `lock-sync-gate`,
+`no-js-scan`, `oikosbot`, `rhodibot`, `static-analysis-gate`,
+`web-client-tests`, `workflow-safety`, `affinescript-canary`, `label-triage`,
+`labels` — measured, not assumed. (31 workflows: 18 + 5 dormant + 6 that never
+start + 2 that fail; `pages.yml` was deleted on 2026-10-21.)
+
+So the board is not "mostly red". It is **twenty green lanes, six lanes that
+cannot start, and two that never could have passed** — and because the six are
+the security and conformance lanes, the green majority is the wrong half of
+the surface. `secret-scanner` is the one to keep in view: it is a security gate
+with a single success in its last twelve runs.
+
+**Next move:** C-6 for the six. For the rest, the actions landed on 2026-10-21:
+the weekly VeriSimDB cron is gone, `pages.yml` (a second, never-working
+deployer of the same Pages environment) is deleted, and CodeQL no longer
+cancels its own `main` scan.
+
+### C-2 — `no-js-scan` cannot fail, and the policy says it must not yet · HIGH · PARTIAL 2026-10-21
+
+`no-js-scan.yml` ends `exit 0`, commented `# Warn-first: never fail the build.`
+History: 45 runs, 45 successes — it is green on every input, which is
+indistinguishable from a workflow that does nothing.
+
+The obvious "fix" is wrong. `standards/docs/NO-JAVASCRIPT-SOURCE-POLICY.adoc`
+is explicit that a repo flips from warn to block **when its own surface reaches
+zero** (`gossamer` is the worked example) and records burble at **14 files** on
+2026-06-02. Arming `exit 1` here would be red on every run from the day it
+landed, on 25 files that the migration plan already knows about.
+
+What *was* missing is any measurement of direction, and that is the actual
+defect: burble is at **25 files today**, up 79% since the policy was written,
+and 45 consecutive green runs said nothing about it. The workflow now fetches
+the base commit, diffs additions, lists them in the step summary and annotates
+them — still non-blocking, per policy, but no longer blind.
+
+**Next move (owner decision, upstream):** the policy has two states, "warn
+while non-zero" and "block at zero", and no state for "non-zero and growing".
+Either accept growth, or add a ratchet state (`standards` issue needed) so that
+`a repo at N files may not exceed N`. Until then this entry records the number
+and its direction: **25, rising.**
 
 ### C-3 — `static-analysis-gate` zeroes its own findings on error · HIGH
 
@@ -301,6 +352,43 @@ fork-secret and outside-collaborator approval settings and other startup
 diagnostics. **`startup_failure` with no steps or annotation on the external
 reusable callers is evidence to investigate policy, not proof of the cause.**
 The earlier YAML investigation is recorded in C-1 and `88b84ed`.
+
+### C-8 — every workflow on the branch failed to start at 18:26, for one commit only · MEDIUM · OPEN
+
+At 18:26Z on 2026-10-21, all twenty workflows triggered by `9731bd0` reported
+`startup_failure` — including `lock-sync-gate.yml`, which has no `uses:`, no
+secrets, no matrix and no container, and `web-client-tests.yml`, which had been
+green nine minutes earlier on the parent commit. Four minutes before, at 18:20,
+the same twenty ran normally on `ce5aa20` (all green except the six in C-6).
+
+So this is a second, distinct event: C-6 is six lanes that never start, C-8 is
+everything failing to start at once, once.
+
+What is known:
+
+- `9731bd0` is authored by `coderabbitai[bot]`, and the pull request was
+  `MERGEABLE` throughout; `git diff --name-status ce5aa20 9731bd0 -- .github/`
+  is **empty** — not one workflow file differs;
+- all 31 workflow YAML files parse, and `actions.lock` matches all 65 `uses:`
+  refs in both directions (checked locally, same algorithm as
+  `scripts/check-lock-sync.sh`);
+- the same owner's other repositories ran external-reusable lanes normally
+  inside that half hour (`marid` at 18:06, `gossamer` at 19:16), so it was not
+  the callee and not the organisation's reusable-workflow access.
+
+That leaves a repository-level Actions condition that existed for the length of
+that run: disabled Actions, a spending limit, or a policy change reverted
+afterwards. None of them is readable with the token available here (403 on
+`/actions/permissions`), and none of them leaves a log — `startup_failure` runs
+have zero jobs, so `GET /actions/runs/<id>/logs` is a 404.
+
+**Next move:** the falsifiable check is the next push to this branch. If it
+starts normally, the event was transient and this entry closes with the
+observation only; if it repeats, check Settings → Actions → General
+(*Allow all actions* vs allowance list) and the billing/spending-limit banner on
+the same page, in that order. Both are one screen.
+
+---
 
 ---
 
@@ -646,22 +734,22 @@ worth preserving.
 
 ## Proof
 
-### P-1 — no proof gate in CI at all · HIGH
+### P-1 — no proof gate in CI at all · HIGH · RESOLVED (found stale) 2026-10-21
 
-11 `.idr` modules and `burble-abi.ipkg` exist. No workflow builds them.
+This entry said "no workflow builds them" and cited `pages.yml` as the only
+idris2-touching workflow. Both halves are wrong, and the second one was
+actively misleading: `idris-abi.yml` exists, runs in an
+`idris2-pack` container, and executes `idris2 --build burble-abi.ipkg` — the
+ipkg form this entry asked for — on every pull request that touches
+`src/Burble/ABI/**`. It is green (9 of its last 12 runs, the rest the C-8
+event).
 
-```
-grep -rniE 'idris|coq|lean|proof' .github/workflows/
-# only pages.yml (an idris2-pack container running the Ddraig SSG — not the
-# ABI proofs) and rhodibot.yml (a grep count)
-```
+`pages.yml` never touched the proofs at all; it ran the Ddraig static-site
+generator. It has been deleted (see C-1) because `casket-pages.yml` deploys the
+same `github-pages` environment on the same trigger and is the one that works.
 
-The single idris2-touching workflow, `pages.yml`, has **one run in its entire
-history and it was a startup_failure.**
-
-**Next move:** an ipkg-based `idris2 --typecheck burble-abi.ipkg` job. Note the
-estate rule: per-file `idris2 --check` exits 0 on module-not-found *and* on
-unsolved holes, so it is a fake gate — the ipkg form is the honest one.
+What remains genuinely unverified is P-2 — that the Idris ABI and the Zig FFI
+still agree — which type-checking cannot answer.
 
 ### P-2 — `PROOF-NEEDS.md` marks Idris↔Zig mirroring "(DONE)" with nothing checking it · HIGH
 
