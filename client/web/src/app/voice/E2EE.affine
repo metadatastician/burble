@@ -8,33 +8,32 @@
 // artifact it produced referenced three identifiers that did not exist. It was
 // harmless by luck, not design.
 //
-// It is kept as a failing stub so that a call site fails loudly instead of
-// transmitting plaintext, and so the next reader is sent to the real module.
+// It is kept as a failing stub so a call site breaks loudly instead of sending
+// plaintext, and so the next reader is sent to the real module:
 //
-//   real implementation   client/web/e2ee.js       (WebCrypto, 44 tests)
-//   key exchange          client/web/e2ee-session.js
-//   protocol              docs/decisions/0016-peer-held-group-keys.adoc
+//   implementation   client/web/e2ee.js          (WebCrypto, 44 tests)
+//   key exchange     client/web/e2ee-session.js
+//   protocol         docs/decisions/0016-peer-held-group-keys.adoc
 //
-// Frames are NOT yet encrypted on the call path: nothing attaches the Encoded
-// Transform to a peer connection. ADR-0016 §Gaps tracks that, and the README
-// says so.
+// Frames are NOT yet encrypted on the call path. ADR-0016 §Gaps tracks that.
 //
-// NOTE ON SYNTAX: this file was previously written in ReScript. Renaming a
-// `.res` to `.affine` does not make it AffineScript — see the upstream
-// ON-RAMP.adoc, which documents exactly that anti-pattern. Everything below is
-// AffineScript, and `affinescript check` is the only thing that can say so.
+// Syntax note: this file was previously ReScript. Renaming `.res` to `.affine`
+// does not make AffineScript — see upstream docs/ON-RAMP.adoc. This file follows
+// the shape of upstream's CI-gated consumer example
+// (examples/consumers/extension-boundary/src/boundary.affine): no imports, no
+// host externs, integer status codes.
 
 module E2EE;
 
-use prelude::{Result, Err};
-
-// The message every disabled entry point returns.
-pub fn disabled_message() -> String {
-  "[Burble:E2EE] client/web/src/app/voice/E2EE is a disabled placeholder; use client/web/e2ee.js"
+// Status code returned by every entry point here: 0 would mean "encryption is
+// available and configured", which is never true for this module.
+pub fn disabled() -> Int {
+  1
 }
 
-// Always fails. Kept so an existing call site breaks at the call rather than
-// quietly sending frames in the clear.
-pub fn initialize() -> Result<Bool, String> {
-  Err(disabled_message())
+// Whether this module can encrypt anything. It cannot, and saying so as a
+// function — rather than by absence — is what makes the disabled state visible
+// to a call site.
+pub fn is_available() -> Bool {
+  false
 }
