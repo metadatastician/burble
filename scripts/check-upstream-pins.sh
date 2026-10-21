@@ -60,7 +60,9 @@ if [ ! -d "$WF_DIR" ]; then
 fi
 
 # fetch <owner/repo> <sha> <path-in-repo>
-# Prints the file and returns 0, or returns 1 without printing.
+# Write the file to stdout; return 0 on success, nonzero on failure.
+# Use STANDARDS_SRC only for hyperpolymath/standards; otherwise fetch over HTTPS.
+# A failed fetch may leave partial output; git show and curl exit statuses propagate.
 fetch() {
   local repo="$1" sha="$2" path="$3"
   if [ -n "$STANDARDS_SRC" ] && [ "$repo" = "hyperpolymath/standards" ]; then
@@ -73,8 +75,9 @@ fetch() {
     "https://raw.githubusercontent.com/${repo}/${sha}/${path}" 2>/dev/null
 }
 
-# Every `uses:` in a workflow that calls a reusable workflow, as
-# "<owner/repo> <sha> <path-in-repo>", de-duplicated.
+# Read WF_DIR's .yml/.yaml files for unquoted reusable-workflow calls pinned to
+# lowercase 40-hex SHAs. Print sorted, unique "<owner/repo> <sha> <path-in-repo>"
+# records; tags and branches are ignored.
 pins() {
   grep -hE "^[[:space:]]*(-[[:space:]]+)?uses:[[:space:]]*[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/\.github/workflows/" \
     "$WF_DIR"/*.yml "$WF_DIR"/*.yaml 2>/dev/null \
@@ -93,7 +96,8 @@ pins() {
   | sort -u
 }
 
-# The actions a callee workflow uses, normalised to "<owner/repo>@<sha>".
+# Read workflow text from stdin; print lowercase "<owner/repo>@<ref>" action keys.
+# Skip local actions, Docker actions, and nested reusable-workflow calls.
 # Sub-path actions collapse to their repository: the lock keys repositories.
 # (github/codeql-action/upload-sarif@X -> github/codeql-action@X)
 callee_actions() {
@@ -117,7 +121,8 @@ callee_actions() {
     }'
 }
 
-# The `ref:` the lock records for a dependency key (empty if unrecorded).
+# Print the ref for a case-insensitive dependency key ($2) in lock text ($1),
+# or nothing if no matching ref is found.
 lock_ref_for() {
   local lock="$1" key="$2"
   printf '%s\n' "$lock" | KEY="$key" awk '

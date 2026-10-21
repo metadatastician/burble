@@ -115,6 +115,10 @@ export function serve(options, handler) {
     port: options.port,
     hostname: options.hostname,
 
+    /**
+     * Dispatch a request with a WebSocket upgrade context and return its response.
+     * Resolve to `undefined` after an upgrade; handler and upgrade errors reject.
+     */
     async fetch(req, server) {
       let pending = null;
 
@@ -154,6 +158,7 @@ export function serve(options, handler) {
     },
 
     websocket: {
+      /** Mark the facade open and notify its `onopen` callback. */
       open(ws) {
         const holder = ws.data;
         holder.ws = ws;
@@ -166,11 +171,13 @@ export function serve(options, handler) {
         const data = typeof message === "string" ? message : new TextDecoder().decode(message);
         holder.socket?.onmessage?.({ data });
       },
+      /** Mark the facade closed and notify `onclose` with `{ code, reason }`. */
       close(ws, code, reason) {
         const holder = ws.data;
         holder.state = CLOSED;
         holder.socket?.onclose?.({ code, reason });
       },
+      /** Forward the error unchanged to the facade's `onerror` callback. */
       error(ws, error) {
         ws.data?.socket?.onerror?.(error);
       }
