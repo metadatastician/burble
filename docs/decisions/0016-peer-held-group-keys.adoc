@@ -158,6 +158,11 @@ These are open, tracked, and must stay in the README until closed:
    Encoded Transform is not written**, so no media is encrypted beyond
    DTLS-SRTP. The protocol is implemented on both sides; no call uses it yet.
 
+   The coordination plane it depends on is covered by
+   `test/burble_web/channels/room_channel_e2ee_test.exs` — key registration,
+   the key-set fetch, the sealed-blob relay, epoch bumps on join, and peer
+   removal on leave — which runs green in CI on OTP 27 / Elixir 1.17.
+
    A second client module already existed — `client/web/src/app/voice/E2EE.res`
    — and was not encryption: it claimed AES-256-GCM, XORed frames with the
    local private key, derived its key from one side only, and was imported by
@@ -179,8 +184,10 @@ These are open, tracked, and must stay in the README until closed:
    wait for the epoch bump that the disconnect triggers. Correct, but a stall
    if the bump is missed.
 4. **Nothing is formally verified.** This is a careful implementation, not a
-   verified one; the tests exercise the pure functions and the coordinator's
-   state machine, not the browser.
+   verified one. The tests exercise the pure functions on both sides (24 Elixir,
+   19 browser), the coordinator's state machine and the channel wiring; they do
+   not exercise a real call, because there is no call path to exercise until
+   the Encoded Transform exists.
 
 ## Consequences
 
