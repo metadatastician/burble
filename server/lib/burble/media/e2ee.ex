@@ -536,12 +536,17 @@ defmodule Burble.Media.E2EE do
          true <- is_binary(blob) and byte_size(blob) > 0,
          true <- byte_size(blob) <= @max_sealed_bytes,
          true <- Map.has_key?(room.peers, peer_id),
-         :ok <- check_epoch(room, epoch) do
-      room = put_in(room, [:sealed, peer_id], %{epoch: epoch, blob: blob})
+         :ok <- check_epoch(room, epoch),
+         leader <- leader_id(room),
+         true <- peer_id == leader,
+         nil <- Map.get(room.sealed, peer_id) do
+      room = put_in(room, [:sealed, peer_id], %{epoch: epoch, from: leader, blob: blob})
       {:reply, :ok, put_in(state, [:rooms, room_id], room)}
     else
       false -> {:reply, {:error, :invalid_sealed_blob}, state}
       {:error, reason} -> {:reply, {:error, reason}, state}
+      %{epoch: ^epoch} -> {:reply, {:error, :already_published}, state}
+      _ -> {:reply, {:error, :not_leader}, state}
     end
   end
 
@@ -555,8 +560,8 @@ defmodule Burble.Media.E2EE do
         current = room.epoch
 
         case Map.get(room.sealed, peer_id) do
-          %{epoch: ^current, blob: blob} ->
-            {:reply, {:ok, %{epoch: current, blob: blob}}, state}
+          %{epoch: ^current, from: from, blob: blob} ->
+            {:reply, {:ok, %{epoch: current, from: from, blob: blob}}, state}
 
           %{epoch: _stale} ->
             {:reply, {:error, :stale_epoch}, state}
