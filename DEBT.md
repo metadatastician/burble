@@ -428,6 +428,17 @@ its inputs said. The refinement belongs upstream, in the rules:
    adjudication and the reason the two `critical` cells do not describe two
    live vulnerabilities.
 
+**Open question — the delta column.** The K9 grid compares revisions
+(`↔ unchanged` on every row); the findings grid has said `— no comparable
+baseline` on all three of its runs so far. The baseline block is present and
+well-formed in the posted comment (schema 1, profile `d99bca26…`, pr 250, sha,
+three reporters), so this is not a missing baseline. The likeliest explanation
+is that the findings renderer's `profile` covers the caller's own workflow
+file: this pull request edited `hypatia-scan.yml` between every run — it was
+created, then the badge job was removed — so each run computed a different
+profile and correctly refused to compare. If the next run on an unchanged file
+still reports no baseline, that explanation is wrong and the defect is upstream.
+
 **Next move:** file the two rule refinements against `panic-attack` and one
 against `hypatia`; keep the grid purple until then, because it is telling the
 truth about its inputs.
