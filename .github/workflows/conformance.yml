@@ -45,7 +45,7 @@ permissions:
 jobs:
   deed:
     name: Validate DEED manifests
-    uses: hyperpolymath/standards/.github/workflows/deed-conformance.yml@0d47b89259128962bc0609f223dbff559724bfb1
+    uses: hyperpolymath/standards/.github/workflows/deed-conformance.yml@01c9b0c9f2646ebea0b30a9588462642ac94aee9
     with:
       # burble_chora.deed is the repository's own deed; a run that finds no deed
       # at all should fail rather than pass silently.
@@ -59,7 +59,7 @@ jobs:
     permissions:
       contents: read
       pull-requests: read
-    uses: hyperpolymath/standards/.github/workflows/k9-conformance.yml@0d47b89259128962bc0609f223dbff559724bfb1
+    uses: hyperpolymath/standards/.github/workflows/k9-conformance.yml@01c9b0c9f2646ebea0b30a9588462642ac94aee9
     with:
       require-files: true
       fail-on-indeterminate: false

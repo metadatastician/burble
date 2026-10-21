@@ -17,7 +17,7 @@ permissions:
 
 jobs:
   scorecard:
-    uses: hyperpolymath/standards/.github/workflows/scorecard-reusable.yml@0d47b89259128962bc0609f223dbff559724bfb1
+    uses: hyperpolymath/standards/.github/workflows/scorecard-reusable.yml@01c9b0c9f2646ebea0b30a9588462642ac94aee9
     permissions:
       # A job-level `permissions:` block REPLACES the workflow-level grant rather
       # than merging with it, and a called reusable workflow may not request more
