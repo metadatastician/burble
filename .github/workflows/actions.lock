@@ -19,6 +19,9 @@ workflows:
     '.github/workflows/codeql.yml':
         - 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1'
         - 'github/codeql-action@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee'
+    '.github/workflows/conformance.yml':
+        - 'actions/download-artifact@v8.0.2'
+        - 'hyperpolymath/standards@0d47b89259128962bc0609f223dbff559724bfb1'
     '.github/workflows/dependency-audit.yml':
         - 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1'
         - 'dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8'

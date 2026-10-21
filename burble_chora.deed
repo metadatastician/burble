@@ -1,0 +1,33 @@
+;; SPDX-License-Identifier: MPL-2.0
+;; SPDX-FileCopyrightText: 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+(repo-deed
+  :schema-version "1.0.0"
+  :canonical-name "burble"
+  :repo-uuid #u8"gv-clade-index:github.com/metadatastician/burble"
+  :beholding-chora #u5"estate/chora"
+  (identity :owner "metadatastician" :primary-forge github)
+  (front-doors :human "README.adoc" :agent ".machine_readable/0-AI-MANIFEST.a2ml")
+  (authority
+    :licensing "LICENSE"
+    :decisions "docs/decisions/"
+    :agent-policy "CLAUDE.md")
+  (routing
+    :control-plane "server/"
+    :media "server/lib/burble/media/"
+    :web-client "client/web/"
+    :signalling "signaling/"
+    :contracts ".machine_readable/self-validating/"
+    :enforcement ".github/workflows/")
+  (status
+    :evidence-source ".github/workflows/web-client-tests.yml"
+    :evidence-status "The five-state K9-DEED conformance grid and the Hypatia findings grid are not yet posted on this repository; this deed records routing only, and claims no readiness grade. A2ML has moved to DEED estate-wide, but most of this tree's machine-readable files are still .a2ml (see DEBT CODE-1c); that migration is outstanding rather than done."
+    :interaction-source ".machine_readable/ai/AI.a2ml")
+  (policies
+    (licensing
+      :initial-assignment "New files carry MPL-2.0 with an SPDX header, as CONTRIBUTING.md and the reuse manifests require."
+      :existing-declarations "Manual-Only; the AGPL-3.0 files recorded in DEBT LIC-1 are not relicensed by an agent.")
+    (claims
+      :rule "A claim about the E2EE boundary is DTLS-SRTP-only unless the peer-held group key path is on the call path; ADR-0016 says it is not.")
+    (fleet
+      :enrolment ".gitbot-fleet/enrolment.json"
+      :report-backs ".gitbot-fleet/report-backs/")))
