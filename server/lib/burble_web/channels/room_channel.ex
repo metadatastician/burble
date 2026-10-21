@@ -412,18 +412,19 @@ defmodule BurbleWeb.RoomChannel do
   # Keys travel base64-encoded because channel payloads are JSON.
 
   @impl true
-  def handle_in(
-        "e2ee_register_key",
-        %{"public_key" => encoded, "identity_sig" => identity_sig, "sig_alg" => sig_alg},
-        socket
-      ) do
+  def handle_in("e2ee_register_key", %{"public_key" => encoded} = params, socket) do
     room_id = socket.assigns.room_id
     user_id = socket.assigns.user_id
 
+    # Optional proof of possession (ADR-0016 §4a). Absent is accepted today and
+    # recorded as unproven; present and wrong is refused.
     with {:ok, public_key} <- decode_public_key(encoded),
-         :ok <- verify_e2ee_key_identity_binding(room_id, user_id, public_key, identity_sig, sig_alg),
+         {:ok, identity_key} <- decode_optional_key(params["identity_key"], 32),
+         {:ok, signature} <- decode_optional_key(params["signature"], 64),
          {:ok, %{epoch: epoch, peer_count: count}} <-
-           safe_e2ee(fn -> E2EE.register_peer_key(room_id, user_id, public_key) end) do
+           safe_e2ee(fn ->
+             E2EE.register_peer_key(room_id, user_id, public_key, identity_key, signature)
+           end) do
       broadcast!(socket, "e2ee_key_set", %{
         peer_id: user_id,
         epoch: epoch,
@@ -439,7 +440,7 @@ defmodule BurbleWeb.RoomChannel do
 
   @impl true
   def handle_in("e2ee_register_key", _params, socket) do
-    {:reply, {:error, %{reason: "invalid_public_key_or_identity_proof"}}, socket}
+    {:reply, {:error, %{reason: "invalid_public_key"}}, socket}
   end
 
   @impl true
@@ -601,6 +602,19 @@ defmodule BurbleWeb.RoomChannel do
   end
 
   defp decode_public_key(_), do: {:error, :invalid_public_key}
+
+  # Optional base64 field of an exact length: nil stays nil (no proof offered),
+  # a malformed value is an error rather than a silent downgrade to "unproven".
+  defp decode_optional_key(nil, _bytes), do: {:ok, nil}
+
+  defp decode_optional_key(encoded, bytes) when is_binary(encoded) do
+    case Base.decode64(encoded) do
+      {:ok, <<key::binary-size(bytes)>>} -> {:ok, key}
+      _ -> {:error, :invalid_key_proof}
+    end
+  end
+
+  defp decode_optional_key(_other, _bytes), do: {:error, :invalid_key_proof}
 
   defp decode_sealed_blob(encoded) when is_binary(encoded) do
     case Base.decode64(encoded) do

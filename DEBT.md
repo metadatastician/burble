@@ -346,6 +346,24 @@ absent*; when SNIF **is** present, a dispatch to any of the 22 is an
 `ZigBackend`, or mark them `@optional_callbacks` and make `SmartBackend`
 route around them. Any of the three is fine; the current state is not.
 
+### CODE-1b — key registration proves possession, not identity · OPEN 2026-10-21
+
+`Burble.Media.E2EE.register_peer_key/5` accepts an Ed25519 signature over
+`room|peer|base64(public_key)`. That proves the sender holds the private key for
+the key it is registering, which stops a copied ephemeral key being registered
+by someone else.
+
+It does **not** prove who that is: nothing binds the Ed25519 identity key to the
+account, so an attacker can register a key of its own and sign it perfectly. The
+partial control is the one that was cheap; the real one needs an account-bound
+identity key and a decision about where it lives (server-held public key, device
+pairing, or a key-transparency log).
+
+Until then `:e2ee_require_key_proof` defaults to `false`: registrations without a
+proof are accepted and recorded as `proven: false`, so turning the switch on
+cannot silently break an older client — it fails loudly. No shipped client signs
+yet.
+
 ### CODE-1a — the client's E2EE module was not encryption · RESOLVED 2026-10-21
 
 `client/web/src/app/voice/E2EE.res` opened with *"Algorithm: AES-256-GCM / Key

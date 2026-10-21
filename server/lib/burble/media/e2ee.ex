@@ -73,7 +73,7 @@ defmodule Burble.Media.E2EE do
       {:ok, pairwise} = E2EE.pairwise_key(my_priv, their_pub, room, epoch, me, them)
       room_key = E2EE.random_group_key()
       {:ok, sealed} = E2EE.seal_group_key(room_key, pairwise, room, epoch, me, them)
-      publish sealed for `them`           # -> publish_sealed/4
+      publish sealed from `us` to `them`  # -> publish_sealed/5
 
       # each other peer
       {:ok, %{blob: sealed}} = fetch my blob   # -> sealed_for/2
@@ -176,7 +176,28 @@ defmodule Burble.Media.E2EE do
   @spec register_peer_key(String.t(), String.t(), binary()) ::
           {:ok, %{epoch: non_neg_integer(), peer_count: non_neg_integer()}} | {:error, term()}
   def register_peer_key(room_id, peer_id, public_key) do
-    GenServer.call(__MODULE__, {:register_peer_key, room_id, peer_id, public_key})
+    register_peer_key(room_id, peer_id, public_key, nil, nil)
+  end
+
+  @doc """
+  Record a peer's X25519 public key, with a proof of possession.
+
+  `identity_key` is a raw Ed25519 public key and `signature` is that key's
+  signature over `room_id <> "|" <> peer_id <> "|" <> base64(public_key)`.
+  Verification shows the registering peer holds a private key, so a key cannot
+  be registered by someone who merely copied it off the wire.
+
+  It is **not** proof of identity: nothing binds `identity_key` to the account,
+  so it stops substitution of an ephemeral key, not impersonation of a person.
+  That binding is the missing half, tracked in DEBT (CODE-1b).
+  """
+  @spec register_peer_key(String.t(), String.t(), binary(), binary() | nil, binary() | nil) ::
+          {:ok, %{epoch: non_neg_integer(), peer_count: non_neg_integer()}} | {:error, term()}
+  def register_peer_key(room_id, peer_id, public_key, identity_key, signature) do
+    GenServer.call(
+      __MODULE__,
+      {:register_peer_key, room_id, peer_id, public_key, identity_key, signature}
+    )
   end
 
   @doc """
@@ -210,14 +231,33 @@ defmodule Burble.Media.E2EE do
   end
 
   @doc """
-  Store an opaque sealed room key destined for one peer.
+  Store an opaque sealed room key from `from` to `to`.
 
-  The leader computes this peer-side; the server only checks size and epoch.
+  `from` is the **authenticated** sender — the channel passes the socket's
+  user id, never a client-supplied field — so a peer cannot deposit a blob
+  attributed to someone else. Only the room's key leader may publish, which is
+  the same rule the receiver applies when it decides whom to believe.
+
+  The leader computes this peer-side; the server checks size, epoch, membership
+  and the leadership of `from`, and stores opaque bytes.
+  """
+  @spec publish_sealed(String.t(), String.t(), String.t(), non_neg_integer(), binary()) ::
+          :ok | {:error, term()}
+  def publish_sealed(room_id, from, to, epoch, blob) do
+    GenServer.call(__MODULE__, {:publish_sealed, room_id, from, to, epoch, blob})
+  end
+
+  @doc """
+  Older arity: publish to `peer_id`, attributed to `peer_id` itself.
+
+  Kept because the unit tests express storage and epoch behaviour through it.
+  The channel does **not** use it — an unauthenticated attribution is exactly
+  what `publish_sealed/5` exists to prevent.
   """
   @spec publish_sealed(String.t(), String.t(), non_neg_integer(), binary()) ::
           :ok | {:error, term()}
   def publish_sealed(room_id, peer_id, epoch, blob) do
-    GenServer.call(__MODULE__, {:publish_sealed, room_id, peer_id, epoch, blob})
+    publish_sealed(room_id, peer_id, peer_id, epoch, blob)
   end
 
   @doc """
@@ -484,12 +524,6 @@ defmodule Burble.Media.E2EE do
   end
 
   @impl true
-  def handle_call({:register_peer_key, room_id, peer_id, public_key}, _from, state) do
-    Logger.warning("[E2EE] Rejected unsigned peer key registration for #{room_id}: :missing_key_proof")
-    {:reply, {:error, :missing_key_proof}, state}
-  end
-
-  @impl true
   def handle_call(
         {:register_peer_key, room_id, peer_id, public_key, identity_key, signature},
         _from,
@@ -499,7 +533,7 @@ defmodule Burble.Media.E2EE do
          :ok <- valid_public_key(public_key),
          :ok <- valid_peer_id(peer_id),
          :ok <- check_capacity(room),
-         :ok <- valid_key_proof(room_id, peer_id, public_key, identity_key, signature) do
+         {:ok, proven} <- key_proof(room_id, peer_id, public_key, identity_key, signature) do
       existing = Map.get(room.peers, peer_id)
 
       cond do
@@ -509,7 +543,11 @@ defmodule Burble.Media.E2EE do
 
         true ->
           peers =
-            Map.put(room.peers, peer_id, %{public_key: public_key, joined_at: DateTime.utc_now()})
+            Map.put(room.peers, peer_id, %{
+              public_key: public_key,
+              proven: proven,
+              joined_at: DateTime.utc_now()
+            })
 
           room = %{room | peers: peers}
           room = maybe_rotate(room, reason: :membership_change)
@@ -588,17 +626,18 @@ defmodule Burble.Media.E2EE do
   end
 
   @impl true
-  def handle_call({:publish_sealed, room_id, peer_id, epoch, blob}, _from, state) do
+  def handle_call({:publish_sealed, room_id, from, to, epoch, blob}, _from, state) do
     with {:ok, room} <- fetch_room(state, room_id),
-         :ok <- valid_peer_id(peer_id),
+         :ok <- valid_peer_id(from),
+         :ok <- valid_peer_id(to),
          true <- is_binary(blob) and byte_size(blob) > 0,
          true <- byte_size(blob) <= @max_sealed_bytes,
-         true <- Map.has_key?(room.peers, peer_id),
+         true <- Map.has_key?(room.peers, from),
+         true <- Map.has_key?(room.peers, to),
          :ok <- check_epoch(room, epoch),
-         leader <- leader_id(room),
-         true <- peer_id == leader,
-         nil <- Map.get(room.sealed, peer_id) do
-      room = put_in(room, [:sealed, peer_id], %{epoch: epoch, from: leader, blob: blob})
+         true <- from == leader_id(room),
+         nil <- Map.get(room.sealed, to) do
+      room = put_in(room, [:sealed, to], %{epoch: epoch, from: from, blob: blob})
       {:reply, :ok, put_in(state, [:rooms, room_id], room)}
     else
       false -> {:reply, {:error, :invalid_sealed_blob}, state}
@@ -743,14 +782,40 @@ defmodule Burble.Media.E2EE do
     # PubSub is absent in isolated unit tests; the broadcast is advisory.
     _kind, _reason -> :ok
   end
-  defp valid_key_proof(room_id, peer_id, public_key, identity_key, signature) do
-    payload = "#{room_id}|#{peer_id}|#{public_key}"
+  # Proof of possession for a registered key.
+  #
+  # Ed25519 signs the message itself, so the digest type is `:none` — passing
+  # `:sha256` (as an earlier autofix did) raises, and a rescue then turns every
+  # genuine proof into `:invalid_key_proof`.
+  #
+  # The payload is base64 of the public key, not the raw binary: the client
+  # signs a string it can construct from JSON values, and interpolation of raw
+  # bytes would make the two sides disagree on encoding without ever saying so.
+  defp key_proof(_room_id, _peer_id, _public_key, nil, _signature) do
+    if Application.get_env(:burble, :e2ee_require_key_proof, false) do
+      {:error, :missing_key_proof}
+    else
+      # Accepted, recorded as unproven. Enforcement is the switch above and
+      # will be turned on once every shipped client signs (DEBT CODE-1b).
+      {:ok, false}
+    end
+  end
 
-    case :public_key.verify(payload, :sha256, signature, identity_key) do
-      true -> :ok
-      false -> {:error, :invalid_key_proof}
+  defp key_proof(room_id, peer_id, public_key, identity_key, signature)
+       when is_binary(identity_key) and is_binary(signature) and byte_size(identity_key) == 32 and
+              byte_size(signature) == 64 do
+    payload = "#{room_id}|#{peer_id}|#{Base.encode64(public_key)}"
+
+    if :crypto.verify(:eddsa, :none, payload, signature, [identity_key, :ed25519]) do
+      {:ok, true}
+    else
+      {:error, :invalid_key_proof}
     end
   rescue
     _ -> {:error, :invalid_key_proof}
+  end
+
+  defp key_proof(_room_id, _peer_id, _public_key, _identity_key, _signature) do
+    {:error, :invalid_key_proof}
   end
 end
