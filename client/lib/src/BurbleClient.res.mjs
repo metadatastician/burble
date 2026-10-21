@@ -78,11 +78,11 @@ function disconnect(client) {
   client.config.onConnectionChange("Disconnected");
 }
 
-function secureIdSuffix() {
+let secureIdSuffix = (function () {
   const b = new Uint8Array(4);
   crypto.getRandomValues(b);
   return Array.from(b, x => x.toString(16).padStart(2, "0")).join("");
-}
+});
 
 function guestLogin(client, displayName) {
   let guestId = "guest_" + secureIdSuffix();
@@ -156,6 +156,7 @@ export {
   profileDefaults,
   connect,
   disconnect,
+  secureIdSuffix,
   guestLogin,
   setAuth,
   joinRoom,
