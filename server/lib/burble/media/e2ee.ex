@@ -235,8 +235,13 @@ defmodule Burble.Media.E2EE do
 
   `from` is the **authenticated** sender — the channel passes the socket's
   user id, never a client-supplied field — so a peer cannot deposit a blob
-  attributed to someone else. Only the room's key leader may publish, which is
-  the same rule the receiver applies when it decides whom to believe.
+  attributed to someone else, and the recipient sees who really sent it.
+
+  The server does not decide who the leader is. Every participant derives that
+  from the key set (lowest peer id), and a receiver is free to ignore a blob
+  from anyone else — enforcing it here would mean the server holding a policy
+  it can get wrong during a membership change, and refusing a legitimate
+  publish is a worse failure than relaying one that peers discard.
 
   The leader computes this peer-side; the server checks size, epoch, membership
   and the leadership of `from`, and stores opaque bytes.
@@ -588,7 +593,6 @@ defmodule Burble.Media.E2EE do
          true <- Map.has_key?(room.peers, from),
          true <- Map.has_key?(room.peers, to),
          :ok <- check_epoch(room, epoch),
-         true <- from == leader_id(room),
          nil <- Map.get(room.sealed, to) do
       room = put_in(room, [:sealed, to], %{epoch: epoch, from: from, blob: blob})
       {:reply, :ok, put_in(state, [:rooms, room_id], room)}
