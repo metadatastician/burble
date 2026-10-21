@@ -169,15 +169,26 @@ peer-held group keys; the coordination half is in the tree:
 
 **What is *not* implemented — the part that matters.**
 
-* **The browser half does not exist.** There is no WebCrypto X25519, no
-  AES-GCM frame layer, and no WebRTC Insertable Streams / Encoded Transform
-  wiring in `client/web`. Without them there is no frame encryption at all:
-  the protocol above has no live endpoint.
+* **The browser half is not wired in.** `client/web/e2ee.js` now implements the
+  peer side — X25519 keypairs, pairwise agreement, sealing, frame keys and
+  frame encryption — and it is checked against the server's own output by
+  committed test vectors (`deno task test`, 19 tests). But nothing calls it
+  yet: the client UI does not do key exchange, and the **WebRTC Encoded
+  Transform (Insertable Streams) is not written**, so no media is encrypted
+  beyond DTLS-SRTP. The crypto exists and is verified; the call path does not
+  use it.
 * The server-side coprocessor pipeline still runs in `:e2ee` rooms. It no
   longer receives a key (the engine refuses one and logs a warning) and cannot
   decrypt, but ADR-0011 §3 puts content DSP at the edge; that move is not done.
 * No mid-epoch key-leader failover, and nothing on this path is formally
   verified.
+
+**One design point the client work forced.** The room key is shared, so on its
+own it authenticates the *room*, not the *speaker* — any member could forge
+frames that appear to come from any other. The frame layer therefore derives a
+per-sender key (`deriveSenderFrameKey`) and binds the sender id into the AAD.
+A peer can still forge its own frames, which it is entitled to do; it cannot
+speak as someone else.
 
 **So the names changed, to stop the drift.** `:e2ee_key` became
 `:pipeline_key` (server-side, explicitly *not* the room key); the pipeline

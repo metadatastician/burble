@@ -132,6 +132,13 @@ two peers involved, and its AAD names the room, epoch, sender and recipient, so
 no other peer can open, redirect or replay it. Any membership change bumps the
 epoch and drops outstanding blobs.
 
+**Media frames (client-defined).** Once the encoded transform exists, a frame
+is `iv(12) || tag(16) || ciphertext` under AES-256-GCM, with AAD
+`frame-aad|<room>|<epoch>|<sender>|<counter>` and a per-sender key from the
+epoch's room key. The sender id is in the derivation so one member cannot forge
+another's frames. Implemented in `client/web/e2ee.js`, not yet called by the
+call path, and not yet cross-checked against a second implementation.
+
 **Test vectors.** `client/web/tests/fixtures/e2ee-vectors.json` pins the
 byte-level protocol (pairwise derivation, sealing, AAD, frame keys);
 `scripts/verify-e2ee-vectors.mjs` re-derives it with WebCrypto. Regenerate with
