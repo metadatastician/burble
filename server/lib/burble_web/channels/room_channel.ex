@@ -452,14 +452,15 @@ defmodule BurbleWeb.RoomChannel do
   @impl true
   def handle_in("e2ee_publish_sealed", params, socket) do
     room_id = socket.assigns.room_id
+    from = socket.assigns.user_id
 
     with {:ok, to} <- fetch_string(params, "to"),
          {:ok, encoded} <- fetch_string(params, "blob", 1024),
          {:ok, epoch} <- fetch_epoch(params),
          {:ok, blob} <- decode_sealed_blob(encoded),
-         :ok <- safe_e2ee(fn -> E2EE.publish_sealed(room_id, to, epoch, blob) end) do
+         :ok <- safe_e2ee(fn -> E2EE.publish_sealed(room_id, from, to, epoch, blob) end) do
       broadcast!(socket, "e2ee_sealed_key", %{
-        from: socket.assigns.user_id,
+        from: from,
         to: to,
         epoch: epoch,
         blob: encoded
