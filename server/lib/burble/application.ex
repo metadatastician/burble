@@ -90,7 +90,11 @@ defmodule Burble.Application do
       # Telemetry
       Burble.Telemetry,
 
-      # E2EE key rotation scheduler (rotates per-room keys for forward secrecy)
+      # E2EE group-key coordinator. Holds PUBLIC keys, epochs and opaque sealed
+      # blobs only — the room key lives on the peers (ADR-0016).
+      Burble.Media.E2EE,
+
+      # E2EE key rotation scheduler (bumps epochs and revokes distributed keys)
       Burble.Security.KeyRotation,
 
       # PTP precision timing (clock synchronisation for multi-node playout)

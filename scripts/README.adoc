@@ -26,4 +26,27 @@ optional QUIC toolchain (msquic/quicer; experimental — ADR-0007).
 `docker-to-podman-image.sh`, `install-desktop.sh`, `smoke-check.sh`::
 Deploy/build utilities.
 
+*Verification:*
+`check-elixir-syntax.mjs`:: Parse `server/lib` and `server/test` with the real
+Elixir grammar (`tree-sitter-elixir`, WASM — no Elixir toolchain needed), and
+optionally cross-check that every `Module.fun(args)` call names a function that
+exists with that arity. It is a parser, not a compiler: it cannot resolve
+macros, `use`-generated functions, protocols or behaviour callbacks, and it does
+not type-check. Use it where `mix` is unavailable, never instead of `mix`.
+Install once with `deno install --config scripts/deno.json --frozen`, then
+`deno run --allow-read --allow-env scripts/check-elixir-syntax.mjs server/lib server/test`
+from the repository root. The Deno manifest keeps the parser dependencies at
+exact versions and `scripts/deno.lock` records their resolved graph and integrity.
+The tool only uses the bundled WASM grammar; native dependency build scripts
+are not needed.
+Rationale and measured results:
+`docs/reports/maintenance/maintenance-2026-10-21.md` (Appendix).
+
+`gen-e2ee-vectors.exs`:: Regenerate `client/web/tests/fixtures/e2ee-vectors.json`
+from the shipped `Burble.Media.E2EE` functions (needs Elixir). Regenerate only
+when the protocol changes — a changed value is a wire break.
+`verify-e2ee-vectors.mjs`:: Re-derive those vectors with WebCrypto (X25519,
+HKDF-SHA256, AES-256-GCM) — the primitives the browser half must use — and fail
+on disagreement. No dependencies; runs on plain Node.
+
 `burble-launcher.sh.deprecated-2026-04-10`:: Retained, deprecated.

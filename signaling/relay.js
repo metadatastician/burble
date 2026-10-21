@@ -63,11 +63,17 @@ Deno.serve({ port: PORT, hostname: HOST }, async (req) => {
     ? "*"
     : ALLOWED_ORIGINS.split(",").map(o => o.trim()).includes(origin) ? origin : "";
   const cors = {
-    "Access-Control-Allow-Origin": allowedOrigin,
     "Access-Control-Allow-Methods": "GET, PUT, OPTIONS",
     "Access-Control-Allow-Headers": "Content-Type",
     "Content-Type": "application/json",
+    // Signalling bodies are one-shot secrets between two peers: never cache.
+    "Cache-Control": "no-store",
+    "Vary": "Origin",
   };
+  // Only set ACAO when the origin is actually allowed. An empty value is a
+  // header a browser will reject the response for anyway; omitting it is the
+  // honest answer and keeps the wildcard default working.
+  if (allowedOrigin) cors["Access-Control-Allow-Origin"] = allowedOrigin;
 
   if (req.method === "OPTIONS") return new Response(null, { headers: cors });
 
@@ -86,8 +92,14 @@ Deno.serve({ port: PORT, hostname: HOST }, async (req) => {
 
   // PUT — store offer or answer
   if (req.method === "PUT") {
+    // Check the declared size first: req.text() materialises the whole body,
+    // so a length check afterwards still lets one request allocate it all.
+    const declared = Number(req.headers.get("content-length") || "0");
+    if (declared > MAX_BODY_BYTES) {
+      return new Response(JSON.stringify({ error: "payload too large", max: MAX_BODY_BYTES }), { status: 413, headers: cors });
+    }
     const body = await req.text();
-    if (body.length > MAX_BODY_BYTES) {
+    if (new TextEncoder().encode(body).length > MAX_BODY_BYTES) {
       return new Response(JSON.stringify({ error: "payload too large", max: MAX_BODY_BYTES }), { status: 413, headers: cors });
     }
     // Reject a brand-new room once we're at the concurrent-room ceiling.
@@ -100,6 +112,9 @@ Deno.serve({ port: PORT, hostname: HOST }, async (req) => {
     }
     const room = rooms.get(name);
     room[type] = body;
+    // Refresh the deadline on writes: the sweep used to expire a room 60s after
+    // its FIRST write, so a slow pair could lose a just-posted answer.
+    room.created = Date.now();
     console.log(`[Relay] ${type} stored for room "${name}" (${body.length} bytes, expires in 60s)`);
     return new Response(JSON.stringify({ ok: true, room: name, type }), { headers: cors });
   }
@@ -109,6 +124,11 @@ Deno.serve({ port: PORT, hostname: HOST }, async (req) => {
     const deadline = Date.now() + 30_000;
     while (Date.now() < deadline) {
       const room = rooms.get(name);
+      // Honor the TTL on read as well as in the sweep.
+      if (room && Date.now() - room.created > TTL_MS) {
+        rooms.delete(name);
+        return new Response(JSON.stringify({ error: "expired", message: `Room "${name}" expired` }), { status: 410, headers: cors });
+      }
       if (room?.[type]) {
         const data = room[type];
         // Delete answer after fetch (one-shot) — offer stays for retry

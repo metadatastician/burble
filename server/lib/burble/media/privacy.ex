@@ -194,26 +194,38 @@ defmodule Burble.Media.Privacy do
   # ── E2EE Configuration ──
 
   @doc """
-  Generate E2EE configuration for Insertable Streams.
+  Describe the E2EE parameters a client *would* use for Insertable Streams.
 
-  When E2EE is enabled, the client uses WebRTC Encoded Transform
-  to encrypt audio frames before sending. The SFU forwards opaque
-  encrypted frames without decoding them.
+  The intended shape: the client encrypts audio frames with WebRTC Encoded
+  Transform (AES-GCM-256) before sending, so the SFU only ever forwards opaque
+  bytes. Keys are held by the peers — one peer per epoch seals a random room
+  key to every other peer under their pairwise X25519 key — and
+  `Burble.Media.E2EE` coordinates that without ever holding the key itself
+  (ADR-0016).
+
+  **`enabled` is `false` and stays `false` until the browser side ships.**
+  This function describes a target, not a working feature; returning
+  `enabled: true` here would let a caller advertise encryption that does not
+  exist yet. Rooms currently rely on DTLS-SRTP in transit only.
   """
   def e2ee_config(privacy_mode) do
     case privacy_mode do
       mode when mode in [:e2ee, :maximum] ->
         %{
-          enabled: true,
+          enabled: false,
+          implemented: false,
+          status: :not_yet_shipped,
           algorithm: "aes-gcm-256",
           key_rotation_seconds: 3600,
-          # Clients derive encryption key from a shared room secret
-          # distributed via the signaling channel (encrypted with each peer's public key)
-          key_distribution: :per_room_secret
+          key_custody: :peers,
+          key_distribution: :pairwise_sealed_room_key,
+          # What the client must call on the server once it is wired up.
+          # String, not an atom: this map is designed to be JSON-encoded.
+          coordinator: "Burble.Media.E2EE"
         }
 
       _ ->
-        %{enabled: false}
+        %{enabled: false, implemented: true}
     end
   end
 

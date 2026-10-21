@@ -43,4 +43,36 @@ New ADRs copy `0000-template.adoc` and take the next number.
 | link:0008-formal-proof-enforcement-vs-scope.adoc[0008]
 | Formal-proof enforcement vs. scoping the "formally verified" claim
 | Accepted (Option C)
+
+| link:0009-bridge-scope-reduction.adoc[0009]
+| Delete the SIP/Discord/Matrix bridges; quarantine Mumble as experimental
+| Accepted
+
+| link:0010-presence-discovery-and-trust-zones.adoc[0010]
+| Presence, discovery & trust zones (unified identity-assurance model)
+| Proposed
+
+| link:0011-media-resilience-and-e2ee-boundary.adoc[0011]
+| Media resilience & the E2EE content/metadata boundary
+| Proposed
+
+| link:0012-founding-thesis-ai-assisted-connection.adoc[0012]
+| The founding thesis: AI-assisted connection & support
+| Proposed (first draft)
+
+| link:0013-embeddability-and-participation-escalator.adoc[0013]
+| Embeddability, dogfood-first adoption & the participation escalator
+| Proposed (first draft)
+
+| link:0014-connection-transport-and-frame-router-link.adoc[0014]
+| Connection transport strategy, and the typed-frame-router (v4↔v6) link
+| Proposed (first draft)
+
+| link:0015-ble-presence-wire-format-v1.adoc[0015]
+| BLE presence wire format v1 (frozen)
+| Proposed
+
+| link:0016-peer-held-group-keys.adoc[0016]
+| Peer-held group keys: the server coordinates, the peers hold
+| Proposed (part-way — browser side not shipped)
 |===

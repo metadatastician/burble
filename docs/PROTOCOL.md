@@ -22,13 +22,22 @@ Burble exposes three integration surfaces:
 | HTTP REST     | HTTPS / JSON     | Auth, room/server CRUD, control  | `server/lib/burble_web/router.ex`               |
 | Realtime      | Phoenix Channels | Signaling, room events, presence | `server/lib/burble_web/channels/`               |
 | Wire schemas  | Bebop binary     | Voice signal + room event frames | `server/lib/burble/protocol/`                   |
-| Media plane   | WebRTC SRTP      | E2EE audio frames (SFU-blind)    | `server/lib/burble/media/`                      |
+| Media plane   | WebRTC SRTP      | DTLS-SRTP per hop (not E2EE yet — see below) | `server/lib/burble/media/`          |
 | BLE presence  | BLE advertising  | Knock/rendezvous + presence beacon (v1 FROZEN) | `server/lib/burble/presence/ble_spa.ex` |
 | Rust client   | Phoenix/WebSocket | Embeddable game-session client   | `client/rust/`                                  |
 
-The SFU **does not decrypt** media: voice frames pass through the media
-plane uninterpreted. The Mumble control-plane bridge (experimental) transcodes
-at the control plane only.
+**Media-plane encryption status.** Voice frames are protected by DTLS-SRTP on
+every hop, and that is where it ends: SRTP terminates at the SFU, so the server
+can decrypt the media it forwards. This is *not* end-to-end encryption, and it
+is not "SFU-blind" — earlier revisions of this document said so and were wrong.
+
+ADR-0016 defines the end-to-end design (peers hold the group key, the server
+coordinates public keys, epochs and opaque sealed blobs) and the server half is
+implemented in `server/lib/burble/media/e2ee.ex`. The browser half — WebCrypto
+X25519, AES-GCM frames, WebRTC Encoded Transform — does not exist yet, so no
+room is end-to-end encrypted today. `README.adoc` §*Encryption: what is true
+today* is the authoritative scoreboard. The Mumble control-plane bridge
+(experimental) transcodes at the control plane only.
 
 ## HTTP REST (`/api/v1`)
 
@@ -94,13 +103,51 @@ Channels live in `server/lib/burble_web/channels/`. Two primary topics:
 
 - `signaling:<room_id>` — WebRTC offer/answer/ICE relay. Tested in
   `server/test/burble_web/channels/signaling_channel_test.exs`.
-- `room:<room_id>` — chat + presence + room events. Tested in
-  `server/test/burble_web/channels/room_channel_text_test.exs`.
+- `room:<room_id>` — chat + presence + room events + E2EE key coordination.
+  Tested in `server/test/burble_web/channels/room_channel_text_test.exs` and
+  `server/test/burble_web/channels/room_channel_e2ee_test.exs`.
 
 Frames over the channel transport are encoded as **JSON**. A Bebop binary
 encoding (see below) exists as generated, tested codecs but is **not yet
 wired into the live channel transport** — it is the planned binary fast
 path, not the current one (ADR-0007 honesty note).
+
+### E2EE key-coordination events (`room:<room_id>`)
+
+The coordination half of ADR-0016. Every payload below is either a **public**
+key or an **opaque** sealed blob; no event returns a room key, because the
+server has none. Binary fields are base64 because the channel transport is JSON.
+
+| Event | Direction | Payload | Notes |
+|---|---|---|---|
+| `e2ee_register_key` | client → server | `{"public_key": <b64, 32 B>}` | Idempotent per peer. Reply `{"epoch", "peers"}`; broadcasts `e2ee_key_set`. |
+| `e2ee_key_set` | client → server | `{}` | Reply `{"epoch", "public_keys": {peer_id: b64}}`. |
+| `e2ee_publish_sealed` | client → server | `{"to": peer_id, "epoch": n, "blob": <b64, ≤512 B>}` | Leader-side distribution. Reply `{"epoch"}`; broadcasts `e2ee_sealed_key`. |
+| `e2ee_fetch_sealed` | client → server | `{}` | Reply `{"epoch", "blob"}` or an error (`not_found`, `stale_epoch`). |
+| `e2ee_status` | client → server | `{}` | Reply `{"epoch", "peers", "sealed_peers", "key_custody": "peers"}`. |
+
+`e2ee_sealed_key` is broadcast to the room, not unicast. That is safe by
+construction: the blob is sealed under a pairwise key that exists only on the
+two peers involved, and its AAD names the room, epoch, sender and recipient, so
+no other peer can open, redirect or replay it. Any membership change bumps the
+epoch and drops outstanding blobs.
+
+**Media frames (client-defined).** Once the encoded transform exists, a frame
+is `iv(12) || tag(16) || ciphertext` under AES-256-GCM, with AAD
+`frame-aad|<room>|<epoch>|<sender>|<counter>` and a per-sender key from the
+epoch's room key. The sender id is in the derivation so one member cannot forge
+another's frames. Implemented in `client/web/e2ee.js`, not yet called by the
+call path, and not yet cross-checked against a second implementation.
+
+**Test vectors.** `client/web/tests/fixtures/e2ee-vectors.json` pins the
+byte-level protocol (pairwise derivation, sealing, AAD, frame keys);
+`scripts/verify-e2ee-vectors.mjs` re-derives it with WebCrypto. Regenerate with
+`scripts/gen-e2ee-vectors.exs` only for a deliberate wire break.
+
+**Status: part-way.** Nothing here encrypts media yet — the browser frame layer
+(WebCrypto + Encoded Transform) is unwritten, so calls remain protected by
+DTLS-SRTP per hop. See `README.adoc` §*Encryption: what is true today*.
+
 
 ## Wire schemas — Bebop
 

@@ -1,1 +1,3 @@
 = Maintenance Reports
+
+* xref:maintenance-2026-10-21.md[2026-10-21 — corrective / adaptive / perfective sweep]

@@ -8,6 +8,10 @@ carries the command that produced its evidence. Nothing here is inferred from
 another document's claim — where a published claim did *not* reproduce, that
 mismatch is itself an item.
 
+**Re-measured 2026-10-21** (maintenance sweep, see
+[`docs/reports/maintenance/maintenance-2026-10-21.md`](docs/reports/maintenance/maintenance-2026-10-21.md))
+— `S-1` is now resolved, `S-2`–`S-4` still reproduce.
+
 This file is an **index**, not a replacement. The pre-existing registers remain
 authoritative in their own domains and are linked, not duplicated:
 [`PROOF-NEEDS.md`](PROOF-NEEDS.md) · [`BURBLE-PROOF-STATUS.md`](BURBLE-PROOF-STATUS.md) ·
@@ -73,7 +77,11 @@ emitted code. Prefer regenerating over resolving.
 
 ## Supply chain
 
-### S-1 — `ex_webrtc 0.16.0` is retired with a DTLS auth advisory · HIGH
+### S-1 — `ex_webrtc 0.16.0` is retired with a DTLS auth advisory · HIGH · RESOLVED 2026-10-21
+
+Resolved: `mix.lock` now pins `ex_webrtc 0.17.0`, past the retired release.
+The analysis below is kept as the record of the finding.
+
 
 The only retired package in the lock, and it is the media plane:
 
@@ -338,13 +346,105 @@ absent*; when SNIF **is** present, a dispatch to any of the 22 is an
 `ZigBackend`, or mark them `@optional_callbacks` and make `SmartBackend`
 route around them. Any of the three is fine; the current state is not.
 
+### CODE-1b — key registration proves possession, not identity · OPEN 2026-10-21
+
+`Burble.Media.E2EE.register_peer_key/5` accepts an Ed25519 signature over
+`room|peer|base64(public_key)`. That proves the sender holds the private key for
+the key it is registering, which stops a copied ephemeral key being registered
+by someone else.
+
+It does **not** prove who that is: nothing binds the Ed25519 identity key to the
+account, so an attacker can register a key of its own and sign it perfectly. The
+partial control is the one that was cheap; the real one needs an account-bound
+identity key and a decision about where it lives (server-held public key, device
+pairing, or a key-transparency log).
+
+Until then `:e2ee_require_key_proof` defaults to `false`: registrations without a
+proof are accepted and recorded as `proven: false`, so turning the switch on
+cannot silently break an older client — it fails loudly. No shipped client signs
+yet.
+
+### CODE-1c — the `.affine` tree is ReScript with a different extension · HIGH · OPEN 2026-10-21
+
+Every `.res` file has an `.affine` sibling (34/34), which looks like a migration
+in progress. It is not: the `.affine` files are ReScript source with the
+extension changed, and ReScript does not parse as AffineScript. Upstream
+`docs/ON-RAMP.adoc` names this exact anti-pattern —
+
+> `.res` written in ReScript is not a face, and renaming `Foo.res` to
+> `Foo.affine` does not make it one — it produces a file that fails to parse.
+
+Measured on `affinescript-canary.yml` for this branch: **35 of 37 `.affine` files
+report `affinescript check failed`**. The number had never been visible — GitHub
+caps annotations at ten per check run, and the job log archive is not always
+reachable, so the canary reported a handful of files and hid the rest. It now
+emits the whole result as one annotation.
+
+Two things hid it:
+
+1. **The canary is advisory.** `continue-on-error: true` on the compile step, and
+   the step `exit 1`s internally, so the job shows green while reporting
+   failures. A green canary has never meant "these compile".
+2. **`client/web/MIGRATION.md` said the compiler was unavailable** — true when
+   written (2026-04-21), false since a pinned CLI landed. The "design stub"
+   convention it licensed is what produced the unparseable files.
+
+Corrected in this branch: `MIGRATION.md` states that the compiler exists, that
+`.affine` must be valid AffineScript, and that it is not on the app's build path;
+`src/app/voice/E2EE.affine` (written here, and wrong in exactly this way) is
+rewritten as real AffineScript and **verified by the canary** — it is one of the
+two files that compile; the canary now emits the complete failure list as one
+annotation instead of being capped at ten.
+
+The rewrite is also the worked answer for the other 35: the failure was not the
+function bodies but `use prelude::{Result, Err};`. A consumer file in this repo
+cannot resolve the upstream `prelude` module, so it must use only builtins and
+declare host functions with `pub extern fn` (the shape of upstream's CI-gated
+consumer example). Copying `stdlib/*.affine` verbatim does not work from here.
+
+**Still open:** the other `.affine` files are unparseable, and the canary is still
+advisory. Flipping it to gating turns the build red for files nobody has touched;
+that needs the migration done or the files deleted, which is a decision rather
+than a fix.
+
+**Blocker for the E2EE module specifically:** the client crypto is promise-based,
+AffineScript's `extern fn` is synchronous on the wasm target, and the Bun-ESM
+target's async externs are partial (upstream #122/#103). The pure parts — frame
+header, replay window, leader election, AAD, epoch bookkeeping — are portable
+now; the WebCrypto boundary is not.
+
+### CODE-1a — the client's E2EE module was not encryption · RESOLVED 2026-10-21
+
+`client/web/src/app/voice/E2EE.res` opened with *"Algorithm: AES-256-GCM / Key
+Derivation: HKDF-SHA256"* and encrypted each frame by XORing it with the local
+private key, repeated. It also derived that key from **one peer's** private key,
+so two participants could never have agreed on one.
+
+It was harmless by accident, not by design: nothing imported it, and the
+generated `.res.mjs` in a working tree referenced three variables it never
+defined (so it would have thrown). Evidence:
+
+```
+grep -rn 'E2EE\.\(initialize\|applyToConnection\)' --include=*.res --include=*.affine client/ | wc -l   # -> 0
+grep -n 'ACTUAL ENCRYPTION' client/web/src/app/voice/E2EE.res          # -> "Placeholder XOR for structural proof"
+```
+
+**Resolved:** the module is now a failing stub that names `client/web/e2ee.js`,
+the real WebCrypto implementation, which is pinned against the server's output
+by `client/web/tests/fixtures/e2ee-vectors.json`. **Still open:** wiring that
+module into the call path, and the WebRTC Encoded Transform (ADR-0016 §Gaps).
+
 ### CODE-2 — load-bearing modules with no matching test file · HIGH
 
 50 of 126 `server/lib/burble/**.ex` modules have no name-matching test.
 The ones that matter: `auth/auth.ex`, `auth/guardian.ex`,
-`auth/guardian_pipeline.ex`, `media/e2ee.ex`, `security/mtls.ex`,
-`security/key_rotation.ex`, `verification/avow.ex`, `protocol/voice_signal.ex`
-(the file that broke `main`).
+`auth/guardian_pipeline.ex`, `security/mtls.ex`, `security/key_rotation.ex`,
+`verification/avow.ex`, `protocol/voice_signal.ex` (the file that broke `main`).
+
+**2026-10-21:** `media/e2ee.ex` now has `server/test/burble/media/e2ee_test.exs`
+(peer-side protocol, coordinator state machine, and an assertion that no
+key-returning function is exported). `security/key_rotation.ex` still has none —
+its remaining work is inseparable from `E2EE`, which is now tested.
 
 **Caveat, stated because it changes what you should do with this:** this is a
 *filename heuristic*. Some are genuinely exercised inside other suites — treat

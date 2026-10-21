@@ -20,7 +20,7 @@
 # Metrics tracked:
 #   - Total rotations per room
 #   - Last rotation timestamp per room
-#   - Average rotation latency (time to complete ratchet_key/1)
+#   - Average rotation latency (time to complete request_rotation/1)
 #
 # Author: Jonathan D.A. Jewell
 
@@ -28,7 +28,9 @@ defmodule Burble.Security.KeyRotation do
   @moduledoc """
   Automatic E2EE key rotation scheduler for Burble voice rooms.
 
-  Ensures forward secrecy by periodically calling `Burble.Media.E2EE.ratchet_key/1`
+  Ensures forward secrecy by periodically calling
+  `Burble.Media.E2EE.request_rotation/1` — an epoch bump plus revocation of the
+  distributed key blobs. The server never holds the key itself (ADR-0016).
   for every active room. Subscribes to room lifecycle events via Phoenix PubSub
   to track which rooms are active.
 
@@ -372,7 +374,11 @@ defmodule Burble.Security.KeyRotation do
 
   # Perform a single key rotation for one room.
   #
-  # Measures latency, calls E2EE.ratchet_key/1, and updates room metrics.
+  # Measures latency, calls E2EE.request_rotation/1, and updates room metrics.
+  #
+  # "Rotation" here means the epoch advances and every sealed room key is
+  # discarded, so peers re-derive with fresh ephemeral keys. The server cannot
+  # ratchet the key itself — by design it never holds one (ADR-0016).
   # Returns {result, updated_room_state, %{rotations: n, errors: n}}.
   @spec perform_rotation(String.t(), room_rotation_state()) ::
           {{:ok, non_neg_integer()} | {:error, term()}, room_rotation_state(),
@@ -380,7 +386,7 @@ defmodule Burble.Security.KeyRotation do
   defp perform_rotation(room_id, room_state) do
     start_time = System.monotonic_time(:microsecond)
 
-    case Burble.Media.E2EE.ratchet_key(room_id) do
+    case Burble.Media.E2EE.request_rotation(room_id) do
       {:ok, new_epoch} ->
         elapsed_us = System.monotonic_time(:microsecond) - start_time
 

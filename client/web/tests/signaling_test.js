@@ -7,12 +7,13 @@
 
 import assert from "node:assert";
 import * as Signaling from "../../lib/src/BurbleSignaling.res.mjs";
+import { test } from "./runner.js";
 
 // ---------------------------------------------------------------------------
 // Construction
 // ---------------------------------------------------------------------------
 
-Deno.test("BurbleSignaling.make creates initial state", () => {
+test("BurbleSignaling.make creates initial state", () => {
   const callbacks = {
     onEvent: () => {},
     onJoined: () => {},
@@ -28,7 +29,7 @@ Deno.test("BurbleSignaling.make creates initial state", () => {
   assert.strictEqual(state.roomId, undefined, "roomId should be None (undefined)");
 });
 
-Deno.test("BurbleSignaling.make preserves callbacks", () => {
+test("BurbleSignaling.make preserves callbacks", () => {
   let eventCalled = false;
   const callbacks = {
     onEvent: () => { eventCalled = true; },
@@ -43,7 +44,7 @@ Deno.test("BurbleSignaling.make preserves callbacks", () => {
   assert.strictEqual(typeof state.callbacks.onError, "function");
 });
 
-Deno.test("BurbleSignaling.make with different URLs", () => {
+test("BurbleSignaling.make with different URLs", () => {
   const callbacks = { onEvent: () => {}, onJoined: () => {}, onError: () => {} };
 
   const state1 = Signaling.make("ws://server1:6473/voice", callbacks);
@@ -58,7 +59,7 @@ Deno.test("BurbleSignaling.make with different URLs", () => {
 // Disconnect (no-op when not connected)
 // ---------------------------------------------------------------------------
 
-Deno.test("BurbleSignaling.disconnect on fresh state does not throw", () => {
+test("BurbleSignaling.disconnect on fresh state does not throw", () => {
   const callbacks = { onEvent: () => {}, onJoined: () => {}, onError: () => {} };
   const state = Signaling.make("ws://localhost:6473/voice", callbacks);
 
@@ -71,7 +72,7 @@ Deno.test("BurbleSignaling.disconnect on fresh state does not throw", () => {
 // Leave room (no-op when not in a room)
 // ---------------------------------------------------------------------------
 
-Deno.test("BurbleSignaling.leaveRoom on fresh state does not throw", () => {
+test("BurbleSignaling.leaveRoom on fresh state does not throw", () => {
   const callbacks = { onEvent: () => {}, onJoined: () => {}, onError: () => {} };
   const state = Signaling.make("ws://localhost:6473/voice", callbacks);
 
@@ -83,14 +84,14 @@ Deno.test("BurbleSignaling.leaveRoom on fresh state does not throw", () => {
 // Send helpers (no-op when channel is None)
 // ---------------------------------------------------------------------------
 
-Deno.test("BurbleSignaling.sendVoiceState without connection does not throw", () => {
+test("BurbleSignaling.sendVoiceState without connection does not throw", () => {
   const callbacks = { onEvent: () => {}, onJoined: () => {}, onError: () => {} };
   const state = Signaling.make("ws://localhost:6473/voice", callbacks);
 
   assert.doesNotThrow(() => Signaling.sendVoiceState(state, "muted"));
 });
 
-Deno.test("BurbleSignaling.sendSignal without connection does not throw", () => {
+test("BurbleSignaling.sendSignal without connection does not throw", () => {
   const callbacks = { onEvent: () => {}, onJoined: () => {}, onError: () => {} };
   const state = Signaling.make("ws://localhost:6473/voice", callbacks);
 
@@ -99,14 +100,14 @@ Deno.test("BurbleSignaling.sendSignal without connection does not throw", () => 
   );
 });
 
-Deno.test("BurbleSignaling.sendText without connection does not throw", () => {
+test("BurbleSignaling.sendText without connection does not throw", () => {
   const callbacks = { onEvent: () => {}, onJoined: () => {}, onError: () => {} };
   const state = Signaling.make("ws://localhost:6473/voice", callbacks);
 
   assert.doesNotThrow(() => Signaling.sendText(state, "hello"));
 });
 
-Deno.test("BurbleSignaling.sendWhisper without connection does not throw", () => {
+test("BurbleSignaling.sendWhisper without connection does not throw", () => {
   const callbacks = { onEvent: () => {}, onJoined: () => {}, onError: () => {} };
   const state = Signaling.make("ws://localhost:6473/voice", callbacks);
 
@@ -117,7 +118,7 @@ Deno.test("BurbleSignaling.sendWhisper without connection does not throw", () =>
 // joinRoom without connection triggers onError callback
 // ---------------------------------------------------------------------------
 
-Deno.test("BurbleSignaling.joinRoom without connect calls onError", () => {
+test("BurbleSignaling.joinRoom without connect calls onError", () => {
   let errorMsg = null;
   const callbacks = {
     onEvent: () => {},

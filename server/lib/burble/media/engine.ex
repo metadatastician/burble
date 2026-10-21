@@ -204,7 +204,32 @@ defmodule Burble.Media.Engine do
 
       session ->
         e2ee_enabled = session.privacy_mode in [:e2ee, :maximum]
-        e2ee_key = if e2ee_enabled, do: Keyword.get(opts, :e2ee_key), else: nil
+
+        # Server-side content pipeline key.
+        #
+        # NOT the room key, and never taken in an end-to-end encrypted room:
+        # ADR-0011 says the server has no capability to see content, and a
+        # pipeline that decrypts is exactly that capability. Callers that
+        # still pass a key for an :e2ee room are told, loudly, that it was
+        # dropped. (The pipeline continuing to run in those rooms is a known
+        # gap — ADR-0016 §Gaps — not a security feature.)
+        pipeline_key =
+          cond do
+            e2ee_enabled and Keyword.has_key?(opts, :pipeline_key) ->
+              Logger.warning(
+                "[Media] Refusing a server-held pipeline key for e2ee room #{room_id}; " <>
+                  "content is not the server's to decrypt (ADR-0011, ADR-0016)"
+              )
+
+              nil
+
+            e2ee_enabled ->
+              nil
+
+            true ->
+              Keyword.get(opts, :pipeline_key)
+          end
+
         channel_pid = Keyword.get(opts, :channel_pid)
 
         peer = %{
@@ -256,7 +281,7 @@ defmodule Burble.Media.Engine do
         # Start coprocessor pipeline for this peer.
         pipeline_opts = [
           peer_id: peer_id,
-          e2ee_key: e2ee_key,
+          pipeline_key: pipeline_key,
           config: %{
             sample_rate: session.config.sample_rate,
             channels: session.config.channels,
@@ -419,7 +444,11 @@ defmodule Burble.Media.Engine do
       privacy_mode: privacy_mode,
       codec: config.codec,
       ice_policy: ice_policy(privacy_mode),
-      e2ee: privacy_mode in [:e2ee, :maximum],
+      # POLICY, not proof. This says the room *asked* for end-to-end
+      # encryption; it does not assert that frames are encrypted, because
+      # frame encryption happens on the peers (ADR-0016). Until the browser
+      # side ships, an :e2ee room is protected by DTLS-SRTP only.
+      e2ee_requested: privacy_mode in [:e2ee, :maximum],
       # Real SDP is generated per-peer by Burble.Media.Peer (ex_webrtc)
       sdp: nil,
       # CSP headers for WebRTC connections.

@@ -12,6 +12,7 @@
 //   3. cross-origin WS upgrades are rejected (drive-by page can't connect)
 
 import assert from "node:assert";
+import { test } from "./runner.js";
 
 const HTTP = 7501;
 const WS = HTTP + 1;
@@ -68,7 +69,7 @@ async function rawUpgradeStatus(port, origin) {
   return parseInt(statusLine.split(" ")[1] || "0", 10);
 }
 
-Deno.test({
+test({
   name: "bridge security: a second WS client is refused while one is active (no hijack)",
   async fn() {
     const bridge = await startBridge(HTTP);
@@ -95,7 +96,7 @@ Deno.test({
   sanitizeOps: false,
 });
 
-Deno.test({
+test({
   name: "bridge security: HTTP endpoints require the token when one is set (/health stays open)",
   async fn() {
     const bridge = await startBridge(HTTP, { BURBLE_AI_BRIDGE_TOKEN: "s3cr3t" });
@@ -126,7 +127,7 @@ Deno.test({
   sanitizeOps: false,
 });
 
-Deno.test({
+test({
   name: "bridge security: WS upgrade requires the token when one is set",
   async fn() {
     const bridge = await startBridge(HTTP, { BURBLE_AI_BRIDGE_TOKEN: "s3cr3t" });
@@ -148,7 +149,7 @@ Deno.test({
   sanitizeOps: false,
 });
 
-Deno.test({
+test({
   name: "bridge security: cross-origin WS upgrade is rejected, local origin is allowed",
   async fn() {
     const bridge = await startBridge(HTTP);
@@ -163,6 +164,44 @@ Deno.test({
         101,
         "a localhost page origin is allowed to upgrade",
       );
+    } finally {
+      stopBridge(bridge);
+      await new Promise((r) => setTimeout(r, 100));
+    }
+  },
+  sanitizeResources: false,
+  sanitizeOps: false,
+});
+
+test({
+  name: "bridge security: HTTP API refuses a foreign Origin (CSRF / queue-drain guard)",
+  async fn() {
+    const bridge = await startBridge(HTTP);
+    try {
+      // A page the user happened to visit can still ISSUE this request even
+      // though it cannot read the response — and GET /recv drains the queue.
+      const evil = await fetch(`http://127.0.0.1:${HTTP}/recv`, {
+        headers: { Origin: "https://evil.example" },
+      });
+      assert.strictEqual(evil.status, 403, "foreign Origin is refused on the HTTP API");
+      await evil.body?.cancel();
+
+      const local = await fetch(`http://127.0.0.1:${HTTP}/recv`, {
+        headers: { Origin: "http://localhost:8080" },
+      });
+      assert.strictEqual(local.status, 200, "a local page origin is still allowed");
+      await local.body?.cancel();
+
+      // No Origin at all (curl, the browser extension, tests) stays allowed.
+      const noOrigin = await fetch(`http://127.0.0.1:${HTTP}/status`);
+      assert.strictEqual(noOrigin.status, 200, "requests without an Origin are allowed");
+      await noOrigin.body?.cancel();
+
+      // /health is deliberately open so liveness probes need no secret — but it
+      // is not a hole: it returns a fixed body and touches no queue.
+      const health = await fetch(`http://127.0.0.1:${HTTP}/health`);
+      assert.strictEqual(health.status, 200);
+      await health.body?.cancel();
     } finally {
       stopBridge(bridge);
       await new Promise((r) => setTimeout(r, 100));

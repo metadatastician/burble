@@ -3,9 +3,11 @@
 # This workflow is managed by gh actions-lock.
 # Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
 #
-# web-client-tests.yml — Deno-based web-client test suite
+# web-client-tests.yml — web-client test suite (Bun first, Deno retained)
 #
-# Runs the 5 web-client tests at client/web/tests/ on every PR.
+# Runs the web-client tests at client/web/tests/ on every PR (10 suites as of
+# 2026-10-21: room names, relay rendezvous + CORS, signaling, WebRTC offer/
+# answer, AI bridge API + security + round-trip).
 # Tests exercise the compiled ReScript output (*.res.mjs) for now;
 # AffineScript-output parity is tracked by affinescript-canary.yml
 # and graduates to required-for-merge when STATE.a2ml Phase 5 closes.
@@ -35,15 +37,40 @@ concurrency:
 env:
   DENO_VERSION: 'v2.x'
 jobs:
+  # Bun is the estate's default runner as of 2026-10. This job runs the E2EE
+  # suite — the newest code and the one place where a crypto regression is
+  # silent — and it gates.
+  #
+  # The rest of tests/ still runs under Deno in the job below because those
+  # suites spawn helper servers with `new Deno.Command("deno", …)`. Porting them
+  # is a mechanical change to that one call site per file, and it is tracked
+  # rather than pretended: a job that half-runs the suite under Bun and calls it
+  # green would be worse than saying which files are covered.
+  bun-e2ee:
+    name: Bun test — E2EE (client/web)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7.0.1
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2.2.0
+      - name: Run the E2EE suite
+        working-directory: client/web
+        run: bun test tests/e2ee_test.js tests/e2ee_session_test.js
   deno-tests:
     name: Deno test — client/web (advisory)
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    # Advisory mode while the test suite contains references to
-    # BurbleSignaling / BurbleVoice modules that no longer exist in
-    # source (the actual modules are Signaling.res / WebRTC.res /
-    # Room.res). Flip to gating once the stale-import suite is either
-    # fixed or moved out of `tests/`. Tracked on #48.
+    # Advisory mode. The stale-import reason this originally carried no longer
+    # applies: signaling_test.js and voice_test.js import the committed
+    # client/lib/src/BurbleSignaling.res.mjs and BurbleVoice.res.mjs, which
+    # exist (the client/web-internal modules are Room.res / Signaling.res /
+    # WebRTC.res, and those tests import those). Remaining blockers to flipping
+    # this to gating are environmental rather than code: the Deno test task
+    # needs npm:phoenix and @rescript/core resolvable, so it must run after
+    # `deno task res:build` (it does) and with the repo's deno.json import map
+    # intact. Verify a green run, then drop continue-on-error. Tracked on #48.
     continue-on-error: true
     steps:
       - name: Checkout repository

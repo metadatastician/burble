@@ -47,7 +47,7 @@
   <h1>Burble P2P</h1>
   <p class="subtitle">Direct voice — no server, no account, no tracking</p>
 
-  <div id="status" class="status idle">Ready to connect</div>
+  <div id="status" class="status idle" role="status" aria-live="polite">Ready to connect</div>
 
   <!-- Step 1: Get microphone -->
   <div class="card" id="step-mic">
@@ -150,9 +150,24 @@
     let micData = null;
     let remoteData = null;
     let animFrame = null;
+    const MAX_BUFFERED_BYTES = 1 << 20;  // 1 MiB of unsent data channel payload
     let aiChannel = null;  // WebRTC DataChannel for AI-to-AI comms
+    let aiChannelOpen = false;  // set by the data channel's onopen; showConnected()
+                                // re-shows the AI card if the channel opened first
+                                // (otherwise a later ICE state change hides it again)
     let everConnected = false;  // did ICE ever reach connected? distinguishes
                                 // "dropped mid-call" from "never punched through NAT"
+
+    // Relay room names are matched server-side by /^\/room\/([a-zA-Z0-9_-]+)\//,
+    // so anything else (spaces, slashes, uppercase, emoji) silently 404s on the
+    // relay and looks like "room not found". Normalise instead of failing.
+    function normalizeRoomName(raw) {
+      return String(raw || "").trim().toLowerCase().replace(/\s+/g, "-");
+    }
+
+    function isValidRoomName(name) {
+      return /^[a-z0-9_-]{1,64}$/.test(name);
+    }
 
     // ── Microphone ──────────────────────────────────────────────────────
 
@@ -248,6 +263,7 @@
 
     function setupAIChannel(ch) {
       ch.onopen = () => {
+        aiChannelOpen = true;
         aiLog('system', 'AI data channel open — peer-to-peer JSON messaging active');
         document.getElementById('step-ai-channel').classList.remove('hidden');
       };
@@ -288,7 +304,10 @@
         }
       };
 
-      ch.onclose = () => aiLog('system', 'AI data channel closed');
+      ch.onclose = () => {
+        aiChannelOpen = false;
+        aiLog('system', 'AI data channel closed');
+      };
 
       // Expose global API for AI agents
       window.burble = {
@@ -298,7 +317,13 @@
             return false;
           }
           const payload = typeof msg === 'string' ? msg : JSON.stringify(msg);
-          aiChannel.send(payload);
+          // SCTP will buffer without bound if the peer stops reading; a
+          // saturated channel throws InvalidStateError on an over-large send.
+          if (aiChannel.bufferedAmount > MAX_BUFFERED_BYTES) {
+            console.error('[Burble AI] Channel backpressure — dropping send (' + aiChannel.bufferedAmount + ' bytes buffered)');
+            aiLog('system', 'dropped a send: peer is not draining the data channel');
+            return false;
+          }
           aiLog('sent', typeof msg === 'string' ? msg : JSON.stringify(msg, null, 2));
           return true;
         },
@@ -330,11 +355,15 @@
       const input = document.getElementById('ai-msg');
       const text = input.value.trim();
       if (!text) return;
-      try {
-        window.burble.send(JSON.parse(text));
-      } catch (e) {
-        window.burble.send(text);
+      if (!window.burble) {
+        setStatus('error', 'AI channel not initialised yet — connect the call first.');
+        return;
       }
+      let parsed = text;
+      try {
+        parsed = JSON.parse(text);
+      } catch (e) { /* send as a plain string */ }
+      window.burble.send(parsed);
       input.value = '';
     }
 
@@ -411,13 +440,22 @@
 
     async function autoConnect(role) {
       const relay = document.getElementById('relay-url').value.trim().replace(/\/$/, '');
-      const room = document.getElementById('room-name').value.trim();
+      const room = normalizeRoomName(document.getElementById('room-name').value);
 
       // No relay or no room name → fall back to manual
       if (!relay || !room) {
         if (role === 'create') return createOffer();
         else return showJoin();
       }
+
+      if (!isValidRoomName(room)) {
+        setStatus('error', `Room name "${room}" is not usable: use letters, digits, "-" or "_" (max 64), e.g. dad-and-son.`);
+        return;
+      }
+
+      const roomUrl = `${relay}/room/${encodeURIComponent(room)}`;
+      const jsonPost = (url, body) =>
+        fetch(url, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body });
 
       // Check relay is reachable
       try {
@@ -440,7 +478,13 @@
 
         // Post offer to relay
         const offerData = JSON.stringify(pc.localDescription);
-        await fetch(`${relay}/room/${room}/offer`, { method: 'PUT', body: offerData });
+        const posted = await jsonPost(`${roomUrl}/offer`, offerData);
+        if (!posted.ok) {
+          // The relay refuses new rooms past its capacity ceiling (503) and
+          // oversized bodies (413); silently polling for ten minutes hid that.
+          setStatus('error', `Relay refused the room "${room}" (HTTP ${posted.status}). Try again or use manual code exchange.`);
+          return;
+        }
         setStatus('waiting', `Room "${room}" created — waiting for someone to join...`);
 
         document.getElementById('step-role').classList.add('hidden');
@@ -450,7 +494,7 @@
         const MAX_ANSWER_POLLS = 20; // 20 × ~30s long-poll ≈ 10 min ceiling
         for (let attempt = 0; attempt < MAX_ANSWER_POLLS; attempt++) {
           try {
-            const res = await fetch(`${relay}/room/${room}/answer`, { signal: AbortSignal.timeout(31000) });
+            const res = await fetch(`${roomUrl}/answer`, { signal: AbortSignal.timeout(31000) });
             if (res.ok) {
               const answer = await res.json();
               await pc.setRemoteDescription(answer);
@@ -472,14 +516,22 @@
         setStatus('waiting', `Joining room "${room}"...`);
         document.getElementById('step-role').classList.add('hidden');
 
-        // Fetch offer from relay (long-poll)
-        let offerData;
-        try {
-          const res = await fetch(`${relay}/room/${room}/offer`, { signal: AbortSignal.timeout(31000) });
-          if (!res.ok) { setStatus('error', `Room "${room}" not found`); return; }
-          offerData = await res.json();
-        } catch (e) {
-          setStatus('error', `Timed out waiting for room "${room}"`);
+        // Fetch offer from relay. The Deno relay long-polls (~30s) and returns
+        // 408 on timeout; the Cloudflare worker has no long-poll and answers
+        // 404 "not ready" immediately. Treat any non-ok answer as "not there
+        // yet" and retry for a bounded window — otherwise joining a room on the
+        // worker relay failed instantly with "Room not found".
+        let offerData = null;
+        const MAX_OFFER_POLLS = 30; // ~30 × 1s (worker) or a few 30s waits (Deno)
+        for (let attempt = 0; attempt < MAX_OFFER_POLLS && offerData === null; attempt++) {
+          try {
+            const res = await fetch(`${roomUrl}/offer`, { signal: AbortSignal.timeout(31000) });
+            if (res.ok) offerData = await res.json();
+          } catch (e) { /* timeout / network — retry */ }
+          if (offerData === null) await new Promise(r => setTimeout(r, 1000));
+        }
+        if (offerData === null) {
+          setStatus('error', `No room "${room}" appeared on ${relay} — check the name, or ask the other side to click Create Room first.`);
           return;
         }
 
@@ -491,7 +543,11 @@
         await waitForICE();
 
         // Post answer to relay
-        await fetch(`${relay}/room/${room}/answer`, { method: 'PUT', body: JSON.stringify(pc.localDescription) });
+        const answerPosted = await jsonPost(`${roomUrl}/answer`, JSON.stringify(pc.localDescription));
+        if (!answerPosted.ok) {
+          setStatus('error', `Could not post the reply to the relay (HTTP ${answerPosted.status}). Try again.`);
+          return;
+        }
         setStatus('waiting', 'Connecting...');
       }
     }
@@ -643,6 +699,10 @@
     function showConnected() {
       document.querySelectorAll('.card').forEach(c => c.classList.add('hidden'));
       document.getElementById('step-connected').classList.remove('hidden');
+      // ICE fires 'connected' and then often 'completed'; this function runs on
+      // each. Re-show the AI card if its channel is already open, otherwise the
+      // second call hid a card the datachannel had just revealed.
+      if (aiChannelOpen) document.getElementById('step-ai-channel').classList.remove('hidden');
       setStatus('connected', 'Voice connected — P2P, no server involved');
     }
 
@@ -703,16 +763,37 @@
       el.textContent = text;
     }
 
-    async function copyOffer() {
-      const text = document.getElementById('offer-text').value;
-      await navigator.clipboard.writeText(text);
-      setStatus('waiting', 'Code copied! Send it to the other person.');
+    // navigator.clipboard only exists in a secure context (https, localhost,
+    // file://). Opening this page over plain http on a LAN address — the exact
+    // "send it to the other person over the network" case — throws instead of
+    // copying, and the old code left an unhandled rejection with no feedback.
+    async function copyFrom(textareaId, doneMessage) {
+      const area = document.getElementById(textareaId);
+      const text = area.value;
+      try {
+        if (!navigator.clipboard?.writeText) throw new Error('clipboard unavailable');
+        await navigator.clipboard.writeText(text);
+        setStatus('waiting', doneMessage);
+      } catch (e) {
+        // Fallback: select the text so Ctrl/Cmd+C works, and say so.
+        try {
+          area.focus();
+          area.select();
+          if (document.execCommand('copy')) {
+            setStatus('waiting', doneMessage);
+            return;
+          }
+        } catch (_) { /* fall through */ }
+        setStatus('waiting', 'Press Ctrl/Cmd+C to copy the selected code.');
+      }
     }
 
-    async function copyAnswer() {
-      const text = document.getElementById('answer-out-text').value;
-      await navigator.clipboard.writeText(text);
-      setStatus('waiting', 'Reply copied! Send it back to the room creator.');
+    function copyOffer() {
+      return copyFrom('offer-text', 'Code copied! Send it to the other person.');
+    }
+
+    function copyAnswer() {
+      return copyFrom('answer-out-text', 'Reply copied! Send it back to the room creator.');
     }
   </script>
 </body>

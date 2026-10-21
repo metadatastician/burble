@@ -1,0 +1,274 @@
+// SPDX-License-Identifier: CC-BY-SA-4.0
+// Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+= Architecture Decision Record: 0016-peer-held-group-keys
+// Status: Proposed — the coordination half is implemented; the browser half is not.
+// Supersedes: nothing. Extends: ADR-0011 (the E2EE content/metadata boundary).
+
+# 16. Peer-held group keys: the server coordinates, the peers hold
+
+Date: 2026-10-21
+
+## Status
+
+Proposed — **part-way**. The server-side coordination protocol is implemented
+and reviewed by inspection (`server/lib/burble/media/e2ee.ex`); the browser
+half is not written. See §Gaps before quoting anything here as a guarantee.
+
+## Context
+
+ADR-0011 fixed the principle for the media layer: *"the seal is never broken to
+rescue a call"*, the server is a pure forwarder, and the guarantee is the
+**absence of capability**, not a promise. It did not say how a group key
+reaches every participant without the server holding it.
+
+The code contradicted ADR-0011 in three specific, checkable ways:
+
+1. `Burble.Media.E2EE` (before 2026-10-21) generated the room key **inside the
+   server process** and exposed `ratchet_key/1` and `get_frame_key/1` to
+   callers. Whatever the README said, a server that can return a room key is a
+   server that can read the room.
+2. `Burble.Media.Engine.add_peer/4` accepted an `:e2ee_key` option and handed
+   it to `Burble.Coprocessor.Pipeline`, which ran real AES-GCM-256 over encoded
+   audio **in the server**. That is server-side encryption — the process that
+   encrypts can decrypt — wearing an E2EE name.
+3. `Burble.Media.Privacy.e2ee_config/1` returned `enabled: true` for `:e2ee`
+   rooms, and `GET /api/v1/setup/check` reported `e2ee_keys_generated: true`
+   whenever the GenServer happened to be running. Neither statement was true.
+   (It also never *was* running: the coordinator was absent from the
+   supervision tree.)
+
+Claims outran the code. ADR-0007 says claims must be backed by evidence; the
+evidence said no.
+
+## Decision
+
+### 1. The key never exists on the server
+
+`Burble.Media.E2EE` is demoted from "key authority" to **coordination
+service**. It stores, per room:
+
+```
+%{epoch: non_neg_integer(),
+  peers: %{peer_id => public_key},                  # PUBLIC keys only
+  sealed: %{peer_id => {ciphertext, iv, tag}}}      # opaque to the server
+```
+
+There is no key-returning function in the module's API. The public API is
+`init_room/1`, `destroy_room/1`, `register_peer_key/3`, `remove_peer/2`,
+`request_rotation/1`, `key_set/1`, `publish_sealed/4`, `sealed_for/2`,
+`room_status/1` — all of which deal in public keys, epochs and blobs.
+
+### 2. The protocol, and why each step is safe to centralise
+
+| Step | Who does it | What the server learns |
+|---|---|---|
+| Generate ephemeral X25519 keypair | peer, per room | nothing (only the public half is sent) |
+| Publish public key | peer → server → room | a public key |
+| `pairwise_key/6` = X25519 + HKDF | **peer-side pure function** | — the operation never runs here |
+| Generate 32-byte room key | one peer per epoch (the *key leader*) | nothing |
+| `seal_group_key/6` (AES-256-GCM under the pairwise key) | the leader | ciphertext |
+| Distribute | leader → server → peers, opaque | ciphertext |
+| `open_group_key/6` | each peer | — never runs here |
+| `derive_frame_key/3` per frame counter | each peer | — |
+| Encrypt / decrypt frames | peers (Encoded Transform) | — |
+
+Leader election is deterministic — the lowest peer id in the epoch — so no
+election traffic is needed and no consensus round exists to fail open. The
+server relays; it cannot substitute itself for the leader, because it cannot
+produce a blob that any peer's pairwise key will open.
+
+Because the pairwise key is `X25519(my_private, their_public)`, AAD binds
+`label | room | epoch | from | to`, and labels are domain-separated
+(`burble-e2ee-pairwise-v1`, `-group-v1`, `-frame-v1`), a blob sealed for
+`(room, epoch, A, B)` cannot be replayed into a different room, epoch,
+direction or purpose. The coordinator rejects all-zero shared secrets
+(RFC 7748 §6.1) and caps blobs at 512 bytes and rooms at 512 peers.
+
+### 3. Membership change means a new epoch, and blobs are dropped
+
+Any join, leave, or explicit request bumps `epoch` and **discards every sealed
+blob**. A departing peer never learns the next key; a joining peer never learns
+a past one. `request_rotation/1` is what `Burble.Security.KeyRotation` calls on
+its schedule — the scheduler no longer "ratchets" anything, because there is
+nothing on this side to ratchet.
+
+### 4. The coordination plane is reachable
+
+A protocol nobody can call is a design document. `BurbleWeb.RoomChannel` now
+starts the room's coordinator record on join, removes the peer on terminate, and
+relays the five coordination events (`e2ee_register_key`, `e2ee_key_set`,
+`e2ee_publish_sealed`, `e2ee_fetch_sealed`, `e2ee_status`). Every one of them
+carries a **public** key or an **opaque** blob; there is no event that could
+return a room key, because no such value exists on this side.
+
+A sealed blob is broadcast to the room rather than unicast to its recipient.
+That is deliberate and safe: it is ciphertext under a pairwise key held by two
+peers, and its AAD names room, epoch, sender and recipient, so a third peer can
+neither open it, redirect it, nor replay it into another epoch. Documented in
+`docs/PROTOCOL.md`.
+
+### 5. The frame format
+
+A media frame is
+
+    version(1) || idLen(1) || sender(idLen) || epoch(4) || counter(4) || iv(12) || tag(16) || ct(n)
+
+with AES-256-GCM over the payload, AAD
+`frame-aad|<room>|<epoch>|<sender>|<counter>`, and a per-frame key
+
+    HKDF-SHA256(ikm = room key,
+                salt = SHA256("frame|" || epoch),
+                info = "burble-e2ee-frame-v1|sender|" || sender || "|" || counter)
+
+The first draft of this section specified `iv || tag || ct` with the counter in
+the AAD and no header at all. That cannot work: the counter is an input to the
+key derivation, so a receiver has no way to decrypt a frame without being told
+the counter out of band — and the one thing a media path cannot promise is
+in-order, lossless, out-of-band delivery of a per-frame value. The header is the
+repair, and it costs 10 bytes plus the length of the sender id per frame.
+
+**Why the sender id is in the frame.** Burble's media plane is an SFU: one
+receive path carries every participant. A frame layer that keyed itself to "the
+remote peer of this peer connection" would have no answer for the second
+speaker. Each frame names its speaker, and the receiver derives that speaker's
+key; the replay window is per speaker, because two speakers' counter 0 are
+different streams.
+
+This does not weaken anything, because the attribution does not rest on the
+header. The AAD commits to the true sender: rewrite the header and the receiver
+derives a different key, and the frame fails to decrypt. A mesh peer connection
+additionally passes `expectedSender`, so the common case is refused by name
+before any crypto runs.
+
+**Epoch in the header.** It is in the AAD too, so a stale frame would fail to
+decrypt regardless; carrying it turns the expected case — a frame from an epoch
+you have left — into a clean rejection rather than a crypto error in a log.
+
+The `derive_frame_key/3` in `Burble.Media.E2EE` (no sender) is kept because it
+is what the vectors pin; the sender-aware variant is what the frame layer uses.
+
+### 5a. Who makes the key, and what the driver does
+
+`client/web/e2ee-session.js` runs the exchange. The key-maker is the **lowest
+peer id** in the key set, compared as strings: every peer computes the same
+answer from the same broadcast, so there is no election traffic and no split
+brain, and when the leader leaves the epoch bump hands the role to the next id
+down. A solo peer does not generate a key — it waits, rather than creating state
+that would be discarded the moment a second participant appears.
+
+Two orderings it must survive, both of which occur in practice:
+
+1. A sealed key can arrive before the peer has fetched the key set, because the
+   register broadcast reaches the whole room at once. The driver fetches and
+   retries once.
+2. A sealed key can arrive from an epoch *ahead* of the receiver's, because the
+   leader seals the instant it sees the new key set while everyone else is still
+   processing the same broadcast. The driver catches up and retries. Treating
+   this as "stale" — the obvious reading — would drop the key silently and
+   permanently, since nothing resends it.
+
+### 6. The protocol is pinned by cross-language vectors
+
+Two implementations must agree byte-for-byte, and the second one is not written
+yet. `client/web/tests/fixtures/e2ee-vectors.json` therefore pins the wire
+protocol: the Elixir functions generate it (`scripts/gen-e2ee-vectors.exs`) and
+`scripts/verify-e2ee-vectors.mjs` re-derives every value with **WebCrypto** —
+X25519 agreement, HKDF-SHA256, AES-256-GCM and the AAD — failing on any
+disagreement. Keys come from the RFC 7748 §6.1 test private keys, so the
+vectors are reproducible from a published document as well as from our code.
+
+One portability constraint surfaced immediately: WebCrypto will not import a
+raw 32-byte X25519 **private** key. The browser must wrap it in PKCS#8 (OID
+1.3.101.110, the key as an inner OCTET STRING). That is recorded here because it
+is the kind of detail that otherwise costs a day when the client half starts.
+
+### 7. Names must not overclaim
+
+- `:e2ee_key` → `:pipeline_key` in the engine and coprocessor pipeline, and the
+  engine **refuses** a pipeline key in an `:e2ee`/`:maximum` room (logged).
+- `Pipeline.health/1` reports `pipeline_encrypted:`, never `e2ee:`.
+- The peer offer carries `e2ee_requested:` — the policy asked for, not proof.
+- `Privacy.e2ee_config/1` returns `enabled: false, implemented: false`.
+- `setup/check` reports `e2ee_coordinator_running:`.
+
+## Gaps (read these before believing anything above)
+
+These are open, tracked, and must stay in the README until closed:
+
+1. **The browser half is written and tested, but not on the call path.**
+   `client/web/e2ee.js` implements the peer side (keypairs, pairwise agreement,
+   sealing/opening, per-speaker frame keys, the frame format of §5, a replay
+   window, an epoch tracker) and the Encoded Transform layer
+   (`FrameCryptor`, `senderTransform`/`receiverTransform`, `attachFrameCrypto`);
+   `client/web/e2ee-session.js` implements the exchange of §5a. Between them
+   they are covered by 44 tests against real WebCrypto, run under Bun (the
+   estate default) and still under Deno.
+
+   What is missing is the last mile, and it is the difference between a protocol
+   and a private call: `VoiceEngine.res` builds no session, attaches no
+   transform, and offers no key-exchange UI — so no media is encrypted beyond
+   DTLS-SRTP. `attachFrameCrypto` is written to fail closed (`ok: false` when
+   the browser has no `createEncodedStreams`), because the alternative is a room
+   that looks encrypted and is not.
+
+   **It has never run in a browser.** The tests use a fake peer connection
+   shaped like Chrome's API; frame mutation in place, `createEncodedStreams`
+   availability and SFU fan-in are modelled, not observed. The first real
+   browser run is owed before any claim about a live call.
+
+   The coordination plane it depends on is covered by
+   `test/burble_web/channels/room_channel_e2ee_test.exs` — key registration,
+   the key-set fetch, the sealed-blob relay, epoch bumps on join, and peer
+   removal on leave — which runs green in CI on OTP 27 / Elixir 1.17.
+
+   A second client module already existed — `client/web/src/app/voice/E2EE.res`
+   — and was not encryption: it claimed AES-256-GCM, XORed frames with the
+   local private key, derived its key from one side only, and was imported by
+   nothing (its generated artifact does not even parse). It is now a failing
+   stub pointing here. The lesson is the same one as MNT-05: a module
+   whose header describes security it does not implement is worse than an
+   absent module, because absence is visible.
+
+   Frame encryption also revealed a gap in this ADR's first draft: a single
+   shared room key authenticates the room, not the speaker. The frame layer
+   derives a per-sender key and binds the sender id into the AAD, so a member
+   cannot forge another member's frames.
+2. **The server-side pipeline still runs in `:e2ee` rooms.** It now has no key
+   and cannot decrypt, but ADR-0011 §3 puts content DSP at the edge; running
+   echo-cancel/denoise on opaque bytes is pointless, and running it on
+   plaintext would be a capability the server must not have. Off the live path
+   is the fix; it is not done.
+3. **No mid-epoch leader failover.** If the leader disconnects, remaining peers
+   wait for the epoch bump that the disconnect triggers. Correct, but a stall
+   if the bump is missed.
+4. **Nothing is formally verified.** This is a careful implementation, not a
+   verified one. The tests exercise the pure functions on both sides (24 Elixir,
+   44 browser), the coordinator's state machine, the channel wiring and the key
+   exchange against a fake channel; they do not exercise a real call, because
+   the client still has to be wired in.
+
+## Consequences
+
+### Positive
+
+- The strong claim becomes true by construction: a server that never receives a
+  private key or an unsealed room key cannot read the room, whatever it is
+  asked to do. No promise, no toggle, no audit trail of good intentions.
+- Compromise of the signalling server leaks public keys, epochs and ciphertext.
+- Rotation is cheap — an epoch bump plus deletion — and cannot fail open.
+
+### Negative
+
+- `n²` sealing per epoch: each of `n` peers receives one blob from the leader.
+  Acceptable for voice rooms (tens of peers), not for broadcast-scale rooms.
+- The server cannot help a peer that lost its key; recovery is re-join + new
+  epoch. No support path exists, by design.
+- Anyone auditing this must read two languages (Elixir coordination + browser
+  crypto) to see the whole protocol, and only the first exists.
+
+### Neutral
+
+- `Burble.Media.E2EE` stays a GenServer, but its state is now data the server
+  is allowed to hold in plaintext.
+- ADR-0011's "E2EE-always" remains the target; this ADR is the mechanism, and
+  the README states how far along it is.

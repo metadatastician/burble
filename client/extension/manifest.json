@@ -3,8 +3,14 @@
   "name": "Burble AI Bridge",
   "version": "0.1.0",
   "description": "Connect Claude Code to Burble voice rooms via the local AI bridge.",
-  "permissions": ["storage"],
-  "host_permissions": ["http://localhost:6474/*", "http://127.0.0.1:6474/*"],
+  "permissions": [
+    "storage",
+    "alarms"
+  ],
+  "host_permissions": [
+    "http://localhost:6474/*",
+    "http://127.0.0.1:6474/*"
+  ],
   "action": {
     "default_popup": "popup.html",
     "default_icon": {

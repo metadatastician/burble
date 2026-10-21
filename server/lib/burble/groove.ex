@@ -95,7 +95,7 @@ defmodule Burble.Groove do
         type: "text",
         description: "Real-time text messaging in rooms via Phoenix Channels",
         protocol: "websocket",
-        endpoint: "/socket/websocket",
+        endpoint: "/voice/websocket",
         requires_auth: false,
         panel_compatible: true
       },
@@ -103,7 +103,7 @@ defmodule Burble.Groove do
         type: "presence",
         description: "User presence and speaking indicators via Phoenix Presence",
         protocol: "websocket",
-        endpoint: "/socket/websocket",
+        endpoint: "/voice/websocket",
         requires_auth: false,
         panel_compatible: true
       },
@@ -143,7 +143,9 @@ defmodule Burble.Groove do
     consumes: ["integrity", "octad-storage", "scanning"],
     endpoints: %{
       voice_ws: "ws://localhost:6473/voice",
-      channel_ws: "ws://localhost:6473/socket/websocket",
+      # Phoenix channels (room:*, signaling:*) are mounted on the single
+      # socket at /voice — see server/lib/burble_web/endpoint.ex.
+      channel_ws: "ws://localhost:6473/voice/websocket",
       api: "http://localhost:6473/api/v1",
       health: "http://localhost:6473/api/v1/health"
     },
