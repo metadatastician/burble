@@ -10,11 +10,19 @@ on:
     - cron: '0 6 1 * *' # monthly 1st 06:00 UTC
 # Estate guardrail: cancel superseded runs so re-pushes / rebased PR
 # updates do not pile up queued runs against the shared account-wide
-# Actions concurrency pool. Applied only to read-only check workflows
-# (no publish/mutation), so cancelling a superseded run is always safe.
+# Actions concurrency pool.
+#
+# Not on `push` and not on the monthly `schedule`, though. Those are the runs
+# that populate the code-scanning dashboard for the commit that is actually on
+# `main`: a second push used to cancel them mid-flight, which is why this
+# workflow's history is success 6 / cancelled 6 over its last fifteen runs. A
+# cancelled analysis is not a clean analysis — it uploads nothing, and CodeQL's
+# whole value here is the baseline that the next PR is compared against.
+# Cancelling a superseded *pull request* run is always safe; cancelling the
+# run that owns `main` is not.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 permissions:
   contents: read
   actions: read

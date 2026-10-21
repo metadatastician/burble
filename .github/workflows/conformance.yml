@@ -82,7 +82,7 @@ jobs:
       pull-requests: write
     steps:
       - name: Download the grid
-        uses: actions/download-artifact@v8.0.2
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         # The lane uploads the grid whenever it rendered one. A lane that died
         # before rendering has nothing to post, and says so below.
         continue-on-error: true
@@ -122,7 +122,7 @@ jobs:
       contents: write
     steps:
       - name: Download the grid
-        uses: actions/download-artifact@v8.0.2
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         continue-on-error: true
         with:
           name: k9-grid

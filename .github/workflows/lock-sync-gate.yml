@@ -64,6 +64,18 @@ jobs:
             || { echo "::error::scripts/check-lock-sync.sh missing or not executable"; exit 1; }
           ./scripts/check-lock-sync.sh
 
+      # `tests/ci/foundation_ci_fixes_test.sh` had failed five of its assertions
+      # for as long as anyone can remember, because it pinned revision hashes
+      # that had moved and nothing ran it. Both halves of that are fixed: the
+      # revision assertions are gone (this job's two scripts cover them, more
+      # strictly), and the checks that remain — Dependabot volume caps, CodeQL
+      # `persist-credentials`, SHA-pinned `uses:` — now run on every pull
+      # request instead of never.
+      - name: Verify the CI hardening invariants
+        run: |
+          set -euo pipefail
+          bash tests/ci/foundation_ci_fixes_test.sh
+
   upstream-pins:
     name: reusable-workflow pins are lock-clean upstream
     runs-on: ubuntu-latest
