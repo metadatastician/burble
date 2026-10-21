@@ -40,7 +40,12 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh extension install github/gh-actions-lock --pin v0.1.6
+          # The pin must be a release that can read the lockfile schema in
+          # actions.lock. v0.1.6 predates schema v0.0.3 and refuses the file
+          # outright ("lockfile version v0.0.3 is newer than this binary
+          # supports"), which failed this step for every commit since the
+          # schema was bumped. Bump both together.
+          gh extension install github/gh-actions-lock --pin v0.2.0
           # Standards' reviewed wrapper accounts for the released tool's
           # reusable-workflow gap; ordinary stale/wrong-ref findings still fail.
           curl -fsSL --retry 3 -o "$RUNNER_TEMP/update-actions-lock.sh" https://raw.githubusercontent.com/hyperpolymath/standards/0f2d9b5447d3d6e56b41fe69d54e834849d7c932/scripts/update-actions-lock.sh
