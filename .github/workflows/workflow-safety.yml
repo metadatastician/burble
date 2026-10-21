@@ -50,14 +50,7 @@ jobs:
           # reusable-workflow gap; ordinary stale/wrong-ref findings still fail.
           curl -fsSL --retry 3 -o "$RUNNER_TEMP/update-actions-lock.sh" https://raw.githubusercontent.com/hyperpolymath/standards/0f2d9b5447d3d6e56b41fe69d54e834849d7c932/scripts/update-actions-lock.sh
           echo "476027a98cc0b05f0c5dd1040780b6858ad2e58f7ad9f13f1329a6372631f681  $RUNNER_TEMP/update-actions-lock.sh" | sha256sum -c -
-          set +e
-          out="$(bash "$RUNNER_TEMP/update-actions-lock.sh" --verify-local 2>&1)"
-          status=$?
-          set -e
-          msg="$(printf '%s' "$out" | tail -100 | sed -e 's/%/%25/g' -e 's/\r//g' -e 's/::/.. /g' | tr '\n' '\001')"
-          msg="${msg//$'\001'/%0A}"
-          echo "::error title=lock-diag::$msg"
-          exit "$status"
+          bash "$RUNNER_TEMP/update-actions-lock.sh" --verify-local
       - name: Verify secret-baseline positive and negative controls
         run: |
           curl -fsSL --retry 3 -o "$RUNNER_TEMP/gitleaks.tar.gz" https://github.com/gitleaks/gitleaks/releases/download/v8.18.4/gitleaks_8.18.4_linux_x64.tar.gz
