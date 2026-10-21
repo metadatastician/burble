@@ -1,0 +1,25 @@
+{
+  "name": "@burble/web-client",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Burble web client \u2014 ReScript sources, WebCrypto E2EE, and the test suite.",
+  "license": "MPL-2.0",
+  "type": "module",
+  "scripts": {
+    "res:build": "rescript",
+    "res:dev": "rescript -w",
+    "dev": "bun run res:dev & bun run dev:vite",
+    "dev:vite": "vite",
+    "build": "bun run res:build && vite build",
+    "test": "bun test tests/"
+  },
+  "devDependencies": {
+    "@rescript/core": "1.6.1",
+    "@rescript/runtime": "12.2.0",
+    "rescript": "12.2.0",
+    "vite": "6.2.0"
+  },
+  "dependencies": {
+    "phoenix": "1.7.11"
+  }
+}
