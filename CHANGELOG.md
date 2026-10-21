@@ -75,8 +75,9 @@ everything else — because four suites spawned helper servers with
   res:build`); there is no Deno-native task left to pick by mistake.
 - **CI**: `web-client-tests.yml` is a single gating Bun job. The Deno job is
   gone, along with `denoland/setup-deno` — one runner, nothing advisory. Drift
-  check added: `client/lib` rebuilds its published artifacts and fails on
-  `git diff`.
+  check added: `client/lib` rebuilds its published artifacts and fails when
+  `git status --porcelain --untracked-files=all -- src` reports any change,
+  including newly generated files.
 
 That drift check found a real one: `client/lib/src/BurbleClient.res.mjs` had
 been **hand-edited** by the #33 security fix. It carried a `function
