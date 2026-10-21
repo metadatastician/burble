@@ -428,16 +428,31 @@ its inputs said. The refinement belongs upstream, in the rules:
    adjudication and the reason the two `critical` cells do not describe two
    live vulnerabilities.
 
-**Open question — the delta column.** The K9 grid compares revisions
-(`↔ unchanged` on every row); the findings grid has said `— no comparable
-baseline` on all three of its runs so far. The baseline block is present and
-well-formed in the posted comment (schema 1, profile `d99bca26…`, pr 250, sha,
-three reporters), so this is not a missing baseline. The likeliest explanation
-is that the findings renderer's `profile` covers the caller's own workflow
-file: this pull request edited `hypatia-scan.yml` between every run — it was
-created, then the badge job was removed — so each run computed a different
-profile and correctly refused to compare. If the next run on an unchanged file
-still reports no baseline, that explanation is wrong and the defect is upstream.
+**Found — the findings grid can never compare revisions when the K9 grid is
+also posted.** `hypatia-scan-reusable.yml`'s "Read the previous verdict grid"
+step selects the previous comment with
+
+    select(.user.login == "github-actions[bot]"
+           and (.body | contains("<!-- verdict-grid:"))) | last
+
+That prefix matches **both** lanes: the K9 grid's marker is
+`<!-- verdict-grid:k9 …` and the findings grid's is `<!-- verdict-grid:hypatia …`.
+`last` then returns whichever was created most recently — the K9 comment, since
+the K9 lane posts second — so the findings renderer is handed a grid whose
+profile is the K9 lane's, correctly refuses to compare, and prints
+`— no comparable baseline`. The K9 side is unaffected because
+`k9-conformance.yml` matches its own marker exactly.
+
+Verified here rather than inferred: the baseline block in this pull request's
+findings comment is stable and well-formed across runs (profile `d99bca26…`
+unchanged, sha moving `4550fb23` → `3ebe7d13`), and the run where the caller's
+workflow file did not change still reported no baseline — which falsifies the
+first explanation considered (that the profile covered the caller's file).
+
+**Upstream fix (one line):** filter on the lane marker —
+`contains("<!-- verdict-grid:hypatia")` — which is what the K9 lane already
+does. Until then, the delta column of the findings grid is uninformative in
+every repository that posts both grids, i.e. by design in all of them.
 
 **Next move:** file the two rule refinements against `panic-attack` and one
 against `hypatia`; keep the grid purple until then, because it is telling the
