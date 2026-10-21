@@ -15,6 +15,11 @@ K9!
       allow_filesystem_write = true,
       allow_subprocess = true,
       signature_required = true,
+      # §8.4 / K9-S007 — the flags above are a REQUEST, not a grant. A host
+      # enforces the grant, so an example that leaves it out teaches the exact
+      # mistake the rule exists to catch: three capabilities asked for, none
+      # paid for.
+      capabilities = ["net.fetch", "fs.write", "process.spawn"],
     },
     metadata = {
       name = "setup-repo",
@@ -28,6 +33,26 @@ K9!
       "Review Just recipes before execution",
       "Use dry-run mode first: ./must --dry-run run setup-repo.k9.ncl",
     ],
+    # §6.5 / K9-S010 — 'Hunt must describe what full access is for. An empty
+    # list is a claim of system access with nothing to review.
+    side_effects = [
+      "creates directories and files in the working tree",
+      "runs git init and writes git config",
+      "fetches the licence text over the network",
+      "executes shell commands from the recipes block",
+    ],
+    # §10 / K9-S009 — presence only. This block proves the file carries a
+    # claim; it does not make the claim true. Verification is K9-C001, and a
+    # host that has not run a verifier must report 'Present_Unverified, which
+    # never authorises 'Hunt.
+    signature = {
+      algorithm = "Ed25519",
+      public_key = "{{SIGNING_PUBLIC_KEY}}",
+      signature = "{{SIGNATURE}}",
+      payload_hash = "{{SHA256_OF_BODY}}",
+      signed_at = "{{SIGNED_AT_ISO8601}}",
+      key_id = "primary",
+    },
   },
 
   # Configuration with contracts
