@@ -54,7 +54,7 @@ MAINTENANCE-CHECKLIST.a2ml, or SOFTWARE-DEVELOPMENT-APPROACH.a2ml in the reposit
 | Banned              | Use Instead        |
 |---------------------|--------------------|
 | TypeScript          | AffineScript       |
-| Node.js / npm / bun | Deno               |
+| Node.js / npm / yarn / pnpm | Bun (default estate-wide; `package.json` is Bun's manifest, not npm's) |
 | Go                  | Rust               |
 | Python              | Julia / Rust       |
 

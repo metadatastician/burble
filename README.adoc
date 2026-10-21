@@ -173,7 +173,7 @@ peer-held group keys; the coordination half is in the tree:
   sealing, per-speaker frame keys, AES-GCM frame encryption, a replay window and
   epoch tracking. It is checked against the server's own output by committed
   test vectors, so the two halves cannot drift apart silently (`bun test
-  client/web/tests/`, 44 tests; the suite also runs under Deno).
+  client/web/tests/` — 97 tests across 12 files, all green).
 * `client/web/e2ee-session.js` is the conversation that goes with it: it speaks
   the five channel events, elects the key-maker (lowest peer id), seals the room
   key to each peer, opens what arrives, and follows epoch bumps. It handles the

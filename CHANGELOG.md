@@ -25,6 +25,15 @@ everything else — because four suites spawned helper servers with
 - **`spawnServer()` in `tests/runner.js`** replaces the per-file `Deno.Command`
   call sites (`Bun.spawn` under Bun, `Deno.Command` under Deno). The raw
   WebSocket-upgrade probe was rewritten on `node:net`.
+- **The policy files were the cause.** Ten files told every agent and
+  contributor to prefer Deno over Bun — `0-AI-MANIFEST.a2ml` said
+  `deno-js-runtime = "NOT Node NOT npm NOT Bun"`,
+  `.github/copilot-instructions.md` said "No Node.js / npm / bun (use Deno)",
+  and `.machine_readable/ai/{.clinerules,.cursorrules,.windsurfrules}` said the
+  same. That is why a bot opened #248 to migrate the Elixir syntax checker to
+  Deno, and why #247's squash carried that migration into `main`. All ten now
+  say Bun, and `deno.json` files are described for what they are: template
+  compliance, with every task delegating to Bun.
 - **`package.json` + `bun.lock`** in `client/web`, `client/lib` and `scripts`.
   A manifest per ReScript package is mandatory for the Bun path: without one,
   `bun x rescript` fails with `try_package_path: upward traversal did not find

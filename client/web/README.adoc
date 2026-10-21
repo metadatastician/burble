@@ -77,15 +77,16 @@ fallback sibling — `MIGRATION.md` covers the migration policy.
   CSS.
 
 `tests/`::
-  Deno test suite (the AffineScript canary uses this).
+  Bun test suite (the AffineScript canary compiles `.affine` separately).
 
 == Conventions
 
 * `.affine` is canonical going forward; `.res` exists only as a
   fallback during the migration. Don't add new `.res`-only
   modules.
-* Browser-only — no Node/npm/bun (per repo policy). Deno is the
-  only JS toolchain used here.
+* Browser-only, built with **Bun** (`bun install`, `bun run res:build`,
+  `bun test tests/`). `deno.json` keeps the same task names so the manifest
+  stays valid, but every task delegates to Bun.
 * WebRTC peer connection lifecycle is owned by `WebRTC.affine`;
   business logic for room state belongs in `Room.affine`.
 * Bridge mode (AI data channel) is opt-in — `burble-ai-bridge.js`

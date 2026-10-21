@@ -119,6 +119,6 @@ default NAT + the `scripts/wsl-bolt-udp-forward.ps1` host forwarder
 ## Do not
 
 - Do not modify files outside `burble/`
-- Do not install npm packages (use Deno)
+- Do not use npm, yarn or pnpm as a package manager — use Bun (`bun install`, `bun run`, `bun test`)
 - Do not create a central server for the P2P mode
 - Do not send real credentials or secrets over the data channel

@@ -1,6 +1,6 @@
 <!-- SPDX-License-Identifier: CC-BY-SA-4.0 -->
 <!-- Copyright (c) {{CURRENT_YEAR}} {{AUTHOR}} (hyperpolymath) <{{AUTHOR_EMAIL}}> -->
-<!-- Authoritative source: docs/AI-CONVENTIONS.md -->
+<!-- Authoritative source: docs/practice/AI-CONVENTIONS.adoc -->
 
 # Copilot Instructions
 
@@ -33,8 +33,15 @@
 
 ## Banned Languages
 
-- No TypeScript (use ReScript)
-- No Node.js / npm / bun (use Deno)
+- No TypeScript (use ReScript; AffineScript where a `.affine` file exists)
+- No npm / yarn / pnpm as package managers, and no Node.js as a runtime — use
+  **Bun** (`bun install`, `bun run`, `bun test`). A `package.json` is not banned:
+  it is Bun's manifest format, and ReScript needs one to resolve
+  `@rescript/core` under Bun.
+- **Bun is the default estate-wide. Do not open a PR that moves a script, test,
+  manifest or CI lane from Bun to Deno** — that direction was tried (see the
+  closed #248) and reverted. `deno.json` files stay because the template
+  expects the manifest; their tasks delegate to Bun.
 - No Go (use Rust)
 - No Python (use Julia or Rust)
 
