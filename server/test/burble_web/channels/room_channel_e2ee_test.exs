@@ -104,8 +104,10 @@ defmodule BurbleWeb.Channels.RoomChannelE2EETest do
 
       assert_reply(ref, :ok, %{epoch: 0, peers: 1})
 
-      assert_broadcast("e2ee_key_set", %{epoch: 0, peers: 1})
-      assert_broadcast("e2ee_key_set", %{public_keys: keys})
+      # One registration produces exactly one broadcast, so assert on it once:
+      # `assert_broadcast/2` consumes the message, and a second call would be
+      # asserting on a message that has already been taken out of the mailbox.
+      assert_broadcast("e2ee_key_set", %{epoch: 0, peers: 1, public_keys: keys})
 
       # The broadcast carries the public key, base64-encoded — and nothing else.
       assert Map.values(keys) |> Enum.map(&Base.decode64!/1) == [public_key]
