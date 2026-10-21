@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: CC-BY-SA-4.0
 // Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
 = Architecture Decision Record: 0016-peer-held-group-keys
-// Status: Proposed — the coordination half is implemented; the browser half is not.
+// Status: Proposed — both halves are implemented; neither is on the call path.
 // Supersedes: nothing. Extends: ADR-0011 (the E2EE content/metadata boundary).
 
 # 16. Peer-held group keys: the server coordinates, the peers hold
@@ -10,9 +10,12 @@ Date: 2026-10-21
 
 ## Status
 
-Proposed — **part-way**. The server-side coordination protocol is implemented
-and reviewed by inspection (`server/lib/burble/media/e2ee.ex`); the browser
-half is not written. See §Gaps before quoting anything here as a guarantee.
+Proposed — **part-way**. Both halves are written: the coordination protocol in
+`server/lib/burble/media/e2ee.ex` and the browser half in `client/web/e2ee.js`
++ `client/web/e2ee-session.js`. **Neither is on the call path** — `VoiceEngine.res`
+builds no session and attaches no transform, so a call is still DTLS-SRTP only —
+and the browser half has never run in a real browser. See §Gaps before quoting
+anything here as a guarantee.
 
 ## Context
 
@@ -201,8 +204,7 @@ These are open, tracked, and must stay in the README until closed:
    window, an epoch tracker) and the Encoded Transform layer
    (`FrameCryptor`, `senderTransform`/`receiverTransform`, `attachFrameCrypto`);
    `client/web/e2ee-session.js` implements the exchange of §5a. Between them
-   they are covered by 44 tests against real WebCrypto, run under Bun (the
-   estate default) and still under Deno.
+   they are covered by 45 tests against real WebCrypto, run under Bun.
 
    What is missing is the last mile, and it is the difference between a protocol
    and a private call: `VoiceEngine.res` builds no session, attaches no
@@ -229,10 +231,16 @@ These are open, tracked, and must stay in the README until closed:
    whose header describes security it does not implement is worse than an
    absent module, because absence is visible.
 
-   Frame encryption also revealed a gap in this ADR's first draft: a single
-   shared room key authenticates the room, not the speaker. The frame layer
-   derives a per-sender key and binds the sender id into the AAD, so a member
-   cannot forge another member's frames.
+   Frame encryption also revealed a gap in this ADR's first draft, and the
+   first draft's fix did not close it. A single shared room key authenticates
+   the room, not the speaker; deriving a per-sender key and binding the sender
+   id into the AAD stops *sender ids* being confused, but every holder of the
+   room key can derive any other member's frame key and produce a frame that
+   attributes to that member. Members cannot be told apart from each other by
+   cryptography here — only outsiders, and the server, are excluded. A sender
+   -specific secret or a signature per frame would be needed, and neither is
+   implemented. `client/web/tests/e2ee_test.js` asserts this limitation rather
+   than describing it away.
 2. **The server-side pipeline still runs in `:e2ee` rooms.** It now has no key
    and cannot decrypt, but ADR-0011 §3 puts content DSP at the edge; running
    echo-cancel/denoise on opaque bytes is pointless, and running it on

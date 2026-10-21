@@ -57,6 +57,10 @@ export class E2EESession {
   #lastError = null;
   #sealedSent = new Set();
 
+  // The key this peer minted for the current epoch while it is leader, so a
+  // retry distributes the same one rather than starting a second key.
+  #leaderKey = null;
+
   /**
    * Create local key-exchange state; callers must forward channel broadcasts
    * to `onKeySet` and `onSealedKey`. Invalid ids or a missing `push` throw `TypeError`.
@@ -297,8 +301,19 @@ export class E2EESession {
   async #distributeRoomKey() {
     if (!this.#keypair) throw new Error("start() must run before a key can be distributed");
 
-    const groupKey = E2EE.randomGroupKey();
     const epoch = this.epoch;
+
+    // One room key per epoch, not one per call. `#sealedSent` remembers which
+    // peers already have this epoch's key, so a retry after a partial failure
+    // (or a second key-set broadcast for a new peer) runs this loop again —
+    // and minting a fresh random key here would hand the remaining peers a
+    // different group key from the one already distributed, in the same epoch.
+    // They would then be unable to read each other.
+    if (!this.#leaderKey || this.#leaderKey.epoch !== epoch) {
+      this.#leaderKey = { epoch, key: E2EE.randomGroupKey() };
+    }
+
+    const groupKey = this.#leaderKey.key;
 
     for (const [peerId, publicKey] of this.#keySet) {
       if (peerId === this.#localId) continue;
@@ -382,6 +397,7 @@ export class E2EESession {
     this.#keySet.clear();
     this.#cryptors.clear();
     this.#sealedSent.clear();
+    this.#leaderKey = null;
     this.#epochs.clear();
     this.#setStatus(STATUS.IDLE);
   }

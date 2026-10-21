@@ -156,8 +156,10 @@ end-to-end encrypted today** — DTLS-SRTP only — and
   `e2ee_requested:` (policy, not proof); `Privacy.e2ee_config/1` returns
   `enabled: false, implemented: false`; `GET /api/v1/setup/check` reports
   `e2ee_coordinator_running:` instead of the untrue `e2ee_keys_generated:`.
-- **Not implemented, stated plainly:** the browser half (WebCrypto X25519,
-  AES-GCM frames, WebRTC Encoded Transform) does not exist; the server-side
+- **Not implemented, stated plainly:** at the time of this entry the browser
+  half (WebCrypto X25519, AES-GCM frames, WebRTC Encoded Transform) did not
+  exist — it was written later the same day and is still not attached to calls;
+  the server-side
   coprocessor pipeline still runs in `:e2ee` rooms (keyless, but it should not
   run at all per ADR-0011 §3); there is no mid-epoch leader failover; nothing
   on this path is formally verified.

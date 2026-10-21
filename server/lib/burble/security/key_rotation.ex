@@ -29,10 +29,10 @@ defmodule Burble.Security.KeyRotation do
   Automatic E2EE key rotation scheduler for Burble voice rooms.
 
   Ensures forward secrecy by periodically calling
-  `Burble.Media.E2EE.request_rotation/1` — an epoch bump plus revocation of the
-  distributed key blobs. The server never holds the key itself (ADR-0016).
-  for every active room. Subscribes to room lifecycle events via Phoenix PubSub
-  to track which rooms are active.
+  `Burble.Media.E2EE.request_rotation/1` for every active room — an epoch bump
+  plus revocation of the distributed key blobs. The server never holds the key
+  itself (ADR-0016). Subscribes to room lifecycle events via Phoenix PubSub to
+  track which rooms are active.
 
   ## Configuration
 

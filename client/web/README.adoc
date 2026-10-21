@@ -41,10 +41,12 @@ fallback sibling — `MIGRATION.md` covers the migration policy.
   agreement, sealed room-key distribution, per-sender frame keys, replay
   window, epoch tracking. WebCrypto only, no dependencies. Checked against the
   server's own output by `tests/e2ee_test.js` + `tests/fixtures/e2ee-vectors.json`.
-  **Not yet wired into the call path** — the encoded transform is still to do.
+  **Not yet wired into the call path** — the Encoded Transform layer exists
+  (`FrameCryptor`, `senderTransform`/`receiverTransform`, `attachFrameCrypto`)
+  but nothing attaches it to a call.
 
 `deno.json`::
-  Deno tasks for dev server, build, test.
+  Task names kept for template compliance; every task delegates to Bun.
 
 `rescript.json`::
   ReScript compiler config (until the AffineScript migration

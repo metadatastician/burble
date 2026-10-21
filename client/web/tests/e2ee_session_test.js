@@ -211,6 +211,54 @@ test("a third peer bumps the epoch and the leader redistributes", async () => {
   assert.deepStrictEqual(await alice.cryptorFor("carol").open(wire), new Uint8Array([9]));
 });
 
+test("a retry after a partial distribution keeps the same room key", async () => {
+  const room = new FakeRoom();
+
+  // The leader's first sealed key for Carol is refused, as `already_published`
+  // would be after a lost broadcast. By then Bob already holds the key, so a
+  // retry reaches only Carol.
+  const aliceChannel = room.channelFor("alice");
+  let refused = false;
+  const alice = new E2EESession({
+    roomId: "room-1",
+    localId: "alice",
+    channel: {
+      push(event, payload) {
+        if (event === "e2ee_publish_sealed" && payload.to === "carol" && !refused) {
+          refused = true;
+          return Promise.resolve({ ok: false, data: { reason: "already_published" } });
+        }
+        return aliceChannel.push(event, payload);
+      }
+    }
+  });
+  room.subscribe("alice", alice);
+  await alice.start();
+
+  const { session: bob } = await join(room, "bob");
+
+  // Carol's registration triggers the distribution, and the refusal surfaces
+  // through the broadcast — that is the partial failure being tested.
+  await assert.rejects(join(room, "carol"));
+
+  assert.strictEqual(refused, true, "the first distribution really was refused");
+  assert.strictEqual(bob.hasRoomKey, true, "Bob got the first key");
+  assert.strictEqual(alice.hasRoomKey, false, "the aborted attempt installed no key");
+
+  // The same key set and epoch reach the leader again — a repeated
+  // `e2ee_key_set` broadcast, or a caller retrying.
+  await alice.onKeySet({ epoch: alice.epoch, public_keys: Object.fromEntries(room.peers) });
+
+  const carol = room.subscribers.get("carol");
+  assert.strictEqual(carol.hasRoomKey, true, "the retry delivered the key to Carol");
+
+  // Bob holds the first key, Carol the second call's key. If the leader minted
+  // a fresh random key for the retry these differ and Bob's frame will not open
+  // in Carol.
+  const wire = await bob.cryptorFor("alice").seal(new Uint8Array([7, 7]));
+  assert.deepStrictEqual(await carol.cryptorFor("bob").open(wire), new Uint8Array([7, 7]));
+});
+
 test("a blob for another peer is ignored, not attempted", async () => {
   const room = new FakeRoom();
   const { session: alice } = await join(room, "alice");

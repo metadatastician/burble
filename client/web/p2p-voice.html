@@ -324,6 +324,15 @@
             aiLog('system', 'dropped a send: peer is not draining the data channel');
             return false;
           }
+          // The guard above is the *only* reason to drop a send. Returning true
+          // without this call is how every message was logged as "sent" and
+          // then silently discarded.
+          try {
+            aiChannel.send(payload);
+          } catch (err) {
+            aiLog('system', `send failed: ${err.message}`);
+            return false;
+          }
           aiLog('sent', typeof msg === 'string' ? msg : JSON.stringify(msg, null, 2));
           return true;
         },
@@ -516,16 +525,23 @@
         setStatus('waiting', `Joining room "${room}"...`);
         document.getElementById('step-role').classList.add('hidden');
 
-        // Fetch offer from relay. The Deno relay long-polls (~30s) and returns
-        // 408 on timeout; the Cloudflare worker has no long-poll and answers
-        // 404 "not ready" immediately. Treat any non-ok answer as "not there
+        // Fetch offer from relay. signaling/relay.js long-polls (~30 s) and
+        // returns 408 on timeout; the Cloudflare worker has no long-poll and
+        // answers 404 "not ready" immediately. Treat any non-ok answer as "not there
         // yet" and retry for a bounded window — otherwise joining a room on the
         // worker relay failed instantly with "Room not found".
         let offerData = null;
-        const MAX_OFFER_POLLS = 30; // ~30 × 1s (worker) or a few 30s waits (Deno)
-        for (let attempt = 0; attempt < MAX_OFFER_POLLS && offerData === null; attempt++) {
+        // Bound by elapsed time, not by attempt count. The relay long-polls for
+        // up to 30 s on a room that is not there yet, so "30 attempts" is not a
+        // short window — it is ~15 minutes before a mistyped room name reports
+        // anything. 45 s covers one long-poll plus retries against the
+        // Cloudflare worker (which answers 404 immediately).
+        const OFFER_WINDOW_MS = 45000;
+        const offerDeadline = Date.now() + OFFER_WINDOW_MS;
+        while (offerData === null && Date.now() < offerDeadline) {
+          const remaining = Math.max(1000, offerDeadline - Date.now());
           try {
-            const res = await fetch(`${roomUrl}/offer`, { signal: AbortSignal.timeout(31000) });
+            const res = await fetch(`${roomUrl}/offer`, { signal: AbortSignal.timeout(Math.min(31000, remaining)) });
             if (res.ok) offerData = await res.json();
           } catch (e) { /* timeout / network — retry */ }
           if (offerData === null) await new Promise(r => setTimeout(r, 1000));

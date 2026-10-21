@@ -123,7 +123,7 @@ server has none. Binary fields are base64 because the channel transport is JSON.
 | `e2ee_register_key` | client → server | `{"public_key": <b64, 32 B>}` | Idempotent per peer. Reply `{"epoch", "peers"}`; broadcasts `e2ee_key_set`. |
 | `e2ee_key_set` | client → server | `{}` | Reply `{"epoch", "public_keys": {peer_id: b64}}`. |
 | `e2ee_publish_sealed` | client → server | `{"to": peer_id, "epoch": n, "blob": <b64, ≤512 B>}` | Leader-side distribution. Reply `{"epoch"}`; broadcasts `e2ee_sealed_key`. |
-| `e2ee_fetch_sealed` | client → server | `{}` | Reply `{"epoch", "blob"}` or an error (`not_found`, `stale_epoch`). |
+| `e2ee_fetch_sealed` | client → server | `{}` | Reply `{"epoch", "blob"}` or an error (`not_found`, `stale_epoch`). **Known gap:** the reply omits the publisher id, which the recipient needs for the pairwise key and AAD — so a peer that missed the broadcast cannot open what it fetches (`DEBT.md` CODE-1g). |
 | `e2ee_status` | client → server | `{}` | Reply `{"epoch", "peers", "sealed_peers", "key_custody": "peers"}`. |
 
 `e2ee_sealed_key` is broadcast to the room, not unicast. That is safe by
@@ -132,21 +132,37 @@ two peers involved, and its AAD names the room, epoch, sender and recipient, so
 no other peer can open, redirect or replay it. Any membership change bumps the
 epoch and drops outstanding blobs.
 
-**Media frames (client-defined).** Once the encoded transform exists, a frame
-is `iv(12) || tag(16) || ciphertext` under AES-256-GCM, with AAD
-`frame-aad|<room>|<epoch>|<sender>|<counter>` and a per-sender key from the
-epoch's room key. The sender id is in the derivation so one member cannot forge
-another's frames. Implemented in `client/web/e2ee.js`, not yet called by the
-call path, and not yet cross-checked against a second implementation.
+**Media frames (client-defined).** A framed media packet is
+
+```
+header: version(1) || idLen(1) || sender(idLen) || epoch(4) || counter(4)
+body:   iv(12) || tag(16) || ciphertext          (AES-256-GCM)
+```
+
+with AAD `frame-aad|<room>|<epoch>|<sender>|<counter>` and a per-sender key
+derived from the epoch's room key. The header is what makes a lossy path work:
+the counter feeds the key derivation, so a receiver cannot derive the key
+without it, and the sender id is needed on an SFU receive path where one
+connection carries many speakers. Derived and applied by
+`client/web/e2ee.js` (`encodeFrameHeader`, `FrameCryptor`, `attachFrameCrypto`).
+
+What the sender id does **not** do: every holder of the room key can derive any
+member's frame key, so a member can produce a frame attributed to another
+member. Header and AAD binding stop an outsider redirecting or re-attributing a
+frame; they do not authenticate members to each other. See ADR-0016 §Gaps.
+
+**Not on the call path, and not run in a browser.** Nothing in the application
+builds a session or attaches the transform, so media is still DTLS-SRTP per
+hop.
 
 **Test vectors.** `client/web/tests/fixtures/e2ee-vectors.json` pins the
 byte-level protocol (pairwise derivation, sealing, AAD, frame keys);
 `scripts/verify-e2ee-vectors.mjs` re-derives it with WebCrypto. Regenerate with
 `scripts/gen-e2ee-vectors.exs` only for a deliberate wire break.
 
-**Status: part-way.** Nothing here encrypts media yet — the browser frame layer
-(WebCrypto + Encoded Transform) is unwritten, so calls remain protected by
-DTLS-SRTP per hop. See `README.adoc` §*Encryption: what is true today*.
+**Status: part-way.** The browser frame layer is written and tested but not
+wired to the call path, so calls remain protected by DTLS-SRTP per hop. See
+`README.adoc` §*Encryption: what is true today*.
 
 
 ## Wire schemas — Bebop
