@@ -26,4 +26,16 @@ optional QUIC toolchain (msquic/quicer; experimental — ADR-0007).
 `docker-to-podman-image.sh`, `install-desktop.sh`, `smoke-check.sh`::
 Deploy/build utilities.
 
+*Verification:*
+`check-elixir-syntax.mjs`:: Parse `server/lib` and `server/test` with the real
+Elixir grammar (`tree-sitter-elixir`, WASM — no Elixir toolchain needed), and
+optionally cross-check that every `Module.fun(args)` call names a function that
+exists with that arity. It is a parser, not a compiler: it cannot resolve
+macros, `use`-generated functions, protocols or behaviour callbacks, and it does
+not type-check. Use it where `mix` is unavailable, never instead of `mix`.
+Install once with `npm install --prefix scripts`, then
+`node scripts/check-elixir-syntax.mjs server/lib server/test`.
+Rationale and measured results:
+`docs/reports/maintenance/maintenance-2026-10-21.md` (Appendix).
+
 `burble-launcher.sh.deprecated-2026-04-10`:: Retained, deprecated.

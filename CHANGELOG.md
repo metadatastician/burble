@@ -29,6 +29,12 @@ end-to-end encrypted today** — DTLS-SRTP only — and
   room/epoch/direction, an all-zero-shared-secret check (RFC 7748 §6.1) and
   size caps (512 B per blob, 512 peers per room). Any membership change bumps
   the epoch and drops every sealed blob.
+- **`BurbleWeb.RoomChannel` now wires the coordinator up**: it registers the
+  room on join, removes the peer (and bumps the epoch) on terminate, and relays
+  `e2ee_register_key`, `e2ee_key_set`, `e2ee_publish_sealed`, `e2ee_fetch_sealed`
+  and `e2ee_status`. Payloads are public keys and opaque blobs only; sealed
+  blobs are broadcast because a third peer can neither open nor replay them.
+  Covered by `test/burble_web/channels/room_channel_e2ee_test.exs`.
 - **`Burble.Media.E2EE` was not in the supervision tree at all**, so every call
   would have failed and `setup/check` could never see it. It is now started
   before `Burble.Security.KeyRotation`.

@@ -157,6 +157,11 @@ peer-held group keys; the coordination half is in the tree:
   `derive_frame_key/3`) with domain-separated labels, AAD bound to
   room/epoch/direction, an all-zero-shared-secret check (RFC 7748 §6.1) and
   size caps. They are the part a test suite can exercise without a browser.
+* The room channel exposes the coordination events a client needs —
+  `e2ee_register_key`, `e2ee_key_set`, `e2ee_publish_sealed`,
+  `e2ee_fetch_sealed`, `e2ee_status` — so the protocol is reachable and not
+  merely a library (`docs/PROTOCOL.md`). Every payload is a public key or an
+  opaque blob.
 * Any membership change bumps the epoch and **drops every sealed blob**, so a
   departing peer never learns the next key and a joining peer never learns a
   past one. `Burble.Security.KeyRotation` now requests these epoch bumps; it

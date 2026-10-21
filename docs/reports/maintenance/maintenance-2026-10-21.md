@@ -652,3 +652,60 @@ A survey of the hyperpolymath type-theory / reversibility repositories
 (`*-types`, `absolute-zero`, `januskey`), with concrete enhancement proposals
 for Burble, is in
 `docs/reports/design-enhancements-2026-10-21.md`.
+
+---
+
+## Appendix — how the Elixir was checked without a compiler (round 2)
+
+There is no Erlang/Elixir toolchain in the environment this work was done in, so
+"reviewed line by line" was upgraded to something reproducible. Three checks
+were run over `server/lib` and `server/test`; none of them is a substitute for
+`mix compile`, and the fourth item lists what they cannot see.
+
+1. **Real grammar, not bracket counting.** Every `.ex`/`.exs` file was parsed
+   with `tree-sitter-elixir` 0.3.5 through `web-tree-sitter` 0.27 (WASM, no
+   native build). The check is committed as `scripts/check-elixir-syntax.mjs`
+   so it can be repeated:
+
+   ```bash
+   npm install --prefix scripts
+   node scripts/check-elixir-syntax.mjs server/lib server/test
+   # -> parsed 208 file(s), 0 with parse errors
+   ```
+
+   The same script, given a deliberately broken file, reports the `ERROR`
+   nodes — so the zero is a measurement, not a silent failure.
+
+2. **Alias-aware cross-module arity check.** For every `Module.fun(args)` in
+   the tree, the script resolves `Module` through the file's `alias`
+   declarations and checks that `fun/arity` is defined in a project module
+   (accounting for default arguments and pipes). This is the exact class of bug
+   that broke this round: `KeyRotation` calling `E2EE.ratchet_key/1` after that
+   function was removed.
+
+   ```bash
+   node scripts/check-elixir-syntax.mjs --calls server/lib server/test
+   # -> parsed 208 file(s), 0 with parse errors
+   # -> 219 project module(s); 25 unresolved cross-module call(s)
+   ```
+
+   All 25 were adjudicated by hand and are artefacts, not defects:
+   macro-generated functions (`use Phoenix.Presence`, `use Phoenix.Endpoint`,
+   `use Guardian`), reflective calls (`__info__/1`, `behaviour_info/1`) and
+   `@spec` type references (`PipeWire.device_info()`). No unresolved call
+   remains in the E2EE, engine, pipeline, privacy, key-rotation or channel
+   modules.
+
+3. **Formatting proxies** (not `mix format`): no tabs, no trailing whitespace,
+   files end with a newline, and new code stays within the default 98-column
+   budget. Six pre-existing lines exceed 98 columns (box-drawing art, long
+   `@spec`/string literals); none were introduced here.
+
+4. **What is still unverified.** Compilation, warnings-as-errors, the ExUnit
+   suites, `mix format --check-formatted`, and every runtime behaviour of the
+   new channel events. The E2EE tests and the channel tests are written but
+   have never been executed. CI must run:
+
+   ```bash
+   cd server && mix compile --warnings-as-errors && mix format --check-formatted && mix test
+   ```

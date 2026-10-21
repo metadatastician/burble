@@ -27,6 +27,11 @@ defmodule BurbleWeb.RoomChannel do
   - `"signal"` — WebRTC signaling (offer, answer, ice_candidate)
   - `"text"` — send a text message in the room
   - `"whisper"` — direct audio to a specific user
+  - `"e2ee_register_key"` — publish this peer's ephemeral X25519 public key
+  - `"e2ee_key_set"` — fetch the room's public keys and epoch
+  - `"e2ee_publish_sealed"` — relay a room key sealed to one peer (opaque)
+  - `"e2ee_fetch_sealed"` — collect a sealed room key addressed to you
+  - `"e2ee_status"` — epoch, peer counts, and `key_custody: "peers"`
 
   ## Outgoing events
 
@@ -36,11 +41,26 @@ defmodule BurbleWeb.RoomChannel do
   - `"signal"` — WebRTC signaling from another peer
   - `"text"` — text message from another user
   - `"room_state"` — full room state update
+  - `"e2ee_key_set"` — the room's public keys changed (a peer joined or left)
+  - `"e2ee_sealed_key"` — a sealed room key was relayed; only the addressee
+    can open it
+
+  ## E2EE (ADR-0016, part-way)
+
+  These events implement the *coordination* half of end-to-end encryption: the
+  server stores public keys, epochs and opaque sealed blobs and can open none
+  of them. The browser half — encrypting frames with WebCrypto and WebRTC
+  Encoded Transform — is not written, so a room marked `:e2ee` is still
+  protected by DTLS-SRTP alone. See `README.adoc` §*Encryption: what is true
+  today*.
   """
 
   use Phoenix.Channel
 
+  require Logger
+
   alias Burble.Presence
+  alias Burble.Media.E2EE
   alias Burble.Rooms.RoomManager
   alias Burble.Permissions
   alias Burble.Verification.Avow
@@ -71,6 +91,11 @@ defmodule BurbleWeb.RoomChannel do
           # Start WebRTC peer via Media.Engine (passes self() as channel_pid
           # so the Peer GenServer can send SDP offers and ICE candidates back).
           Burble.Media.Engine.add_peer(room_id, user_id, channel_pid: self())
+
+          # Make the E2EE coordinator aware of the room. Idempotent, and
+          # non-fatal if the coordinator is unavailable — the media path must
+          # not depend on the key-coordination path being up.
+          init_e2ee_room(room_id)
 
           # Audit log.
           Audit.log(:room_join, user_id, %{room_id: room_id})
@@ -144,7 +169,6 @@ defmodule BurbleWeb.RoomChannel do
 
   @impl true
   def handle_info(msg, socket) do
-    require Logger
     Logger.debug("[RoomChannel] Unhandled info: #{inspect(msg)}")
     {:noreply, socket}
   end
@@ -377,9 +401,109 @@ defmodule BurbleWeb.RoomChannel do
     {:reply, {:error, %{reason: "invalid_text_payload"}}, socket}
   end
 
+  # ── E2EE key coordination (ADR-0016) ──
+  #
+  # The server relays public keys, epochs and opaque sealed blobs. It cannot
+  # open a sealed blob: each is encrypted under a pairwise key that exists only
+  # on two peers, and its AAD names the room, epoch and both peer ids. That is
+  # why broadcasting a blob to the whole room is safe — every peer other than
+  # the addressee receives ciphertext it can neither open nor replay.
+  #
+  # Keys travel base64-encoded because channel payloads are JSON.
+
+  @impl true
+  def handle_in("e2ee_register_key", %{"public_key" => encoded}, socket) do
+    room_id = socket.assigns.room_id
+    user_id = socket.assigns.user_id
+
+    with {:ok, public_key} <- decode_public_key(encoded),
+         {:ok, %{epoch: epoch, peer_count: count}} <-
+           safe_e2ee(fn -> E2EE.register_peer_key(room_id, user_id, public_key) end) do
+      broadcast!(socket, "e2ee_key_set", %{
+        peer_id: user_id,
+        epoch: epoch,
+        peers: count,
+        public_keys: public_key_set(room_id)
+      })
+
+      {:reply, {:ok, %{epoch: epoch, peers: count}}, socket}
+    else
+      {:error, reason} -> {:reply, {:error, %{reason: error_string(reason)}}, socket}
+    end
+  end
+
+  @impl true
+  def handle_in("e2ee_register_key", _params, socket) do
+    {:reply, {:error, %{reason: "invalid_public_key"}}, socket}
+  end
+
+  @impl true
+  def handle_in("e2ee_key_set", _params, socket) do
+    case safe_e2ee(fn -> E2EE.key_set(socket.assigns.room_id) end) do
+      {:ok, %{epoch: epoch, peers: peers}} ->
+        keys = Map.new(peers, fn {id, key} -> {id, Base.encode64(key)} end)
+        {:reply, {:ok, %{epoch: epoch, public_keys: keys}}, socket}
+
+      {:error, reason} ->
+        {:reply, {:error, %{reason: error_string(reason)}}, socket}
+    end
+  end
+
+  @impl true
+  def handle_in("e2ee_publish_sealed", params, socket) do
+    room_id = socket.assigns.room_id
+
+    with {:ok, to} <- fetch_string(params, "to"),
+         {:ok, encoded} <- fetch_string(params, "blob", 1024),
+         {:ok, epoch} <- fetch_epoch(params),
+         {:ok, blob} <- decode_sealed_blob(encoded),
+         :ok <- safe_e2ee(fn -> E2EE.publish_sealed(room_id, to, epoch, blob) end) do
+      broadcast!(socket, "e2ee_sealed_key", %{
+        from: socket.assigns.user_id,
+        to: to,
+        epoch: epoch,
+        blob: encoded
+      })
+
+      {:reply, {:ok, %{epoch: epoch}}, socket}
+    else
+      {:error, reason} -> {:reply, {:error, %{reason: error_string(reason)}}, socket}
+    end
+  end
+
+  @impl true
+  def handle_in("e2ee_fetch_sealed", _params, socket) do
+    room_id = socket.assigns.room_id
+
+    case safe_e2ee(fn -> E2EE.sealed_for(room_id, socket.assigns.user_id) end) do
+      {:ok, %{epoch: epoch, blob: blob}} ->
+        {:reply, {:ok, %{epoch: epoch, blob: Base.encode64(blob)}}, socket}
+
+      {:error, reason} ->
+        {:reply, {:error, %{reason: error_string(reason)}}, socket}
+    end
+  end
+
+  @impl true
+  def handle_in("e2ee_status", _params, socket) do
+    case safe_e2ee(fn -> E2EE.room_status(socket.assigns.room_id) end) do
+      {:ok, status} ->
+        {:reply,
+         {:ok,
+          %{
+            epoch: status.epoch,
+            peers: status.peers,
+            sealed_peers: status.sealed_peers,
+            key_custody: Atom.to_string(status.key_custody)
+          }}, socket}
+
+      {:error, reason} ->
+        {:reply, {:error, %{reason: error_string(reason)}}, socket}
+    end
+  end
+
   @impl true
   def handle_in(event, _params, socket) do
-    require Logger
     Logger.warning("[RoomChannel] Unhandled event: #{inspect(event)}")
     {:reply, {:error, %{reason: "unknown_event", event: event}}, socket}
   end
@@ -399,6 +523,10 @@ defmodule BurbleWeb.RoomChannel do
       Audit.log(:room_leave, user_id, %{room_id: room_id})
 
       Burble.Rooms.Room.leave(room_id, user_id)
+
+      # Drop the peer's public key and bump the epoch so the key it holds can
+      # never be current again.
+      teardown_e2ee_peer(room_id, user_id)
     end
 
     :ok
@@ -425,6 +553,82 @@ defmodule BurbleWeb.RoomChannel do
       :ok
     end
   end
+
+  # Register the room with the E2EE coordinator (idempotent, best-effort).
+  defp init_e2ee_room(room_id) do
+    case safe_e2ee(fn -> E2EE.init_room(room_id) end) do
+      {:ok, _} ->
+        :ok
+
+      {:error, :room_exists} ->
+        :ok
+
+      {:error, reason} ->
+        Logger.warning("[RoomChannel] E2EE room init failed for #{room_id}: #{inspect(reason)}")
+        :ok
+    end
+  end
+
+  defp teardown_e2ee_peer(room_id, user_id) do
+    _ = safe_e2ee(fn -> E2EE.remove_peer(room_id, user_id) end)
+    :ok
+  end
+
+  # Call into the E2EE coordinator, tolerating its absence. The coordinator is
+  # a coordination service, not a dependency of the call path.
+  defp safe_e2ee(fun) do
+    fun.()
+  catch
+    :exit, {:noproc, _} -> {:error, :e2ee_unavailable}
+    :exit, {:timeout, _} -> {:error, :e2ee_timeout}
+    :exit, reason -> {:error, {:e2ee_exit, reason}}
+  end
+
+  @public_key_bytes 32
+  @max_sealed_bytes 512
+
+  defp decode_public_key(encoded) when is_binary(encoded) do
+    case Base.decode64(encoded) do
+      {:ok, <<key::binary-size(@public_key_bytes)>>} -> {:ok, key}
+      _ -> {:error, :invalid_public_key}
+    end
+  end
+
+  defp decode_public_key(_), do: {:error, :invalid_public_key}
+
+  defp decode_sealed_blob(encoded) when is_binary(encoded) do
+    case Base.decode64(encoded) do
+      {:ok, blob} when byte_size(blob) > 0 and byte_size(blob) <= @max_sealed_bytes -> {:ok, blob}
+      _ -> {:error, :invalid_sealed_blob}
+    end
+  end
+
+  defp decode_sealed_blob(_), do: {:error, :invalid_sealed_blob}
+
+  # Peer ids are short; a base64 sealed blob is not. Both are length-capped,
+  # before decoding and again after (see decode_sealed_blob/1).
+  defp fetch_string(params, key, max_bytes \\ 128) when is_map(params) do
+    case Map.get(params, key) do
+      value when is_binary(value) and byte_size(value) > 0 and byte_size(value) <= max_bytes ->
+        {:ok, value}
+
+      _ ->
+        {:error, :invalid_params}
+    end
+  end
+
+  defp fetch_epoch(%{"epoch" => epoch}) when is_integer(epoch) and epoch >= 0, do: {:ok, epoch}
+  defp fetch_epoch(_), do: {:error, :invalid_epoch}
+
+  defp public_key_set(room_id) do
+    case safe_e2ee(fn -> E2EE.key_set(room_id) end) do
+      {:ok, %{peers: peers}} -> Map.new(peers, fn {id, key} -> {id, Base.encode64(key)} end)
+      {:error, _reason} -> %{}
+    end
+  end
+
+  defp error_string(reason) when is_atom(reason), do: Atom.to_string(reason)
+  defp error_string(reason), do: inspect(reason)
 
   # Call into the per-peer media process, tolerating its absence.
   defp safe_peer_call(fun) do

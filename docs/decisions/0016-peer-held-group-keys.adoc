@@ -92,7 +92,22 @@ a past one. `request_rotation/1` is what `Burble.Security.KeyRotation` calls on
 its schedule — the scheduler no longer "ratchets" anything, because there is
 nothing on this side to ratchet.
 
-### 4. Names must not overclaim
+### 4. The coordination plane is reachable
+
+A protocol nobody can call is a design document. `BurbleWeb.RoomChannel` now
+starts the room's coordinator record on join, removes the peer on terminate, and
+relays the five coordination events (`e2ee_register_key`, `e2ee_key_set`,
+`e2ee_publish_sealed`, `e2ee_fetch_sealed`, `e2ee_status`). Every one of them
+carries a **public** key or an **opaque** blob; there is no event that could
+return a room key, because no such value exists on this side.
+
+A sealed blob is broadcast to the room rather than unicast to its recipient.
+That is deliberate and safe: it is ciphertext under a pairwise key held by two
+peers, and its AAD names room, epoch, sender and recipient, so a third peer can
+neither open it, redirect it, nor replay it into another epoch. Documented in
+`docs/PROTOCOL.md`.
+
+### 5. Names must not overclaim
 
 - `:e2ee_key` → `:pipeline_key` in the engine and coprocessor pipeline, and the
   engine **refuses** a pipeline key in an `:e2ee`/`:maximum` room (logged).
@@ -107,7 +122,8 @@ These are open, tracked, and must stay in the README until closed:
 
 1. **The browser half does not exist.** `client/web` has no WebCrypto X25519,
    no AES-GCM frame path, and no Insertable Streams / Encoded Transform
-   wiring. Until it does, a room marked `:e2ee` is protected in transit by
+   wiring. The server side is reachable over the room channel (§4) but no
+   client speaks it, so a room marked `:e2ee` is protected in transit by
    **DTLS-SRTP only** — hop-by-hop, terminated at the SFU. The protocol above
    is a protocol, not a working call.
 2. **The server-side pipeline still runs in `:e2ee` rooms.** It now has no key

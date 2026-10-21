@@ -103,13 +103,39 @@ Channels live in `server/lib/burble_web/channels/`. Two primary topics:
 
 - `signaling:<room_id>` — WebRTC offer/answer/ICE relay. Tested in
   `server/test/burble_web/channels/signaling_channel_test.exs`.
-- `room:<room_id>` — chat + presence + room events. Tested in
-  `server/test/burble_web/channels/room_channel_text_test.exs`.
+- `room:<room_id>` — chat + presence + room events + E2EE key coordination.
+  Tested in `server/test/burble_web/channels/room_channel_text_test.exs` and
+  `server/test/burble_web/channels/room_channel_e2ee_test.exs`.
 
 Frames over the channel transport are encoded as **JSON**. A Bebop binary
 encoding (see below) exists as generated, tested codecs but is **not yet
 wired into the live channel transport** — it is the planned binary fast
 path, not the current one (ADR-0007 honesty note).
+
+### E2EE key-coordination events (`room:<room_id>`)
+
+The coordination half of ADR-0016. Every payload below is either a **public**
+key or an **opaque** sealed blob; no event returns a room key, because the
+server has none. Binary fields are base64 because the channel transport is JSON.
+
+| Event | Direction | Payload | Notes |
+|---|---|---|---|
+| `e2ee_register_key` | client → server | `{"public_key": <b64, 32 B>}` | Idempotent per peer. Reply `{"epoch", "peers"}`; broadcasts `e2ee_key_set`. |
+| `e2ee_key_set` | client → server | `{}` | Reply `{"epoch", "public_keys": {peer_id: b64}}`. |
+| `e2ee_publish_sealed` | client → server | `{"to": peer_id, "epoch": n, "blob": <b64, ≤512 B>}` | Leader-side distribution. Reply `{"epoch"}`; broadcasts `e2ee_sealed_key`. |
+| `e2ee_fetch_sealed` | client → server | `{}` | Reply `{"epoch", "blob"}` or an error (`not_found`, `stale_epoch`). |
+| `e2ee_status` | client → server | `{}` | Reply `{"epoch", "peers", "sealed_peers", "key_custody": "peers"}`. |
+
+`e2ee_sealed_key` is broadcast to the room, not unicast. That is safe by
+construction: the blob is sealed under a pairwise key that exists only on the
+two peers involved, and its AAD names the room, epoch, sender and recipient, so
+no other peer can open, redirect or replay it. Any membership change bumps the
+epoch and drops outstanding blobs.
+
+**Status: part-way.** Nothing here encrypts media yet — the browser frame layer
+(WebCrypto + Encoded Transform) is unwritten, so calls remain protected by
+DTLS-SRTP per hop. See `README.adoc` §*Encryption: what is true today*.
+
 
 ## Wire schemas — Bebop
 
