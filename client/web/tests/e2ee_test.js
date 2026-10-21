@@ -282,3 +282,240 @@ Deno.test("KeyEpoch.frameKey requires a room key for the current epoch", async (
   const key = await epoch.frameKey("alice", 0);
   assert.ok(key);
 });
+
+// ---------------------------------------------------------------------------
+// 6. Frames on the wire: header, cryptor, encoded transforms
+//
+// Everything below runs against real WebCrypto and real TransformStreams. What
+// it cannot prove is that a *browser* pipes RTP through them — there is no
+// RTCPeerConnection here, so the attachment points are exercised with fakes
+// that match the shape Chrome documents. That gap is stated in the ADR rather
+// than papered over.
+// ---------------------------------------------------------------------------
+
+Deno.test("encodeFrameHeader/decodeFrameHeader round-trip epoch and counter", () => {
+  const header = E2EE.encodeFrameHeader(7, 123456);
+
+  assert.strictEqual(header.length, E2EE.CONSTANTS.FRAME_HEADER_BYTES);
+  const parsed = E2EE.decodeFrameHeader(new Uint8Array([...header, 0xaa, 0xbb]));
+  assert.strictEqual(parsed.version, 1);
+  assert.strictEqual(parsed.epoch, 7);
+  assert.strictEqual(parsed.counter, 123456);
+  assert.deepStrictEqual(parsed.body, new Uint8Array([0xaa, 0xbb]));
+});
+
+Deno.test("decodeFrameHeader refuses a short frame and an unknown version", () => {
+  assert.throws(() => E2EE.decodeFrameHeader(new Uint8Array([1, 0, 0])), /shorter than its header/);
+
+  const bumped = E2EE.encodeFrameHeader(0, 0);
+  bumped[0] = 2;
+  assert.throws(() => E2EE.decodeFrameHeader(bumped), /unsupported frame version 2/);
+});
+
+Deno.test("frame counters and epochs must be uint32", () => {
+  assert.throws(() => E2EE.encodeFrameHeader(-1, 0), /uint32/);
+  assert.throws(() => E2EE.encodeFrameHeader(0, 2 ** 32), /uint32/);
+  assert.throws(() => E2EE.encodeFrameHeader(1.5, 0), /uint32/);
+});
+
+Deno.test("sealFrame embeds its header and opens with the derived key", async () => {
+  const groupKey = E2EE.randomGroupKey();
+  const plaintext = new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8]);
+
+  const wire = await E2EE.sealFrame(groupKey, plaintext, "room-1", 3, "alice", 42);
+
+  const parsed = E2EE.decodeFrameHeader(wire);
+  assert.strictEqual(parsed.epoch, 3);
+  assert.strictEqual(parsed.counter, 42);
+  // 12-byte IV + 16-byte tag + 8 bytes of payload, on top of the header.
+  assert.strictEqual(wire.length, E2EE.CONSTANTS.FRAME_HEADER_BYTES + 12 + 16 + plaintext.length);
+
+  const key = await E2EE.deriveSenderFrameKey(groupKey, 3, "alice", 42);
+  const opened = await E2EE.decryptFrame(key, parsed.body, "room-1", 3, "alice", 42);
+  assert.deepStrictEqual(opened, plaintext);
+});
+
+function pairOfCryptors() {
+  const groupKey = E2EE.randomGroupKey();
+  const aliceEpochs = new E2EE.KeyEpoch("room-1");
+  const bobEpochs = new E2EE.KeyEpoch("room-1");
+  aliceEpochs.setRoomKey(groupKey);
+  bobEpochs.setRoomKey(groupKey);
+
+  return {
+    alice: new E2EE.FrameCryptor({ epochs: aliceEpochs, roomId: "room-1", localId: "alice", remoteId: "bob" }),
+    bob: new E2EE.FrameCryptor({ epochs: bobEpochs, roomId: "room-1", localId: "bob", remoteId: "alice" })
+  };
+}
+
+Deno.test("FrameCryptor seals and opens between two peers", async () => {
+  const { alice, bob } = pairOfCryptors();
+  const plaintext = new Uint8Array([9, 9, 9]);
+
+  const wire = await alice.seal(plaintext);
+  assert.deepStrictEqual(await bob.open(wire), plaintext);
+
+  // Counters advance independently per direction.
+  assert.strictEqual(alice.sentCount, 1);
+  assert.strictEqual(bob.sentCount, 0);
+});
+
+Deno.test("FrameCryptor refuses a replay, a foreign sender and a tampered frame", async () => {
+  const { alice, bob } = pairOfCryptors();
+  const wire = await alice.seal(new Uint8Array([1]));
+
+  assert.deepStrictEqual(await bob.open(wire), new Uint8Array([1]));
+  await assert.rejects(bob.open(wire), /replay or outside the window/);
+
+  // AAD binds the sender: claiming the frame came from carol fails.
+  const { alice: alice2, bob: bob2 } = pairOfCryptors();
+  const wire2 = await alice2.seal(new Uint8Array([2]));
+  await assert.rejects(bob2.open(wire2, "carol"), /OperationError|decrypt/i);
+
+  // Byte-flip in the ciphertext.
+  const { alice: alice3, bob: bob3 } = pairOfCryptors();
+  const wire3 = await alice3.seal(new Uint8Array([3, 3, 3]));
+  wire3[wire3.length - 1] ^= 0x01;
+  await assert.rejects(bob3.open(wire3), /OperationError|decrypt/i);
+});
+
+Deno.test("a frame that fails to decrypt does not consume its counter", async () => {
+  const { alice, bob } = pairOfCryptors();
+  const good = await alice.seal(new Uint8Array([7, 7]));
+
+  const corrupt = good.slice();
+  corrupt[corrupt.length - 1] ^= 0xff;
+  await assert.rejects(bob.open(corrupt));
+
+  // The genuine frame still opens: the failed attempt did not spend counter 0.
+  assert.deepStrictEqual(await bob.open(good), new Uint8Array([7, 7]));
+});
+
+Deno.test("FrameCryptor refuses frames from another epoch", async () => {
+  const groupKey = E2EE.randomGroupKey();
+  const aliceEpochs = new E2EE.KeyEpoch("room-1");
+  const bobEpochs = new E2EE.KeyEpoch("room-1");
+  aliceEpochs.setRoomKey(groupKey);
+  bobEpochs.setRoomKey(groupKey);
+
+  const alice = new E2EE.FrameCryptor({ epochs: aliceEpochs, roomId: "room-1", localId: "alice", remoteId: "bob" });
+  const bob = new E2EE.FrameCryptor({ epochs: bobEpochs, roomId: "room-1", localId: "bob", remoteId: "alice" });
+
+  const epochZero = await alice.seal(new Uint8Array([4]));
+  assert.deepStrictEqual(await bob.open(epochZero), new Uint8Array([4]));
+
+  // Something changed the membership: Bob's tracker moves to epoch 1 and his
+  // cryptor drops its replay window.
+  bobEpochs.advanceTo(1);
+  bob.reset();
+
+  // A frame sealed under epoch 0 is refused by name, not by a crypto error.
+  await assert.rejects(bob.open(epochZero), /from epoch 0, current is 1/);
+});
+
+Deno.test("senderTransform and receiverTransform carry frames between stream pairs", async () => {
+  const { alice, bob } = pairOfCryptors();
+  const plaintext = new Uint8Array([0xde, 0xad, 0xbe, 0xef]);
+
+  // The sender's readable feeds a transform whose output the browser sends.
+  const senderIn = new TransformStream();
+  const senderOut = new TransformStream();
+  senderIn.readable.pipeThrough(E2EE.senderTransform(alice)).pipeTo(senderOut.writable);
+
+  const receiverIn = new TransformStream();
+  const receiverOut = new TransformStream();
+  receiverIn.readable.pipeThrough(E2EE.receiverTransform(bob)).pipeTo(receiverOut.writable);
+
+  const senderWriter = senderIn.writable.getWriter();
+  const senderReader = senderOut.readable.getReader();
+  const receiverWriter = receiverIn.writable.getWriter();
+  const receiverReader = receiverOut.readable.getReader();
+
+  await senderWriter.write({ data: plaintext });
+  const sealed = await senderReader.read();
+  assert.notDeepStrictEqual(new Uint8Array(sealed.value.data), plaintext);
+
+  await receiverWriter.write(sealed.value);
+  const opened = await receiverReader.read();
+  assert.deepStrictEqual(new Uint8Array(opened.value.data), plaintext);
+});
+
+Deno.test("a frame the transform cannot seal is dropped, never forwarded in the clear", async () => {
+  const errors = [];
+  const broken = {
+    seal: async () => {
+      throw new Error("key unavailable");
+    }
+  };
+
+  const input = new TransformStream();
+  const output = new TransformStream();
+  input.readable
+    .pipeThrough(E2EE.senderTransform(broken, { onError: e => errors.push(e) }))
+    .pipeTo(output.writable);
+
+  const writer = input.writable.getWriter();
+  const reader = output.readable.getReader();
+
+  await writer.write({ data: new Uint8Array([1, 2, 3]) });
+  await writer.close();
+
+  assert.deepStrictEqual(await reader.read(), { value: undefined, done: true });
+  assert.strictEqual(errors.length, 1);
+  assert.match(errors[0].message, /key unavailable/);
+});
+
+Deno.test("attachFrameCrypto fails closed when encoded transforms are unavailable", () => {
+  const fakePc = {
+    getSenders: () => [{}],
+    getReceivers: () => [{ createEncodedStreams: () => null }]
+  };
+  const cryptor = pairOfCryptors().alice;
+
+  const result = E2EE.attachFrameCrypto(fakePc, { cryptor });
+
+  assert.strictEqual(result.ok, false);
+  assert.strictEqual(result.results.length, 2);
+  for (const r of result.results) {
+    assert.strictEqual(r.ok, false);
+    assert.match(r.reason, /encoded-transform-unavailable|no transceivers/);
+  }
+});
+
+Deno.test("attachFrameCrypto wires a fake peer connection end to end", async () => {
+  const { alice, bob } = pairOfCryptors();
+  const plaintext = new Uint8Array([42, 43, 44]);
+
+  function endpoint() {
+    const inbound = new TransformStream(); // peer → encryptor
+    const outbound = new TransformStream(); // encryptor → peer
+    return {
+      endpoint: { createEncodedStreams: () => ({ readable: inbound.readable, writable: outbound.writable }) },
+      writer: inbound.writable.getWriter(),
+      reader: outbound.readable.getReader()
+    };
+  }
+
+  const senderSide = endpoint();
+  const receiverSide = endpoint();
+
+  const sendResult = E2EE.attachFrameCrypto(
+    { getSenders: () => [senderSide.endpoint], getReceivers: () => [] },
+    { cryptor: alice, role: "sender" }
+  );
+  const recvResult = E2EE.attachFrameCrypto(
+    { getSenders: () => [], getReceivers: () => [receiverSide.endpoint] },
+    { cryptor: bob, role: "receiver" }
+  );
+
+  assert.strictEqual(sendResult.ok, true);
+  assert.strictEqual(recvResult.ok, true);
+
+  await senderSide.writer.write({ data: plaintext });
+  const sealed = await senderSide.reader.read();
+  assert.notDeepStrictEqual(new Uint8Array(sealed.value.data), plaintext);
+
+  await receiverSide.writer.write(sealed.value);
+  const opened = await receiverSide.reader.read();
+  assert.deepStrictEqual(new Uint8Array(opened.value.data), plaintext);
+});

@@ -386,11 +386,24 @@ export class ReplayWindow {
     this.#size = size;
   }
 
-  /** True if `counter` is new; records it. False if it is a replay or too old. */
-  accept(counter) {
+  /**
+   * True if `counter` would be accepted, without recording it.
+   *
+   * The frame layer needs this: it must refuse a replay *before* paying for a
+   * decrypt, but it must not burn the counter if the decrypt then fails —
+   * otherwise a corrupted frame would take its counter down with it and a
+   * genuine retransmission of the same frame would be dropped as a replay.
+   */
+  wouldAccept(counter) {
     if (!Number.isInteger(counter) || counter < 0) throw new RangeError("counter must be a non-negative integer");
     if (this.#seen.has(counter)) return false;
     if (this.#highest - counter >= this.#size) return false;
+    return true;
+  }
+
+  /** True if `counter` is new; records it. False if it is a replay or too old. */
+  accept(counter) {
+    if (!this.wouldAccept(counter)) return false;
 
     this.#seen.add(counter);
     if (counter > this.#highest) {
@@ -477,7 +490,288 @@ export class KeyEpoch {
   }
 }
 
+
+// ── Frames on the wire ──────────────────────────────────────────────────────
+//
+// A frame is `header || iv(12) || tag(16) || ciphertext(n)`.
+//
+// The header exists because the counter is an input to *both* the key
+// derivation and the AAD, so a receiver cannot decrypt a frame without it.
+// Sending it out of band would mean trusting the signalling path to deliver a
+// per-frame value in order, which under reordering is exactly the thing the
+// replay window is supposed to tolerate. Nine bytes per frame is the honest
+// price: version(1) || epoch(4, BE) || counter(4, BE).
+//
+// The epoch is carried *and* checked: it is already inside the AAD, so a frame
+// from another epoch fails to decrypt anyway. Checking it first turns an
+// expected event (a membership change) into a clean rejection instead of a
+// crypto error in a log.
+
+const FRAME_VERSION = 1;
+const FRAME_HEADER_BYTES = 1 + 4 + 4;
+const UINT32_MAX = 0xffffffff;
+
+/** Build a frame header. Both fields are uint32 by construction. */
+export function encodeFrameHeader(epoch, counter) {
+  if (!Number.isInteger(epoch) || epoch < 0 || epoch > UINT32_MAX) {
+    throw new RangeError("epoch must be a uint32");
+  }
+  if (!Number.isInteger(counter) || counter < 0 || counter > UINT32_MAX) {
+    throw new RangeError("counter must be a uint32");
+  }
+
+  const header = new Uint8Array(FRAME_HEADER_BYTES);
+  header[0] = FRAME_VERSION;
+  const view = new DataView(header.buffer);
+  view.setUint32(1, epoch);
+  view.setUint32(5, counter);
+  return header;
+}
+
+/** Parse a frame header. Throws rather than guessing on anything unrecognised. */
+export function decodeFrameHeader(bytes) {
+  if (!(bytes instanceof Uint8Array) || bytes.length < FRAME_HEADER_BYTES) {
+    throw new RangeError("frame is shorter than its header");
+  }
+  if (bytes[0] !== FRAME_VERSION) {
+    throw new Error(`unsupported frame version ${bytes[0]}`);
+  }
+
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  return {
+    version: bytes[0],
+    epoch: view.getUint32(1),
+    counter: view.getUint32(5),
+    body: bytes.subarray(FRAME_HEADER_BYTES)
+  };
+}
+
+/**
+ * Encrypt one frame, header included.
+ *
+ * @returns {Promise<Uint8Array>} header || iv || tag || ciphertext
+ */
+export async function sealFrame(groupKey, plaintext, roomId, epoch, senderId, counter) {
+  const key = await deriveSenderFrameKey(groupKey, epoch, senderId, counter);
+  const body = await encryptFrame(key, plaintext, roomId, epoch, senderId, counter);
+  return concat(encodeFrameHeader(epoch, counter), body);
+}
+
+/**
+ * Encrypt a frame with a key the caller already derived (the `FrameCryptor`
+ * path, which caches nothing but avoids derivations the caller tracks itself).
+ */
+export async function sealFrameWithKey(frameKey, plaintext, roomId, epoch, senderId, counter) {
+  const body = await encryptFrame(frameKey, plaintext, roomId, epoch, senderId, counter);
+  return concat(encodeFrameHeader(epoch, counter), body);
+}
+
+/**
+ * Cryptor for one direction of one peer connection.
+ *
+ * Holds the send counter and the per-sender replay windows. One instance per
+ * peer connection: in a mesh call each peer has its own connection and its own
+ * `remotePeerId`, which is what binds a received frame to a speaker.
+ */
+export class FrameCryptor {
+  #epochs;
+  #roomId;
+  #localId;
+  #counter = 0;
+  #window = null;
+  #remoteId;
+  #onError;
+
+  constructor({ epochs, roomId, localId, remoteId, onError = null, windowSize = 256 }) {
+    if (!epochs || typeof epochs.frameKey !== "function") throw new TypeError("FrameCryptor needs a KeyEpoch");
+    if (typeof roomId !== "string" || roomId.length === 0) throw new TypeError("roomId is required");
+    if (typeof localId !== "string" || localId.length === 0) throw new TypeError("localId is required");
+    if (typeof remoteId !== "string" || remoteId.length === 0) {
+      throw new TypeError("remoteId is required: a frame key is bound to its sender");
+    }
+
+    this.#epochs = epochs;
+    this.#roomId = roomId;
+    this.#localId = localId;
+    this.#remoteId = remoteId;
+    this.#onError = onError;
+    this.#window = new ReplayWindow(windowSize);
+    this.windowSize = windowSize;
+  }
+
+  get epoch() {
+    return this.#epochs.epoch;
+  }
+
+  get sentCount() {
+    return this.#counter;
+  }
+
+  /** Drop the replay window — call when the epoch moves. */
+  reset() {
+    this.#counter = 0;
+    this.#window = new ReplayWindow(this.windowSize);
+  }
+
+  /** Seal one outgoing frame. Counter starts at 0 for each epoch. */
+  async seal(plaintext) {
+    if (this.#counter > UINT32_MAX) throw new RangeError("frame counter exhausted for this epoch");
+    const epoch = this.#epochs.epoch;
+    const counter = this.#counter++;
+    const key = await this.#epochs.frameKey(this.#localId, counter);
+    return sealFrameWithKey(key, plaintext, this.#roomId, epoch, this.#localId, counter);
+  }
+
+  /**
+   * Open one incoming frame from `remoteId` (defaults to the address this
+   * cryptor was built for).
+   *
+   * Rejects: wrong epoch, replay or too-old counter, wrong sender (the AAD
+   * binds it), tampered ciphertext.
+   */
+  async open(wire, remoteId = this.#remoteId) {
+    const { epoch, counter, body } = decodeFrameHeader(wire);
+
+    if (epoch !== this.#epochs.epoch) {
+      throw new Error(`frame is from epoch ${epoch}, current is ${this.#epochs.epoch}`);
+    }
+    if (!this.#window.wouldAccept(counter)) {
+      throw new Error(`frame counter ${counter} is a replay or outside the window`);
+    }
+
+    const key = await this.#epochs.frameKey(remoteId, counter);
+    const plaintext = await decryptFrame(key, body, this.#roomId, epoch, remoteId, counter);
+
+    // Only now is the counter spent: a frame that failed to decrypt leaves the
+    // window untouched, so a genuine retransmission is still accepted.
+    this.#window.accept(counter);
+    return plaintext;
+  }
+}
+
+// ── Encoded Transform plumbing ──────────────────────────────────────────────
+
+/**
+ * What this browser can do. Reported rather than assumed: the two APIs are
+ * mutually exclusive in practice (Chrome shipped `createEncodedStreams`, then
+ * moved to `RTCRtpScriptTransform`, which needs a dedicated worker).
+ */
+export function describeTransformSupport() {
+  const senderProto = typeof RTCRtpSender !== "undefined" ? RTCRtpSender.prototype : null;
+  const receiverProto = typeof RTCRtpReceiver !== "undefined" ? RTCRtpReceiver.prototype : null;
+
+  return {
+    createEncodedStreams:
+      !!senderProto && typeof senderProto.createEncodedStreams === "function" &&
+      !!receiverProto && typeof receiverProto.createEncodedStreams === "function",
+    scriptTransform: typeof RTCRtpScriptTransform !== "undefined"
+  };
+}
+
+/** A transform that seals outgoing frames in place. Drops a frame it cannot seal. */
+export function senderTransform(cryptor, { onError = null } = {}) {
+  return new TransformStream({
+    async transform(frame, controller) {
+      try {
+        frame.data = await cryptor.seal(new Uint8Array(frame.data));
+        controller.enqueue(frame);
+      } catch (e) {
+        // Fail closed. Dropping one frame is a glitch in the call; forwarding
+        // it in the clear is a disclosure, and no exception is worth that.
+        if (onError) onError(e);
+      }
+    }
+  });
+}
+
+/** A transform that opens incoming frames in place. Drops a frame it cannot open. */
+export function receiverTransform(cryptor, { onError = null } = {}) {
+  return new TransformStream({
+    async transform(frame, controller) {
+      try {
+        frame.data = await cryptor.open(new Uint8Array(frame.data));
+        controller.enqueue(frame);
+      } catch (e) {
+        if (onError) onError(e);
+      }
+    }
+  });
+}
+
+/**
+ * Attach encryption to every sender and decryption to every receiver on a
+ * peer connection.
+ *
+ * @returns {{ok: boolean, results: Array<{direction: string, ok: boolean, reason?: string}>}}
+ *          `ok: false` means media is NOT protected; the caller must treat that
+ *          as fatal for an `:e2ee` room rather than continuing quietly.
+ */
+export function attachFrameCrypto(pc, { cryptor, role = "both", onError = null } = {}) {
+  if (!pc || typeof pc.getSenders !== "function") throw new TypeError("attachFrameCrypto needs an RTCPeerConnection");
+  if (!(cryptor instanceof FrameCryptor)) throw new TypeError("attachFrameCrypto needs a FrameCryptor");
+
+  const results = [];
+
+  if (role === "sender" || role === "both") {
+    for (const sender of pc.getSenders()) {
+      results.push({ direction: "send", ...pipeSender(sender, cryptor, onError) });
+    }
+  }
+
+  if (role === "receiver" || role === "both") {
+    for (const receiver of pc.getReceivers()) {
+      results.push({ direction: "receive", ...pipeReceiver(receiver, cryptor, onError) });
+    }
+  }
+
+  if (results.length === 0) {
+    return { ok: false, results: [{ direction: "none", ok: false, reason: "no transceivers" }] };
+  }
+
+  return { ok: results.every(r => r.ok), results };
+}
+
+function streamsOf(endpoint) {
+  if (typeof endpoint.createEncodedStreams !== "function") return null;
+
+  const streams = endpoint.createEncodedStreams();
+  if (!streams) return null;
+
+  // Chrome has shipped both spellings; accept either rather than pinning one.
+  const readable = streams.readable ?? streams.readStream;
+  const writable = streams.writable ?? streams.writeStream;
+  if (!readable || !writable) return null;
+
+  return { readable, writable };
+}
+
+function pipeSender(sender, cryptor, onError) {
+  const streams = streamsOf(sender);
+  if (!streams) return { ok: false, reason: "encoded-transform-unavailable" };
+
+  streams.readable
+    .pipeThrough(senderTransform(cryptor, { onError }))
+    .pipeTo(streams.writable)
+    .catch(err => onError?.(err));
+
+  return { ok: true };
+}
+
+function pipeReceiver(receiver, cryptor, onError) {
+  const streams = streamsOf(receiver);
+  if (!streams) return { ok: false, reason: "encoded-transform-unavailable" };
+
+  streams.readable
+    .pipeThrough(receiverTransform(cryptor, { onError }))
+    .pipeTo(streams.writable)
+    .catch(err => onError?.(err));
+
+  return { ok: true };
+}
+
 export const CONSTANTS = {
+  FRAME_VERSION,
+  FRAME_HEADER_BYTES,
   KEY_BYTES,
   IV_BYTES,
   TAG_BYTES,
