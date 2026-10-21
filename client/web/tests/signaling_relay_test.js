@@ -12,6 +12,7 @@
 // the server suite).
 
 import assert from "node:assert";
+import { test } from "./runner.js";
 
 // ---------------------------------------------------------------------------
 // Fetch stub — records calls + returns canned responses
@@ -40,7 +41,7 @@ const Signaling = await import("../src/Signaling.res.mjs");
 // PUT offer / answer
 // ---------------------------------------------------------------------------
 
-Deno.test("Relay.putOffer issues PUT to /room/<id>/offer with JSON body", () => {
+test("Relay.putOffer issues PUT to /room/<id>/offer with JSON body", () => {
   fetchCalls.length = 0;
   const sdp = { type: "offer", sdp: "v=0\r\nhandshake\r\n" };
   Signaling.Relay.putOffer("https://relay.example.com", "apple-banana-cat", sdp);
@@ -52,7 +53,7 @@ Deno.test("Relay.putOffer issues PUT to /room/<id>/offer with JSON body", () => 
   assert.strictEqual(init.body, JSON.stringify(sdp), "body must be SDP serialised to JSON");
 });
 
-Deno.test("Relay.putAnswer issues PUT to /room/<id>/answer", () => {
+test("Relay.putAnswer issues PUT to /room/<id>/answer", () => {
   fetchCalls.length = 0;
   const sdp = { type: "answer", sdp: "v=0\r\nhandshake-reply\r\n" };
   Signaling.Relay.putAnswer("https://relay.example.com", "river-sun-tree", sdp);
@@ -68,7 +69,7 @@ Deno.test("Relay.putAnswer issues PUT to /room/<id>/answer", () => {
 // GET offer / answer
 // ---------------------------------------------------------------------------
 
-Deno.test("Relay.getOffer issues GET and parses JSON response", async () => {
+test("Relay.getOffer issues GET and parses JSON response", async () => {
   fetchCalls.length = 0;
   const remoteOffer = { type: "offer", sdp: "v=0\r\nremote\r\n" };
   fetchResponses.clear();
@@ -86,7 +87,7 @@ Deno.test("Relay.getOffer issues GET and parses JSON response", async () => {
   assert.ok(init.method === undefined || init.method === "GET", "default method is GET");
 });
 
-Deno.test("Relay.getAnswer parses JSON response", async () => {
+test("Relay.getAnswer parses JSON response", async () => {
   fetchCalls.length = 0;
   const remoteAnswer = { type: "answer", sdp: "v=0\r\nremote-reply\r\n" };
   fetchResponses.clear();
@@ -103,7 +104,7 @@ Deno.test("Relay.getAnswer parses JSON response", async () => {
 // End-to-end room-join sequence (caller perspective)
 // ---------------------------------------------------------------------------
 
-Deno.test("Relay e2e: caller PUTs offer, polls answer, gets remote SDP back", async () => {
+test("Relay e2e: caller PUTs offer, polls answer, gets remote SDP back", async () => {
   fetchCalls.length = 0;
   fetchResponses.clear();
 
@@ -127,7 +128,7 @@ Deno.test("Relay e2e: caller PUTs offer, polls answer, gets remote SDP back", as
   assert.ok(fetchCalls[1].url.endsWith("/answer"));
 });
 
-Deno.test("Relay e2e: callee GETs offer, PUTs answer", async () => {
+test("Relay e2e: callee GETs offer, PUTs answer", async () => {
   fetchCalls.length = 0;
   fetchResponses.clear();
 

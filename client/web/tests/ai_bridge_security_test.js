@@ -12,6 +12,7 @@
 //   3. cross-origin WS upgrades are rejected (drive-by page can't connect)
 
 import assert from "node:assert";
+import { test } from "./runner.js";
 
 const HTTP = 7501;
 const WS = HTTP + 1;
@@ -68,7 +69,7 @@ async function rawUpgradeStatus(port, origin) {
   return parseInt(statusLine.split(" ")[1] || "0", 10);
 }
 
-Deno.test({
+test({
   name: "bridge security: a second WS client is refused while one is active (no hijack)",
   async fn() {
     const bridge = await startBridge(HTTP);
@@ -95,7 +96,7 @@ Deno.test({
   sanitizeOps: false,
 });
 
-Deno.test({
+test({
   name: "bridge security: HTTP endpoints require the token when one is set (/health stays open)",
   async fn() {
     const bridge = await startBridge(HTTP, { BURBLE_AI_BRIDGE_TOKEN: "s3cr3t" });
@@ -126,7 +127,7 @@ Deno.test({
   sanitizeOps: false,
 });
 
-Deno.test({
+test({
   name: "bridge security: WS upgrade requires the token when one is set",
   async fn() {
     const bridge = await startBridge(HTTP, { BURBLE_AI_BRIDGE_TOKEN: "s3cr3t" });
@@ -148,7 +149,7 @@ Deno.test({
   sanitizeOps: false,
 });
 
-Deno.test({
+test({
   name: "bridge security: cross-origin WS upgrade is rejected, local origin is allowed",
   async fn() {
     const bridge = await startBridge(HTTP);
@@ -172,7 +173,7 @@ Deno.test({
   sanitizeOps: false,
 });
 
-Deno.test({
+test({
   name: "bridge security: HTTP API refuses a foreign Origin (CSRF / queue-drain guard)",
   async fn() {
     const bridge = await startBridge(HTTP);

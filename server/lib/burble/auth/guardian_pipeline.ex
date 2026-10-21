@@ -29,9 +29,10 @@ defmodule Burble.Auth.GuardianPipeline do
     * `:is_guest`     — the `gst` claim, defaulting to false
     * `:current_user` — the loaded resource, when the store has one
 
-  Accesses tokens (`typ` = "access") and guest tokens (`typ` = "guest") are
-  both accepted. Refresh tokens are not: they must be exchanged at
-  `/api/v1/auth/refresh` and never used as bearer credentials.
+  Only access tokens (`typ` = "access") are accepted in this pipeline.
+  Refresh and guest tokens are not: refresh tokens must be exchanged at
+  `/api/v1/auth/refresh`, and guest access should be handled by a dedicated,
+  least-privilege route scope/pipeline.
   """
 
   use Guardian.Plug.Pipeline,
@@ -46,7 +47,7 @@ defmodule Burble.Auth.GuardianPipeline do
   # Ensure the token is present and valid.
   plug Guardian.Plug.EnsureAuthenticated
 
-  # Reject refresh tokens presented as bearer credentials.
+  # Reject any non-access token presented as bearer credentials.
   plug :verify_token_type
 
   # Load the user resource from the token claims into :current_user. Guests
@@ -61,7 +62,7 @@ defmodule Burble.Auth.GuardianPipeline do
     # current_claims/1 reads the pipeline's default claim key, which is the one
     # VerifyHeader populated above.
     case Guardian.Plug.current_claims(conn) do
-      %{"typ" => typ} when typ in ["access", "guest"] ->
+      %{"typ" => "access"} ->
         conn
 
       _ ->

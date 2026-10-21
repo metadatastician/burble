@@ -6,6 +6,7 @@
 // error handling on /send when no peer is connected.
 
 import assert from "node:assert";
+import { test } from "./runner.js";
 
 const BASE_URL = "http://127.0.0.1:6474";
 let bridgeProcess = null;
@@ -35,7 +36,7 @@ async function stopBridge() {
 // /health endpoint
 // ---------------------------------------------------------------------------
 
-Deno.test({
+test({
   name: "AI Bridge /health returns ok",
   async fn() {
     await startBridge();
@@ -56,7 +57,7 @@ Deno.test({
 // /status endpoint
 // ---------------------------------------------------------------------------
 
-Deno.test({
+test({
   name: "AI Bridge /status returns JSON with expected fields",
   async fn() {
     await startBridge();
@@ -79,7 +80,7 @@ Deno.test({
 // /recv endpoint
 // ---------------------------------------------------------------------------
 
-Deno.test({
+test({
   name: "AI Bridge /recv returns empty messages array when no messages",
   async fn() {
     await startBridge();
@@ -101,7 +102,7 @@ Deno.test({
 // /send endpoint (no WebSocket peer connected)
 // ---------------------------------------------------------------------------
 
-Deno.test({
+test({
   name: "AI Bridge /send returns 503 when no peer connected",
   async fn() {
     await startBridge();
@@ -127,7 +128,7 @@ Deno.test({
 // Unknown route
 // ---------------------------------------------------------------------------
 
-Deno.test({
+test({
   name: "AI Bridge unknown route returns 200 with help text",
   async fn() {
     await startBridge();

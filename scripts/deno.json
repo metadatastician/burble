@@ -3,8 +3,5 @@
   "imports": {
     "tree-sitter-elixir": "npm:tree-sitter-elixir@0.3.5",
     "web-tree-sitter": "npm:web-tree-sitter@0.27.1"
-  },
-  "tasks": {
-    "check:elixir": "deno run --frozen --allow-read check-elixir-syntax.mjs ../server/lib ../server/test"
   }
 }

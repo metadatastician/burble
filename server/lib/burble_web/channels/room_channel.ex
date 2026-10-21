@@ -483,8 +483,8 @@ defmodule BurbleWeb.RoomChannel do
     room_id = socket.assigns.room_id
 
     case safe_e2ee(fn -> E2EE.sealed_for(room_id, socket.assigns.user_id) end) do
-      {:ok, %{epoch: epoch, blob: blob}} ->
-        {:reply, {:ok, %{epoch: epoch, blob: Base.encode64(blob)}}, socket}
+      {:ok, %{epoch: epoch, from: from, blob: blob}} ->
+        {:reply, {:ok, %{epoch: epoch, from: from, blob: Base.encode64(blob)}}, socket}
 
       {:error, reason} ->
         {:reply, {:error, %{reason: error_string(reason)}}, socket}

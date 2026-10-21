@@ -3,18 +3,50 @@
 ## Status
 
 An incremental migration from ReScript (`.res`) to AffineScript (`.affine`) is underway.
-The AffineScript compiler is not yet available; **ReScript remains authoritative** for all
-runtime behaviour until the compiler lands.  The `.affine` files are design stubs —
-they document the intended resource-ownership model and serve as templates for the
-eventual compile step.
 
-Every stub carries this header:
+**The AffineScript compiler exists** (corrected 2026-10-21). An earlier version of
+this file said it was "not yet available" and that `.affine` files were therefore
+free-form design stubs. That is no longer true, and it produced a tree of `.affine`
+files that are ReScript with a different extension — which do not parse.
+[`ON-RAMP.adoc`](https://github.com/hyperpolymath/affinescript/blob/main/docs/ON-RAMP.adoc)
+in the upstream repository calls this out by name: *"`.res` written in ReScript is
+not a face, and renaming `Foo.res` to `Foo.affine` does not make it one — it
+produces a file that fails to parse."*
 
-```
-// STUB — awaiting AffineScript compiler; ReScript version is authoritative until migration completes
-```
+What is true now:
 
-Do not delete or modify the corresponding `.res` files while the compiler is unavailable.
+* A pinned canonical CLI is built and run by `affinescript-canary.yml`
+  (`AFFINESCRIPT_REF` in that workflow), which `affinescript check`s every
+  `.affine` file.
+* That canary is **advisory** (`continue-on-error: true`), so a green tick on it
+  is not evidence that anything compiled. GitHub also caps annotations at ten per
+  run, so the count of failures is not visible from the checks tab either. The
+  job summary carries the full list.
+* The compiler is **not on this application's build path**: `client/web/rescript.json`
+  still compiles `.res` into `.res.mjs`, and that is what the browser loads.
+  `.affine` is checkable today, loadable later. Do not describe it otherwise.
+* `tools/res-to-affine/` in the upstream repository converts a `.res` file into an
+  `.affine` skeleton and names each anti-pattern it found. Use it rather than
+  hand-writing a stub from a copy-paste.
+
+So: **ReScript remains what runs**, AffineScript is what we are moving to, and an
+`.affine` file must be valid AffineScript today — a stub that does not parse is
+worse than no file, because the advisory canary makes it look fine.
+
+### The one hard blocker for the E2EE work
+
+The client's crypto is promise-based: every `crypto.subtle` call returns a
+`Promise`. AffineScript's `extern fn` is **synchronous on the wasm target**, and
+the Bun-ESM target's async-extern support has documented limits (upstream #122 /
+#103). So a wholesale port of `client/web/e2ee.js` is not possible yet.
+
+What *is* portable, because it is pure and synchronous: the frame header
+encode/decode, the replay window, leader election, AAD and label construction, and
+epoch bookkeeping. Those are also where the subtle bugs live. The crypto boundary
+(WebCrypto calls) has to stay in a JS-host module until async externs land.
+
+Do not delete or modify the corresponding `.res` files: they are still what the
+application compiles and runs.
 
 ---
 
@@ -67,7 +99,9 @@ Until an AffineScript compiler ships, stubs are written by hand following this p
 8. Add the `@migrate_from("…")` annotation at the top.
 9. Add the STUB header comment.
 
-There is no automated tooling yet.  Track stubs alongside the corresponding `.res` files
+Upstream also ships `tools/res-to-affine/`, which does steps 1–3 mechanically and
+marks each anti-pattern it finds; use it for the remaining files rather than
+following the list by hand. Track stubs alongside the corresponding `.res` files
 in git so diffs are reviewable.
 
 ---

@@ -97,6 +97,7 @@ workflows:
     '.github/workflows/web-client-tests.yml':
         - 'actions/checkout@v7.0.1'
         - 'denoland/setup-deno@v2.0.5'
+        - 'oven-sh/setup-bun@v2.2.0'
     '.github/workflows/workflow-safety.yml':
         - 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1'
 dependencies:

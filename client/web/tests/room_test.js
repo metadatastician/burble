@@ -12,12 +12,13 @@
 
 import assert from "node:assert";
 import * as Room from "../src/Room.res.mjs";
+import { test } from "./runner.js";
 
 // ---------------------------------------------------------------------------
 // generateRoomName
 // ---------------------------------------------------------------------------
 
-Deno.test("Room.generateRoomName produces three-word hyphenated name", () => {
+test("Room.generateRoomName produces three-word hyphenated name", () => {
   const name = Room.generateRoomName();
   assert.match(
     name,
@@ -26,7 +27,7 @@ Deno.test("Room.generateRoomName produces three-word hyphenated name", () => {
   );
 });
 
-Deno.test("Room.generateRoomName is non-empty and bounded", () => {
+test("Room.generateRoomName is non-empty and bounded", () => {
   for (let i = 0; i < 20; i++) {
     const name = Room.generateRoomName();
     assert.ok(name.length > 0, "name must be non-empty");
@@ -35,7 +36,7 @@ Deno.test("Room.generateRoomName is non-empty and bounded", () => {
   }
 });
 
-Deno.test("Room.generateRoomName produces variety across many calls", () => {
+test("Room.generateRoomName produces variety across many calls", () => {
   const seen = new Set();
   for (let i = 0; i < 100; i++) {
     seen.add(Room.generateRoomName());
@@ -52,13 +53,13 @@ Deno.test("Room.generateRoomName produces variety across many calls", () => {
 // isValidRoomName
 // ---------------------------------------------------------------------------
 
-Deno.test("Room.isValidRoomName accepts valid 3-word names", () => {
+test("Room.isValidRoomName accepts valid 3-word names", () => {
   assert.strictEqual(Room.isValidRoomName("apple-banana-cat"), true);
   assert.strictEqual(Room.isValidRoomName("a-b-c"), true);
   assert.strictEqual(Room.isValidRoomName("water-xylophone-yellow"), true);
 });
 
-Deno.test("Room.isValidRoomName rejects wrong shape", () => {
+test("Room.isValidRoomName rejects wrong shape", () => {
   // Too few parts
   assert.strictEqual(Room.isValidRoomName("apple-banana"), false);
   assert.strictEqual(Room.isValidRoomName("apple"), false);
@@ -70,14 +71,14 @@ Deno.test("Room.isValidRoomName rejects wrong shape", () => {
   assert.strictEqual(Room.isValidRoomName("apple banana cat"), false);
 });
 
-Deno.test("Room.isValidRoomName rejects uppercase / digits / symbols", () => {
+test("Room.isValidRoomName rejects uppercase / digits / symbols", () => {
   assert.strictEqual(Room.isValidRoomName("Apple-banana-cat"), false);
   assert.strictEqual(Room.isValidRoomName("apple1-banana-cat"), false);
   assert.strictEqual(Room.isValidRoomName("apple_banana_cat"), false);
   assert.strictEqual(Room.isValidRoomName("apple.banana.cat"), false);
 });
 
-Deno.test("Room.isValidRoomName accepts what generateRoomName produces", () => {
+test("Room.isValidRoomName accepts what generateRoomName produces", () => {
   for (let i = 0; i < 20; i++) {
     const name = Room.generateRoomName();
     assert.strictEqual(
