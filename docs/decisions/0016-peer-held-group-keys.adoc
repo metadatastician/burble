@@ -109,17 +109,63 @@ neither open it, redirect it, nor replay it into another epoch. Documented in
 
 ### 5. The frame format
 
-Frames are `iv(12) || tag(16) || ciphertext(n)`, AES-256-GCM, with AAD
-`frame-aad|<room>|<epoch>|<sender>|<counter>` and a key derived as
-`HKDF-SHA256(ikm=room key, salt=SHA256("frame|" || epoch),
-info="burble-e2ee-frame-v1|sender|" || sender || "|" || counter)`.
+A media frame is
+
+    version(1) || idLen(1) || sender(idLen) || epoch(4) || counter(4) || iv(12) || tag(16) || ct(n)
+
+with AES-256-GCM over the payload, AAD
+`frame-aad|<room>|<epoch>|<sender>|<counter>`, and a per-frame key
+
+    HKDF-SHA256(ikm = room key,
+                salt = SHA256("frame|" || epoch),
+                info = "burble-e2ee-frame-v1|sender|" || sender || "|" || counter)
+
+The first draft of this section specified `iv || tag || ct` with the counter in
+the AAD and no header at all. That cannot work: the counter is an input to the
+key derivation, so a receiver has no way to decrypt a frame without being told
+the counter out of band — and the one thing a media path cannot promise is
+in-order, lossless, out-of-band delivery of a per-frame value. The header is the
+repair, and it costs 10 bytes plus the length of the sender id per frame.
+
+**Why the sender id is in the frame.** Burble's media plane is an SFU: one
+receive path carries every participant. A frame layer that keyed itself to "the
+remote peer of this peer connection" would have no answer for the second
+speaker. Each frame names its speaker, and the receiver derives that speaker's
+key; the replay window is per speaker, because two speakers' counter 0 are
+different streams.
+
+This does not weaken anything, because the attribution does not rest on the
+header. The AAD commits to the true sender: rewrite the header and the receiver
+derives a different key, and the frame fails to decrypt. A mesh peer connection
+additionally passes `expectedSender`, so the common case is refused by name
+before any crypto runs.
+
+**Epoch in the header.** It is in the AAD too, so a stale frame would fail to
+decrypt regardless; carrying it turns the expected case — a frame from an epoch
+you have left — into a clean rejection rather than a crypto error in a log.
 
 The `derive_frame_key/3` in `Burble.Media.E2EE` (no sender) is kept because it
-is what the vectors pin; the sender-aware variant is the one the frame layer
-uses, for the reason above: a shared group key alone lets any member forge any
-other member's frames. The frame format is defined by the client module and is
-not yet cross-checked against a second implementation — that is owed when the
-native client grows a frame path.
+is what the vectors pin; the sender-aware variant is what the frame layer uses.
+
+### 5a. Who makes the key, and what the driver does
+
+`client/web/e2ee-session.js` runs the exchange. The key-maker is the **lowest
+peer id** in the key set, compared as strings: every peer computes the same
+answer from the same broadcast, so there is no election traffic and no split
+brain, and when the leader leaves the epoch bump hands the role to the next id
+down. A solo peer does not generate a key — it waits, rather than creating state
+that would be discarded the moment a second participant appears.
+
+Two orderings it must survive, both of which occur in practice:
+
+1. A sealed key can arrive before the peer has fetched the key set, because the
+   register broadcast reaches the whole room at once. The driver fetches and
+   retries once.
+2. A sealed key can arrive from an epoch *ahead* of the receiver's, because the
+   leader seals the instant it sees the new key set while everyone else is still
+   processing the same broadcast. The driver catches up and retries. Treating
+   this as "stale" — the obvious reading — would drop the key silently and
+   permanently, since nothing resends it.
 
 ### 6. The protocol is pinned by cross-language vectors
 
@@ -149,14 +195,25 @@ is the kind of detail that otherwise costs a day when the client half starts.
 
 These are open, tracked, and must stay in the README until closed:
 
-1. **The browser half exists but is not wired in.** `client/web/e2ee.js`
-   implements the peer side in WebCrypto — keypairs (PKCS#8-wrapped private
-   keys, §5), pairwise agreement, sealing/opening, per-sender frame keys, a
-   replay window and an epoch tracker — and `client/web/tests/e2ee_test.js`
-   checks all of it against the server's output (19 tests). What is missing is
-   the last mile: the client UI does not run key exchange, and the **WebRTC
-   Encoded Transform is not written**, so no media is encrypted beyond
-   DTLS-SRTP. The protocol is implemented on both sides; no call uses it yet.
+1. **The browser half is written and tested, but not on the call path.**
+   `client/web/e2ee.js` implements the peer side (keypairs, pairwise agreement,
+   sealing/opening, per-speaker frame keys, the frame format of §5, a replay
+   window, an epoch tracker) and the Encoded Transform layer
+   (`FrameCryptor`, `senderTransform`/`receiverTransform`, `attachFrameCrypto`);
+   `client/web/e2ee-session.js` implements the exchange of §5a. Between them
+   they are covered by 44 tests against real WebCrypto.
+
+   What is missing is the last mile, and it is the difference between a protocol
+   and a private call: `VoiceEngine.res` builds no session, attaches no
+   transform, and offers no key-exchange UI — so no media is encrypted beyond
+   DTLS-SRTP. `attachFrameCrypto` is written to fail closed (`ok: false` when
+   the browser has no `createEncodedStreams`), because the alternative is a room
+   that looks encrypted and is not.
+
+   **It has never run in a browser.** The tests use a fake peer connection
+   shaped like Chrome's API; frame mutation in place, `createEncodedStreams`
+   availability and SFU fan-in are modelled, not observed. The first real
+   browser run is owed before any claim about a live call.
 
    The coordination plane it depends on is covered by
    `test/burble_web/channels/room_channel_e2ee_test.exs` — key registration,
@@ -185,9 +242,9 @@ These are open, tracked, and must stay in the README until closed:
    if the bump is missed.
 4. **Nothing is formally verified.** This is a careful implementation, not a
    verified one. The tests exercise the pure functions on both sides (24 Elixir,
-   19 browser), the coordinator's state machine and the channel wiring; they do
-   not exercise a real call, because there is no call path to exercise until
-   the Encoded Transform exists.
+   44 browser), the coordinator's state machine, the channel wiring and the key
+   exchange against a fake channel; they do not exercise a real call, because
+   the client still has to be wired in.
 
 ## Consequences
 

@@ -10,6 +10,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — the browser half of E2EE, and a frame format that works (2026-10-21)
+
+`client/web/e2ee.js` now covers the Encoded Transform layer and
+`client/web/e2ee-session.js` performs the key exchange; 44 tests. **Still not on
+the call path**: `VoiceEngine.res` builds no session and attaches no transform,
+so no media is encrypted beyond DTLS-SRTP, and none of it has run in a browser
+yet.
+
+- **Frame format fixed.** Frames carry `version || idLen || sender || epoch ||
+  counter || iv || tag || ct`. The previous `iv || tag || ct` could not work: the
+  counter feeds the key derivation, so a receiver could never derive the key
+  without it. The sender id is in the frame because the media plane is an SFU —
+  one receive path, many speakers — with the replay window per speaker.
+- **`encodeSealed` now returns base64.** It returned raw bytes while its
+  docstring promised text; a real client would have sent a `Uint8Array` through
+  JSON. Found the moment a caller existed.
+- **Key-exchange ordering bugs fixed before shipping:** a sealed key can arrive
+  before the key set (fetch and retry), and can arrive from an epoch ahead of
+  the receiver's (catch up and retry). Dropping the second case would have
+  failed silently and permanently.
+- **Two CI defects fixed:** `.gitleaks.toml` allowlists the vector fixture's
+  derived values by exact value (declared with a `Ratchet-exception` trailer);
+  and `actions.lock` entries whose `ref` was a raw SHA were given the tag or
+  branch the Actions resolver requires, which had been failing five jobs at
+  "Set up job" since #246.
+
 ### Changed — E2EE is now honest, and part-way by design (2026-10-21)
 
 ADR-0016 ([`docs/decisions/0016-peer-held-group-keys.adoc`](docs/decisions/0016-peer-held-group-keys.adoc)):

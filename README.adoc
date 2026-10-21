@@ -167,16 +167,33 @@ peer-held group keys; the coordination half is in the tree:
   past one. `Burble.Security.KeyRotation` now requests these epoch bumps; it
   does not, and cannot, ratchet a key the server does not have.
 
-**What is *not* implemented — the part that matters.**
+**The browser half exists, and is tested — it is not yet on the call path.**
 
-* **The browser half is not wired in.** `client/web/e2ee.js` now implements the
-  peer side — X25519 keypairs, pairwise agreement, sealing, frame keys and
-  frame encryption — and it is checked against the server's own output by
-  committed test vectors (`deno task test`, 19 tests). But nothing calls it
-  yet: the client UI does not do key exchange, and the **WebRTC Encoded
-  Transform (Insertable Streams) is not written**, so no media is encrypted
-  beyond DTLS-SRTP. The crypto exists and is verified; the call path does not
-  use it.
+* `client/web/e2ee.js` is the peer side: X25519 keypairs, pairwise agreement,
+  sealing, per-speaker frame keys, AES-GCM frame encryption, a replay window and
+  epoch tracking. It is checked against the server's own output by committed
+  test vectors, so the two halves cannot drift apart silently.
+* `client/web/e2ee-session.js` is the conversation that goes with it: it speaks
+  the five channel events, elects the key-maker (lowest peer id), seals the room
+  key to each peer, opens what arrives, and follows epoch bumps. It handles the
+  two orderings that actually happen — a sealed key arriving before the key set,
+  and one arriving from an epoch ahead of ours.
+* `client/web/e2ee.js` also carries the **Encoded Transform** layer:
+  `FrameCryptor`, `senderTransform`/`receiverTransform` and
+  `attachFrameCrypto(pc, …)`, which pipes them into a `RTCPeerConnection` and
+  reports `ok: false` when the browser lacks `createEncodedStreams`.
+
+What is missing is the last mile, and it is the difference between "the
+protocol is implemented" and "your call is private":
+
+* **Nothing calls them yet.** `VoiceEngine.res` does not build the session, does
+  not attach the transforms to the peer connection, and has no key-exchange UI.
+  So no call is encrypted beyond DTLS-SRTP, and the server can still decrypt
+  what it forwards.
+* **It has never run in a browser.** The tests exercise real WebCrypto and real
+  `TransformStream`s, but with a fake peer connection shaped like Chrome's API.
+  `createEncodedStreams` presence, frame mutation in place, and the SFU's
+  fan-in are all modelled, not observed.
 * **There was already a client E2EE module, and it was not encryption.**
   `client/web/src/app/voice/E2EE.res` claimed "AES-256-GCM with HKDF-SHA256"
   and XORed each frame with the local private key, repeated. Nothing imported
@@ -192,12 +209,19 @@ peer-held group keys; the coordination half is in the tree:
 * No mid-epoch key-leader failover, and nothing on this path is formally
   verified.
 
-**One design point the client work forced.** The room key is shared, so on its
+**Two design points the client work forced.** The room key is shared, so on its
 own it authenticates the *room*, not the *speaker* — any member could forge
 frames that appear to come from any other. The frame layer therefore derives a
-per-sender key (`deriveSenderFrameKey`) and binds the sender id into the AAD.
-A peer can still forge its own frames, which it is entitled to do; it cannot
-speak as someone else.
+per-sender key and binds the sender id into the AAD, and each frame states its
+speaker in its header: rewriting that header makes the receiver derive the wrong
+key, so the AAD check catches the forgery. A peer can still forge its own
+frames, which it is entitled to do; it cannot speak as someone else.
+
+The second point is topology. Burble's media plane is an SFU, so one receive
+path carries every participant; a frame layer that assumed "the remote peer of
+this connection" could not have worked. Frames carry their speaker and the
+replay window is per speaker, which is also what makes the same code correct in
+a mesh call.
 
 **So the names changed, to stop the drift.** `:e2ee_key` became
 `:pipeline_key` (server-side, explicitly *not* the room key); the pipeline
