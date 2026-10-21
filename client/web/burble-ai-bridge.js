@@ -199,6 +199,18 @@ const HEARTBEAT_INTERVAL_MS = 15_000;
 const HEARTBEAT_TIMEOUT_MS = 5_000;
 
 // WebSocket server for p2p-voice.html to connect to.
+//
+// The handler refuses, in this order, before it upgrades anything: 400 when the
+// request is not a WebSocket upgrade; 403 when `Origin` is not local (drive-by
+// hijack from a visited page); 401 when a shared secret is configured and the
+// token is missing or wrong; 409 when a page is already connected, because one
+// active client per bridge is part of the security model. On success it assigns
+// wsClient immediately rather than in onopen — under Deno 2.x an upgraded
+// socket can already be OPEN, so `open` may never fire — and returns
+// ctx.upgrade's response, which is a Response on Deno and undefined on Bun.
+// Received payloads are queued for /recv, evicting the oldest at
+// MAX_MESSAGE_QUEUE_SIZE (1000); a frame that fails to parse is logged and
+// dropped rather than closing the socket.
 serve({ port: PORT + 1, hostname: "127.0.0.1" }, (req, ctx) => {
   if (req.headers.get("upgrade") !== "websocket") {
     return new Response("WebSocket only", { status: 400 });
