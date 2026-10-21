@@ -438,10 +438,21 @@ defmodule Burble.Media.E2EE do
 
   @impl true
   def handle_call({:register_peer_key, room_id, peer_id, public_key}, _from, state) do
+    Logger.warning("[E2EE] Rejected unsigned peer key registration for #{room_id}: :missing_key_proof")
+    {:reply, {:error, :missing_key_proof}, state}
+  end
+
+  @impl true
+  def handle_call(
+        {:register_peer_key, room_id, peer_id, public_key, identity_key, signature},
+        _from,
+        state
+      ) do
     with {:ok, room} <- fetch_room(state, room_id),
          :ok <- valid_public_key(public_key),
          :ok <- valid_peer_id(peer_id),
-         :ok <- check_capacity(room) do
+         :ok <- check_capacity(room),
+         :ok <- valid_key_proof(room_id, peer_id, public_key, identity_key, signature) do
       existing = Map.get(room.peers, peer_id)
 
       cond do
@@ -684,5 +695,15 @@ defmodule Burble.Media.E2EE do
   catch
     # PubSub is absent in isolated unit tests; the broadcast is advisory.
     _kind, _reason -> :ok
+  end
+  defp valid_key_proof(room_id, peer_id, public_key, identity_key, signature) do
+    payload = "#{room_id}|#{peer_id}|#{public_key}"
+
+    case :public_key.verify(payload, :sha256, signature, identity_key) do
+      true -> :ok
+      false -> {:error, :invalid_key_proof}
+    end
+  rescue
+    _ -> {:error, :invalid_key_proof}
   end
 end
