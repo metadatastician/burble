@@ -116,7 +116,13 @@
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ display_name: name })
         });
-        const auth = await authRes.json();
+        const auth = await authRes.json().catch(() => ({}));
+        if (!authRes.ok || !auth.access_token) {
+          // Without a token the socket connect/1 clause falls through to
+          // `:error` and the user saw only "Disconnected" with no explanation.
+          setStatus('disconnected', `Could not get a guest session: ${auth.error || authRes.status}`);
+          return;
+        }
         token = auth.access_token;
 
         // 2. Get microphone access
@@ -138,7 +144,10 @@
         meterInterval = setInterval(updateMicMeter, 100);
 
         // 4. Connect WebSocket to Phoenix
-        const wsUrl = server.replace('http', 'ws') + `/socket/websocket?token=${token}&vsn=2.0.0`;
+        // The Phoenix socket is mounted at /voice (see
+        // server/lib/burble_web/endpoint.ex). /socket/websocket has never
+        // existed on this endpoint, so this used to 404 at the upgrade.
+        const wsUrl = server.replace('http', 'ws') + `/voice/websocket?token=${encodeURIComponent(token)}&vsn=2.0.0`;
         ws = new WebSocket(wsUrl);
 
         ws.onopen = () => {

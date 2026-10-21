@@ -86,6 +86,16 @@ const jsonResponse = (data, status = 200) =>
 Deno.serve({ port: PORT, hostname: "127.0.0.1" }, async (req) => {
   const url = new URL(req.url);
 
+  // SECURITY: refuse requests a web page made to this localhost API. A browser
+  // will not let that page READ the response (no CORS headers), but it can still
+  // ISSUE the request — GET /recv, for instance, drains Claude's queue as a side
+  // effect. Same policy as the WebSocket relay: local origins and no Origin
+  // (curl, the extension, tests) are fine.
+  const origin = req.headers.get("origin");
+  if (origin && !isLocalOrigin(origin)) {
+    return jsonResponse({ ok: false, error: "forbidden origin" }, 403);
+  }
+
   // Auth gate (no-op unless BURBLE_AI_BRIDGE_TOKEN is set). /health stays open
   // so liveness probes don't need the secret.
   if (url.pathname !== "/health" && !tokenOk(tokenFrom(req, url))) {
@@ -103,7 +113,18 @@ Deno.serve({ port: PORT, hostname: "127.0.0.1" }, async (req) => {
       );
     }
 
-    // Read body with size limit.
+    // Size limit, checked on the declared length first: req.text() buffered the
+    // whole body before the old post-hoc check ran, so it bounded nothing.
+    const declared = Number(req.headers.get("content-length") || "0");
+    if (declared > MAX_SEND_PAYLOAD_BYTES) {
+      return jsonResponse(
+        { ok: false, error: `payload too large (max ${MAX_SEND_PAYLOAD_BYTES} bytes)` },
+        413
+      );
+    }
+
+    // Read body with size limit. Byte length, not .length (which counts UTF-16
+    // code units, so multi-byte payloads slipped past the cap).
     let rawBody;
     try {
       rawBody = await req.text();
@@ -111,7 +132,7 @@ Deno.serve({ port: PORT, hostname: "127.0.0.1" }, async (req) => {
       return jsonResponse({ ok: false, error: "failed to read request body" }, 400);
     }
 
-    if (rawBody.length > MAX_SEND_PAYLOAD_BYTES) {
+    if (new TextEncoder().encode(rawBody).length > MAX_SEND_PAYLOAD_BYTES) {
       return jsonResponse(
         { ok: false, error: `payload too large (max ${MAX_SEND_PAYLOAD_BYTES} bytes)` },
         413
@@ -218,9 +239,17 @@ Deno.serve({ port: PORT + 1, hostname: "127.0.0.1" }, (req) => {
     if (pongTimer !== null) { clearTimeout(pongTimer); pongTimer = null; }
   };
 
+  // Idempotent: onopen and the post-upgrade start both call this.
+  const startHeartbeat = () => {
+    if (heartbeatTimer !== null) return;
+    heartbeatTimer = setInterval(sendPing, HEARTBEAT_INTERVAL_MS);
+  };
+
   const sendPing = () => {
     if (socket.readyState !== 1) return;
     try {
+      // Never stack pong timers if a previous probe is still outstanding.
+      if (pongTimer !== null) { clearTimeout(pongTimer); pongTimer = null; }
       socket.send(JSON.stringify({ type: "ping", ts: Date.now() }));
       pongTimer = setTimeout(() => {
         console.warn("[Burble AI Bridge] Pong timeout — closing stale socket");
@@ -233,7 +262,7 @@ Deno.serve({ port: PORT + 1, hostname: "127.0.0.1" }, (req) => {
 
   socket.onopen = () => {
     console.log("[Burble AI Bridge] Page connected via WebSocket");
-    heartbeatTimer = setInterval(sendPing, HEARTBEAT_INTERVAL_MS);
+    startHeartbeat();
   };
 
   socket.onmessage = (ev) => {
@@ -270,7 +299,7 @@ Deno.serve({ port: PORT + 1, hostname: "127.0.0.1" }, (req) => {
   };
 
   // Start the heartbeat even if onopen never fires (see comment above).
-  heartbeatTimer = setInterval(sendPing, HEARTBEAT_INTERVAL_MS);
+  startHeartbeat();
 
   return response;
 });

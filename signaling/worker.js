@@ -36,11 +36,16 @@ export default {
       ? "*"
       : allowedOrigins.split(",").map(o => o.trim()).includes(origin) ? origin : "";
     const cors = {
-      "Access-Control-Allow-Origin": allowedOrigin,
       "Access-Control-Allow-Methods": "GET, PUT, OPTIONS",
       "Access-Control-Allow-Headers": "Content-Type",
       "Content-Type": "application/json",
+      // Ephemeral peer-to-peer secrets: never let an edge or browser cache them.
+      "Cache-Control": "no-store",
+      "Vary": "Origin",
     };
+    // Omit ACAO entirely when the origin is not allowed (an empty value is a
+    // header browsers reject the response for).
+    if (allowedOrigin) cors["Access-Control-Allow-Origin"] = allowedOrigin;
 
     if (request.method === "OPTIONS") return new Response(null, { headers: cors });
 
@@ -56,9 +61,21 @@ export default {
     const [, name, type] = match;
     const key = `${name}:${type}`;
 
+    // Maximum SDP blob we will store. An offer/answer is a few KiB; KV accepts
+    // up to 25 MiB, so an unauthenticated PUT could otherwise park megabytes in
+    // the namespace.
+    const MAX_BODY_BYTES = 65536;
+
     // PUT — store with 60s TTL
     if (request.method === "PUT") {
+      const declared = Number(request.headers.get("content-length") || "0");
+      if (declared > MAX_BODY_BYTES) {
+        return new Response(JSON.stringify({ error: "payload too large", max: MAX_BODY_BYTES }), { status: 413, headers: cors });
+      }
       const body = await request.text();
+      if (new TextEncoder().encode(body).length > MAX_BODY_BYTES) {
+        return new Response(JSON.stringify({ error: "payload too large", max: MAX_BODY_BYTES }), { status: 413, headers: cors });
+      }
       await env.ROOMS.put(key, body, { expirationTtl: 60 });
       return new Response(JSON.stringify({ ok: true, room: name, type }), { headers: cors });
     }

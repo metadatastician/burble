@@ -123,7 +123,12 @@ defmodule BurbleWeb.API.SetupController do
         "pipewire_available": true
       }
   """
-  def audio_devices(conn, _params) do
+  # Locked once setup is complete — see setup_locked/1.
+  def audio_devices(conn, params) do
+    if setup_complete?(), do: setup_locked(conn), else: do_audio_devices(conn, params)
+  end
+
+  defp do_audio_devices(conn, _params) do
     if not PipeWire.available?() do
       conn
       |> put_status(503)
@@ -181,7 +186,11 @@ defmodule BurbleWeb.API.SetupController do
         "duration_ms": 3000
       }
   """
-  def test_microphone(conn, %{"device_id" => device_id_str}) do
+  def test_microphone(conn, params) do
+    if setup_complete?(), do: setup_locked(conn), else: do_test_microphone(conn, params)
+  end
+
+  defp do_test_microphone(conn, %{"device_id" => device_id_str}) do
     with {:ok, device_id} <- parse_device_id(device_id_str),
          {:ok, device} <- PipeWire.device_info(device_id),
          :ok <- validate_input_device(device) do
@@ -206,7 +215,7 @@ defmodule BurbleWeb.API.SetupController do
     end
   end
 
-  def test_microphone(conn, _params) do
+  defp do_test_microphone(conn, _params) do
     conn |> put_status(400) |> json(%{error: "missing_device_id"})
   end
 
@@ -234,7 +243,11 @@ defmodule BurbleWeb.API.SetupController do
         "message": "Did you hear a tone? Confirm in the next step."
       }
   """
-  def test_speakers(conn, %{"device_id" => device_id_str}) do
+  def test_speakers(conn, params) do
+    if setup_complete?(), do: setup_locked(conn), else: do_test_speakers(conn, params)
+  end
+
+  defp do_test_speakers(conn, %{"device_id" => device_id_str}) do
     with {:ok, device_id} <- parse_device_id(device_id_str),
          {:ok, device} <- PipeWire.device_info(device_id),
          :ok <- validate_output_device(device) do
@@ -259,7 +272,7 @@ defmodule BurbleWeb.API.SetupController do
     end
   end
 
-  def test_speakers(conn, _params) do
+  defp do_test_speakers(conn, _params) do
     conn |> put_status(400) |> json(%{error: "missing_device_id"})
   end
 
@@ -304,20 +317,30 @@ defmodule BurbleWeb.API.SetupController do
           configured_at: DateTime.utc_now() |> DateTime.to_iso8601()
         }
 
-        :ok = store_put(@audio_config_key, audio_config)
-        :ok = store_put(@setup_complete_key, true)
+        with :ok <- store_put(@audio_config_key, audio_config),
+             :ok <- store_put(@setup_complete_key, true) do
+          Logger.info(
+            "[Setup] Setup complete: input=#{input_id}, output=#{output_id}, name=#{server_name}"
+          )
 
-        Logger.info(
-          "[Setup] Setup complete: input=#{input_id}, output=#{output_id}, name=#{server_name}"
-        )
+          conn
+          |> put_status(200)
+          |> json(%{
+            success: true,
+            message: "Setup complete. Burble is ready to use.",
+            config: audio_config
+          })
+        else
+          {:error, reason} ->
+            Logger.error("[Setup] Could not persist setup state: #{inspect(reason)}")
 
-        conn
-        |> put_status(200)
-        |> json(%{
-          success: true,
-          message: "Setup complete. Burble is ready to use.",
-          config: audio_config
-        })
+            conn
+            |> put_status(503)
+            |> json(%{
+              error: "store_unavailable",
+              message: "Setup could not be persisted. Is VeriSimDB reachable?"
+            })
+        end
       else
         {:error, :invalid_device_id} ->
           conn |> put_status(400) |> json(%{error: "invalid_device_id"})
@@ -340,10 +363,14 @@ defmodule BurbleWeb.API.SetupController do
   end
 
   # Check if an audio input device has been configured.
+  #
+  # The stored config round-trips through JSON, so the keys come back as
+  # strings; accept both shapes rather than silently reporting "not configured"
+  # on a server that is in fact configured.
   @spec audio_input_configured?() :: boolean()
   defp audio_input_configured? do
     case store_get(@audio_config_key) do
-      {:ok, %{input_device_id: id}} when not is_nil(id) -> true
+      {:ok, config} when is_map(config) -> present?(config, "input_device_id", :input_device_id)
       _ -> false
     end
   end
@@ -352,10 +379,13 @@ defmodule BurbleWeb.API.SetupController do
   @spec audio_output_configured?() :: boolean()
   defp audio_output_configured? do
     case store_get(@audio_config_key) do
-      {:ok, %{output_device_id: id}} when not is_nil(id) -> true
+      {:ok, config} when is_map(config) -> present?(config, "output_device_id", :output_device_id)
       _ -> false
     end
   end
+
+  defp present?(map, string_key, atom_key),
+    do: not is_nil(Map.get(map, string_key) || Map.get(map, atom_key))
 
   # Check if E2EE keys have been generated.
   @spec e2ee_keys_exist?() :: boolean()
@@ -372,8 +402,12 @@ defmodule BurbleWeb.API.SetupController do
   @spec server_name_set?() :: boolean()
   defp server_name_set? do
     case store_get(@audio_config_key) do
-      {:ok, %{server_name: name}} when is_binary(name) and name != "" -> true
-      _ -> false
+      {:ok, config} when is_map(config) ->
+        name = Map.get(config, "server_name") || Map.get(config, :server_name)
+        is_binary(name) and name != ""
+
+      _ ->
+        false
     end
   end
 
@@ -652,29 +686,45 @@ defmodule BurbleWeb.API.SetupController do
   # ── Private: VeriSimDB wrappers ──
 
   # Read a value from VeriSimDB (Burble's persistent store).
-  # Wraps the store module to handle the case where it's not running.
+  #
+  # Burble.Store exports typed accessors (save_server_config/load_server_config),
+  # not a generic key/value get/put. The previous implementation called
+  # `apply(Burble.Store, :get, [key])` — a function that has never existed — so
+  # every read raised UndefinedFunctionError, was swallowed into
+  # {:error, :store_unavailable}, and setup_complete?/0 could never return true.
   @spec store_get(String.t()) :: {:ok, term()} | {:error, term()}
   defp store_get(key) do
-    try do
-      # Uses runtime dispatch — Burble.Store may not be fully defined yet.
-      apply(Burble.Store, :get, [key])
-    rescue
-      _ -> {:error, :store_unavailable}
-    catch
-      :exit, _ -> {:error, :store_unavailable}
+    case Burble.Store.load_server_config(key) do
+      # Jason decodes stored JSON with string keys.
+      {:ok, %{"value" => value}} -> {:ok, value}
+      {:ok, %{value: value}} -> {:ok, value}
+      {:ok, _unexpected} -> {:error, :unexpected_shape}
+      {:error, reason} -> {:error, reason}
     end
+  catch
+    :exit, reason -> {:error, {:store_unavailable, reason}}
   end
 
-  # Write a value to VeriSimDB.
+  # Write a value to VeriSimDB, wrapped under a "value" key so any term can be
+  # stored (the accessor's document modality is JSON).
   @spec store_put(String.t(), term()) :: :ok | {:error, term()}
   defp store_put(key, value) do
-    try do
-      # Uses runtime dispatch — Burble.Store may not be fully defined yet.
-      apply(Burble.Store, :put, [key, value])
-    rescue
-      _ -> {:error, :store_unavailable}
-    catch
-      :exit, _ -> {:error, :store_unavailable}
+    case Burble.Store.save_server_config(key, %{"value" => value}) do
+      {:ok, _} -> :ok
+      {:error, reason} -> {:error, reason}
     end
+  catch
+    :exit, reason -> {:error, {:store_unavailable, reason}}
+  end
+
+  # 403 for the audio endpoints once setup has been completed.
+  @spec setup_locked(Plug.Conn.t()) :: Plug.Conn.t()
+  defp setup_locked(conn) do
+    conn
+    |> put_status(403)
+    |> json(%{
+      error: "setup_already_complete",
+      message: "Setup is complete. Use the admin panel to reconfigure audio devices."
+    })
   end
 end

@@ -10,6 +10,70 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed — maintenance sweep 2026-10-21
+
+Full detail, evidence and remaining recommendations:
+[`docs/reports/maintenance/maintenance-2026-10-21.md`](docs/reports/maintenance/maintenance-2026-10-21.md).
+
+Server:
+
+- **All authenticated API routes lost the caller's identity.** The Guardian
+  pipeline loaded the resource into a pipeline-scoped key and never set
+  `conn.assigns[:user_id]`, so moderation, messaging and routing controllers
+  were all acting with a `nil` actor. `:user_id`, `:display_name`,
+  `:is_guest` and `:current_user` are now assigned explicitly.
+- **Guest tokens were rejected on every authenticated API route.** The
+  pipeline verified `typ == "access"` only, while guests are issued
+  `typ == "guest"`; access and guest tokens are now both accepted and refresh
+  tokens are explicitly refused as bearer credentials.
+- **Setup wizard could never record completion.** It called
+  `apply(Burble.Store, :get/:put, ...)` — functions that do not exist — and
+  matched on `:ok = store_put(...)`, turning every attempt into a 500. It now
+  uses the store's real accessors, returns 503 when the store is unreachable,
+  and honours its documented contract by returning 403 from the audio
+  endpoints once setup is complete.
+- **`Burble.Media.E2EE` could be crashed by any peer** with a malformed
+  X25519 public key (unvalidated input reached `:crypto.compute_key`); keys are
+  now length-checked and degenerate (all-zero) shared secrets rejected. The
+  module documentation no longer claims "server ignorance" that the code does
+  not provide.
+- **`RoomChannel` crashed on early SDP answers / ICE candidates** when the
+  peer process was not registered yet; those calls are now tolerated and
+  answered with an error tuple.
+- **Guest `display_name` was unbounded** on the socket connect path.
+- Groove discovery advertised `/socket/websocket`, which does not exist on the
+  endpoint (the socket is mounted at `/voice`); the capability manifest and
+  `.well-known/groove/manifest.json` now point at the real path.
+
+Client / tooling:
+
+- `quick-join.html` connected to `/socket/websocket` (404) instead of
+  `/voice/websocket`, and started a socket with an undefined token when guest
+  auth failed.
+- `p2p-voice.html`: room names are normalised/validated before hitting the
+  relay; joining waits for an offer instead of failing instantly against the
+  Cloudflare worker relay (which has no long-poll); relay write failures are
+  reported; the AI-channel card is no longer hidden by a later ICE state
+  change; sends respect data-channel backpressure; clipboard copy falls back
+  outside secure contexts; the live status region is announced to screen
+  readers.
+- `burble-ai-bridge.js`: the HTTP API now rejects foreign `Origin` headers
+  (a visited page could previously drain `/recv` as a side effect), size limits
+  are enforced before the body is materialised and counted in bytes, and the
+  heartbeat no longer starts two timers per connection.
+- `signaling/relay.js`: CORS no longer emits an empty
+  `Access-Control-Allow-Origin`, the room TTL is refreshed on writes and
+  enforced on reads, and the body cap is checked before buffering.
+- `signaling/worker.js`: same CORS fix plus the missing body-size cap.
+- Browser extension: declared icon files now exist, the badge poller uses
+  `chrome.alarms` (MV3 service workers are evicted, so the `setInterval`
+  version silently stopped), and the `alarms` permission is declared.
+- `.well-known/security.txt` and `humans.txt` had unfilled `{{PLACEHOLDER}}`
+  values and pointed at a different repository; both are now real.
+- `.devcontainer/devcontainer.json`: replaced template placeholders and a
+  `postCreateCommand` (`just deps`) that referenced a recipe that does not
+  exist.
+
 ### Changed
 
 - `burble-client` is now version 2.0.0: caller-supplied `TextTransport`

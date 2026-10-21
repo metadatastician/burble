@@ -7,7 +7,7 @@
   "capabilities": {
     "presence": {
       "description": "User presence and speaking indicators via Phoenix Presence",
-      "endpoint": "/socket/websocket",
+      "endpoint": "/voice/websocket",
       "panel_compatible": true,
       "protocol": "websocket",
       "requires_auth": false,
@@ -39,7 +39,7 @@
     },
     "text": {
       "description": "Real-time text messaging in rooms via Phoenix Channels",
-      "endpoint": "/socket/websocket",
+      "endpoint": "/voice/websocket",
       "panel_compatible": true,
       "protocol": "websocket",
       "requires_auth": false,
@@ -69,7 +69,7 @@
   ],
   "endpoints": {
     "api": "http://localhost:6473/api/v1",
-    "channel_ws": "ws://localhost:6473/socket/websocket",
+    "channel_ws": "ws://localhost:6473/voice/websocket",
     "health": "http://localhost:6473/api/v1/health",
     "voice_ws": "ws://localhost:6473/voice"
   },

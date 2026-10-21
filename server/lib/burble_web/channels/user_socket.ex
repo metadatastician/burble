@@ -39,7 +39,15 @@ defmodule BurbleWeb.UserSocket do
   end
 
   # Guest connection (no token required if server policy allows).
+  #
+  # Guests are unauthenticated, so the name is attacker-controlled and was
+  # previously passed through unbounded (an 8 MiB display_name became room
+  # presence metadata, repeated per join). Clamp it, and fall back to "Guest"
+  # rather than rejecting — a bad name should not stop someone joining.
+  @max_display_name 64
+
   def connect(%{"guest" => "true", "display_name" => name}, socket, _connect_info) do
+    name = sanitise_display_name(name)
     {:ok, guest} = Burble.Auth.create_guest_session(name)
 
     socket =
@@ -65,4 +73,18 @@ defmodule BurbleWeb.UserSocket do
 
   @impl true
   def id(socket), do: "user_socket:#{socket.assigns.user_id}"
+
+  # Trim, drop control characters, and bound the length. Returns "Guest" for
+  # anything that is not a non-empty binary.
+  defp sanitise_display_name(name) when is_binary(name) do
+    cleaned =
+      name
+      |> String.replace(~r/[[:cntrl:]]/u, "")
+      |> String.trim()
+      |> String.slice(0, @max_display_name)
+
+    if cleaned == "", do: "Guest", else: cleaned
+  end
+
+  defp sanitise_display_name(_), do: "Guest"
 end

@@ -128,3 +128,38 @@ Deno.test({
   sanitizeResources: false,
   sanitizeOps: false,
 });
+
+Deno.test({
+  name: "relay: CORS header is only emitted for an allowed origin",
+  async fn() {
+    const relay = await startRelay({ ALLOWED_ORIGINS: "https://burble.example.com" });
+    try {
+      const allowed = await fetch(`${BASE}/health`, {
+        headers: { Origin: "https://burble.example.com" },
+      });
+      assert.strictEqual(
+        allowed.headers.get("access-control-allow-origin"),
+        "https://burble.example.com",
+        "an allowed origin is echoed back",
+      );
+      await allowed.body?.cancel();
+
+      const denied = await fetch(`${BASE}/health`, {
+        headers: { Origin: "https://evil.example" },
+      });
+      // An empty Access-Control-Allow-Origin is a header browsers reject the
+      // response for; the header must be absent instead.
+      assert.strictEqual(
+        denied.headers.get("access-control-allow-origin"),
+        null,
+        "a disallowed origin gets no ACAO header at all",
+      );
+      await denied.body?.cancel();
+    } finally {
+      stopRelay(relay);
+      await new Promise((r) => setTimeout(r, 100));
+    }
+  },
+  sanitizeResources: false,
+  sanitizeOps: false,
+});

@@ -186,16 +186,25 @@ defmodule BurbleWeb.RoomChannel do
   def handle_in("sdp_answer", %{"body" => body}, socket) do
     # Client sends SDP answer in response to server's offer.
     peer_id = socket.assigns.user_id
-    Burble.Media.Peer.apply_sdp_answer(peer_id, body)
-    {:noreply, socket}
+
+    # The Peer GenServer may not be registered yet (or may have died). A bare
+    # GenServer.call through a Registry name then exits :noproc, which crashed
+    # the channel — killing the client's whole session over one early frame.
+    case safe_peer_call(fn -> Burble.Media.Peer.apply_sdp_answer(peer_id, body) end) do
+      :ok -> {:noreply, socket}
+      {:error, reason} -> {:reply, {:error, %{reason: reason}}, socket}
+    end
   end
 
   @impl true
   def handle_in("ice_candidate", %{"body" => body}, socket) do
     # Client sends ICE candidate.
     peer_id = socket.assigns.user_id
-    Burble.Media.Peer.add_ice_candidate(peer_id, body)
-    {:noreply, socket}
+
+    case safe_peer_call(fn -> Burble.Media.Peer.add_ice_candidate(peer_id, body) end) do
+      :ok -> {:noreply, socket}
+      {:error, reason} -> {:reply, {:error, %{reason: reason}}, socket}
+    end
   end
 
   # Legacy P2P signaling (kept for fallback/serverless mode).
@@ -415,6 +424,20 @@ defmodule BurbleWeb.RoomChannel do
     else
       :ok
     end
+  end
+
+  # Call into the per-peer media process, tolerating its absence.
+  defp safe_peer_call(fun) do
+    case fun.() do
+      :ok -> :ok
+      {:ok, _} -> :ok
+      {:error, reason} -> {:error, reason}
+      other -> {:error, other}
+    end
+  catch
+    :exit, {:noproc, _} -> {:error, :peer_not_ready}
+    :exit, {:timeout, _} -> {:error, :peer_timeout}
+    :exit, reason -> {:error, {:peer_exit, reason}}
   end
 
   # Get the user's effective permissions based on their role.

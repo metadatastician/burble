@@ -5,7 +5,9 @@
 #
 # web-client-tests.yml — Deno-based web-client test suite
 #
-# Runs the 5 web-client tests at client/web/tests/ on every PR.
+# Runs the web-client tests at client/web/tests/ on every PR (10 suites as of
+# 2026-10-21: room names, relay rendezvous + CORS, signaling, WebRTC offer/
+# answer, AI bridge API + security + round-trip).
 # Tests exercise the compiled ReScript output (*.res.mjs) for now;
 # AffineScript-output parity is tracked by affinescript-canary.yml
 # and graduates to required-for-merge when STATE.a2ml Phase 5 closes.
@@ -39,11 +41,15 @@ jobs:
     name: Deno test — client/web (advisory)
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    # Advisory mode while the test suite contains references to
-    # BurbleSignaling / BurbleVoice modules that no longer exist in
-    # source (the actual modules are Signaling.res / WebRTC.res /
-    # Room.res). Flip to gating once the stale-import suite is either
-    # fixed or moved out of `tests/`. Tracked on #48.
+    # Advisory mode. The stale-import reason this originally carried no longer
+    # applies: signaling_test.js and voice_test.js import the committed
+    # client/lib/src/BurbleSignaling.res.mjs and BurbleVoice.res.mjs, which
+    # exist (the client/web-internal modules are Room.res / Signaling.res /
+    # WebRTC.res, and those tests import those). Remaining blockers to flipping
+    # this to gating are environmental rather than code: the Deno test task
+    # needs npm:phoenix and @rescript/core resolvable, so it must run after
+    # `deno task res:build` (it does) and with the repo's deno.json import map
+    # intact. Verify a green run, then drop continue-on-error. Tracked on #48.
     continue-on-error: true
     steps:
       - name: Checkout repository

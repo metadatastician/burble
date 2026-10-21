@@ -8,6 +8,10 @@ carries the command that produced its evidence. Nothing here is inferred from
 another document's claim — where a published claim did *not* reproduce, that
 mismatch is itself an item.
 
+**Re-measured 2026-10-21** (maintenance sweep, see
+[`docs/reports/maintenance/maintenance-2026-10-21.md`](docs/reports/maintenance/maintenance-2026-10-21.md))
+— `S-1` is now resolved, `S-2`–`S-4` still reproduce.
+
 This file is an **index**, not a replacement. The pre-existing registers remain
 authoritative in their own domains and are linked, not duplicated:
 [`PROOF-NEEDS.md`](PROOF-NEEDS.md) · [`BURBLE-PROOF-STATUS.md`](BURBLE-PROOF-STATUS.md) ·
@@ -73,7 +77,11 @@ emitted code. Prefer regenerating over resolving.
 
 ## Supply chain
 
-### S-1 — `ex_webrtc 0.16.0` is retired with a DTLS auth advisory · HIGH
+### S-1 — `ex_webrtc 0.16.0` is retired with a DTLS auth advisory · HIGH · RESOLVED 2026-10-21
+
+Resolved: `mix.lock` now pins `ex_webrtc 0.17.0`, past the retired release.
+The analysis below is kept as the record of the finding.
+
 
 The only retired package in the lock, and it is the media plane:
 

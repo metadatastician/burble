@@ -29,10 +29,10 @@ defmodule Burble.Media.E2EE do
   @moduledoc """
   End-to-end encryption for Burble voice rooms.
 
-  Manages per-room cryptographic key state using X25519 Diffie-Hellman
-  key exchange and AES-256-GCM frame encryption. The server acts as an
-  opaque relay — it never possesses the symmetric key and cannot decrypt
-  audio frames.
+  Manages per-room cryptographic key state: X25519 key exchange with each
+  peer, HKDF-SHA256 derivation of a room frame key, rotation on membership
+  change, and one-way ratcheting for forward secrecy. Frames are AES-256-GCM.
+  Read "What this module is NOT" below before calling a deployment E2EE.
 
   ## Architecture
 
@@ -53,7 +53,27 @@ defmodule Burble.Media.E2EE do
   - **Integrity**: GCM tag authenticates ciphertext + AAD
   - **Forward secrecy**: Key ratcheting prevents past-frame decryption
   - **Replay protection**: Frame counter in AAD prevents replay
-  - **Server ignorance**: Server relays opaque blobs, never sees plaintext
+
+  ## What this module is NOT
+
+  Earlier revisions of this documentation claimed "server ignorance" — that
+  the server relays opaque frames and never sees plaintext. That is not what
+  the code does, and the claim has been removed rather than left standing:
+
+  - `get_frame_key/1` returns the room's symmetric frame key to the caller, so
+    the server-side coprocessor can encrypt/decrypt frames
+    (`crypto_encrypt_frame/4`, `crypto_decrypt_frame/5`). The server therefore
+    both holds the key and can process plaintext.
+  - `rotate_room_key/1` derives each new key from fresh local entropy. The
+    X25519 exchange with each peer is recorded (`register_peer_key/4`) but is
+    **not** an input to the room key, so peer-side knowledge of the key is not
+    currently guaranteed by this path.
+
+  Genuine end-to-end encryption — where the server cannot decrypt — is the
+  `:serverless` topology (see `Burble.Topology`), where media never transits a
+  Burble server. Treat anything running through this module as
+  server-mediated transport encryption, and see the maintenance report /
+  issue tracker before describing a deployment as E2EE.
   """
 
   use GenServer
@@ -275,32 +295,45 @@ defmodule Burble.Media.E2EE do
       room_state ->
         {server_public, server_private} = room_state.server_keypair
 
-        # Derive shared secret via X25519 Diffie-Hellman.
-        shared_secret = compute_x25519_shared_secret(server_private, peer_public_key)
+        # The peer key arrives from the network, so validate it before handing it
+        # to :crypto. A value that is not 32 bytes makes compute_key raise, which
+        # would crash this GenServer — taking every room's key state with it. A
+        # low-order point yields an all-zero secret (RFC 7748 §6.1); reject that
+        # too. Previously neither check existed.
+        with :ok <- validate_peer_public_key(peer_public_key),
+             {:ok, shared_secret} <-
+               compute_x25519_shared_secret(server_private, peer_public_key) do
+          peer_state = %{
+            peer_id: peer_id,
+            public_key: peer_public_key,
+            shared_secret: shared_secret,
+            frame_counter: 0
+          }
 
-        peer_state = %{
-          peer_id: peer_id,
-          public_key: peer_public_key,
-          shared_secret: shared_secret,
-          frame_counter: 0
-        }
+          updated_peers = Map.put(room_state.peers, peer_id, peer_state)
+          updated_room = %{room_state | peers: updated_peers}
 
-        updated_peers = Map.put(room_state.peers, peer_id, peer_state)
-        updated_room = %{room_state | peers: updated_peers}
+          # Rotate key on new participant join (if not the first peer).
+          {final_room, new_epoch} =
+            if map_size(room_state.peers) > 0 do
+              rotate_room_key(updated_room)
+            else
+              {updated_room, updated_room.key_epoch}
+            end
 
-        # Rotate key on new participant join (if not the first peer).
-        {final_room, new_epoch} =
-          if map_size(room_state.peers) > 0 do
-            rotate_room_key(updated_room)
-          else
-            {updated_room, updated_room.key_epoch}
-          end
+          new_rooms = Map.put(state.rooms, room_id, final_room)
 
-        new_rooms = Map.put(state.rooms, room_id, final_room)
+          Logger.info("[E2EE] Peer #{peer_id} registered in #{room_id} (epoch #{new_epoch})")
 
-        Logger.info("[E2EE] Peer #{peer_id} registered in #{room_id} (epoch #{new_epoch})")
+          {:reply, {:ok, server_public}, %{state | rooms: new_rooms}}
+        else
+          {:error, reason} ->
+            Logger.warning(
+              "[E2EE] Rejected peer key for #{peer_id} in #{room_id}: #{inspect(reason)}"
+            )
 
-        {:reply, {:ok, server_public}, %{state | rooms: new_rooms}}
+            {:reply, {:error, reason}, state}
+        end
     end
   end
 
@@ -461,11 +494,27 @@ defmodule Burble.Media.E2EE do
     {public, private}
   end
 
-  # Compute the X25519 shared secret from our private key and peer's public key.
-  # Returns a 32-byte shared secret.
+  # A peer's X25519 public key must be exactly 32 bytes.
+  @doc false
+  defp validate_peer_public_key(key) when is_binary(key) and byte_size(key) == 32, do: :ok
+  defp validate_peer_public_key(_), do: {:error, :invalid_public_key}
+
+  # Compute the X25519 shared secret from our private key and the peer's public
+  # key. Returns {:ok, secret} or {:error, reason} — never raises, and rejects
+  # the all-zero secret produced by low-order points (RFC 7748 §6.1).
   @doc false
   defp compute_x25519_shared_secret(our_private, their_public) do
-    :crypto.compute_key(:ecdh, their_public, our_private, :x25519)
+    case :crypto.compute_key(:ecdh, their_public, our_private, :x25519) do
+      secret when is_binary(secret) and byte_size(secret) == 32 ->
+        if secret == :binary.copy(<<0>>, 32),
+          do: {:error, :degenerate_shared_secret},
+          else: {:ok, secret}
+
+      _ ->
+        {:error, :invalid_shared_secret}
+    end
+  rescue
+    _ -> {:error, :invalid_public_key}
   end
 
   # Derive a 32-byte AES-256-GCM frame key from a shared secret using HKDF-SHA256.

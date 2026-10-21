@@ -1,7 +1,14 @@
 // Burble AI Bridge — background service worker.
 // Maintains bridge connection status and provides badge updates.
+//
+// MV3 service workers are evicted after ~30s of inactivity, taking any
+// setInterval with them — the previous version polled on an interval that
+// simply stopped firing, and the badge froze. chrome.alarms wakes the worker
+// back up, so the badge keeps tracking the bridge.
 
 const DEFAULT_BRIDGE = "http://localhost:6474";
+const ALARM_NAME = "burble-bridge-poll";
+const POLL_MINUTES = 0.5; // the smallest period Chrome allows
 
 async function updateBadge() {
   try {
@@ -25,6 +32,24 @@ async function updateBadge() {
   }
 }
 
-// Poll every 5 seconds for badge updates.
-setInterval(updateBadge, 5000);
+async function schedule() {
+  // create() with an existing name is a no-op, so this is safe on every wake.
+  await chrome.alarms.create(ALARM_NAME, { periodInMinutes: POLL_MINUTES });
+}
+
+chrome.alarms.onAlarm.addListener((alarm) => {
+  if (alarm.name === ALARM_NAME) updateBadge();
+});
+
+// Re-arm on install/update/browser start as well as every worker wake-up.
+chrome.runtime.onInstalled.addListener(() => {
+  schedule();
+  updateBadge();
+});
+chrome.runtime.onStartup.addListener(() => {
+  schedule();
+  updateBadge();
+});
+
+schedule();
 updateBadge();

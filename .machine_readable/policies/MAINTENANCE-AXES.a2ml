@@ -9,18 +9,24 @@ last-updated = "{{CURRENT_DATE}}"
 scope = "repo"
 
 [discovery]
+# Verified 2026-10-21: every path below resolves in the repository. Four of the
+# previous entries (docs/maintenance/MAINTENANCE-CHECKLIST.md,
+# docs/practice/SOFTWARE-DEVELOPMENT-APPROACH.adoc, .machine_readable/META.a2ml,
+# .machine_readable/bot_directives/README.scm) did not exist — a discovery
+# policy whose entrypoints 404 is the one thing it cannot afford.
 human-entrypoints = [
   "README.adoc",
-  "docs/maintenance/MAINTENANCE-CHECKLIST.md",
-  "docs/practice/SOFTWARE-DEVELOPMENT-APPROACH.adoc",
+  "docs/governance/MAINTENANCE-CHECKLIST.adoc",
+  "docs/governance/SOFTWARE-DEVELOPMENT-APPROACH.adoc",
+  "docs/reports/maintenance/maintenance-2026-10-21.md",
 ]
 machine-entrypoints = [
   ".machine_readable/policies/MAINTENANCE-AXES.a2ml",
   ".machine_readable/policies/MAINTENANCE-CHECKLIST.a2ml",
   ".machine_readable/policies/SOFTWARE-DEVELOPMENT-APPROACH.a2ml",
-  ".machine_readable/META.a2ml",
+  ".machine_readable/descriptiles/STATE.a2ml",
   ".machine_readable/ai/README.adoc",
-  ".machine_readable/bot_directives/README.scm",
+  ".machine_readable/bot_directives/README.adoc",
 ]
 bots = ["hypatia", "gitbot-fleet", "repo visitors"]
 
