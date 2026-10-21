@@ -33,8 +33,12 @@ optionally cross-check that every `Module.fun(args)` call names a function that
 exists with that arity. It is a parser, not a compiler: it cannot resolve
 macros, `use`-generated functions, protocols or behaviour callbacks, and it does
 not type-check. Use it where `mix` is unavailable, never instead of `mix`.
-Install once with `npm install --prefix scripts`, then
-`node scripts/check-elixir-syntax.mjs server/lib server/test`.
+Install once with `deno install --config scripts/deno.json --frozen`, then
+`deno run --allow-read --allow-env scripts/check-elixir-syntax.mjs server/lib server/test`
+from the repository root. The Deno manifest keeps the parser dependencies at
+exact versions and `scripts/deno.lock` records their resolved graph and integrity.
+The tool only uses the bundled WASM grammar; native dependency build scripts
+are not needed.
 Rationale and measured results:
 `docs/reports/maintenance/maintenance-2026-10-21.md` (Appendix).
 
