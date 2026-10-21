@@ -264,6 +264,12 @@ defmodule BurbleWeb.Channels.RoomChannelE2EETest do
       {chan, user_id} = join_room(room_id, "Frank")
       assert_reply(register(chan, new_public_key()), :ok, %{})
 
+      # The channel process is linked to the test process, and `leave/1` shuts
+      # it down asynchronously with `{:shutdown, :left}`. In the tests above the
+      # signal arrives after the test has already finished, so it is dropped;
+      # here the test keeps running (the await below), so without trapping exits
+      # the shutdown signal kills the test process instead of the channel.
+      Process.flag(:trap_exit, true)
       leave(chan)
 
       # The last peer to leave takes the room record with it, so either the

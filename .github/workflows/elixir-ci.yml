@@ -84,17 +84,6 @@ jobs:
         # circuit-breaker test drift). A failing test turns this job red —
         # this is the CRG grade-C test-pass-evidence artefact (#35/#39).
         run: just test-server
-      - name: TEMP diagnose e2ee channel test failures
-        if: failure()
-        working-directory: ${{ github.workspace }}
-        run: |
-          cd server
-          set +e
-          out="$(mix test test/burble_web/channels/room_channel_e2ee_test.exs --trace --seed 0 2>&1 \
-                 | sed -n '/^ *[0-9]*) test /,$p' | head -90)"
-          msg="$(printf '%s' "$out" | sed -e 's/%/%25/g' -e 's/\r//g' -e 's/::/.. /g' | tr '\n' '\001')"
-          msg="${msg//$'\001'/%0A}"
-          echo "::error title=e2ee-diag::$msg"
       - name: Run Rust client tests
         working-directory: ${{ github.workspace }}
         run: cargo test --manifest-path client/rust/Cargo.toml
