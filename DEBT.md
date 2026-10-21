@@ -374,11 +374,11 @@ extension changed, and ReScript does not parse as AffineScript. Upstream
 > `.res` written in ReScript is not a face, and renaming `Foo.res` to
 > `Foo.affine` does not make it one — it produces a file that fails to parse.
 
-Measured on `affinescript-canary.yml` for this branch: at least 9 `.affine` files
-report `affinescript check failed` (`Routes`, `TextChat`, `AuthState`,
-`SafeDOMExample`, and five under `admin/src/`). The real count is higher — GitHub
-caps annotations at ten per check run, which is also why the number was never
-visible.
+Measured on `affinescript-canary.yml` for this branch: **35 of 37 `.affine` files
+report `affinescript check failed`**. The number had never been visible — GitHub
+caps annotations at ten per check run, and the job log archive is not always
+reachable, so the canary reported a handful of files and hid the rest. It now
+emits the whole result as one annotation.
 
 Two things hid it:
 
@@ -392,8 +392,15 @@ Two things hid it:
 Corrected in this branch: `MIGRATION.md` states that the compiler exists, that
 `.affine` must be valid AffineScript, and that it is not on the app's build path;
 `src/app/voice/E2EE.affine` (written here, and wrong in exactly this way) is
-rewritten as real AffineScript; the canary now prints the complete failure list
-into its job summary instead of being capped at ten annotations.
+rewritten as real AffineScript and **verified by the canary** — it is one of the
+two files that compile; the canary now emits the complete failure list as one
+annotation instead of being capped at ten.
+
+The rewrite is also the worked answer for the other 35: the failure was not the
+function bodies but `use prelude::{Result, Err};`. A consumer file in this repo
+cannot resolve the upstream `prelude` module, so it must use only builtins and
+declare host functions with `pub extern fn` (the shape of upstream's CI-gated
+consumer example). Copying `stdlib/*.affine` verbatim does not work from here.
 
 **Still open:** the other `.affine` files are unparseable, and the canary is still
 advisory. Flipping it to gating turns the build red for files nobody has touched;
