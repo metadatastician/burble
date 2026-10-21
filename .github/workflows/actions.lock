@@ -113,7 +113,7 @@ dependencies:
         owner_id: 44036562
         repo_id: 760701061
     'actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9':
-        ref: '55cc8345863c7cc4c66a329aec7e433d2d1c52a9'
+        ref: 'v6.1.0'
         commit: 'sha1-55cc8345863c7cc4c66a329aec7e433d2d1c52a9'
         owner_id: 44036562
         repo_id: 215566462
@@ -195,7 +195,7 @@ dependencies:
         owner_id: 5429470
         repo_id: 288485773
     'dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de':
-        ref: '02cb101ec7c40f2c49e1d9714d64511d8e1b74de'
+        ref: 'master'
         commit: 'sha1-02cb101ec7c40f2c49e1d9714d64511d8e1b74de'
         owner_id: 1940490
         repo_id: 260749683
@@ -210,7 +210,7 @@ dependencies:
         owner_id: 26415196
         repo_id: 297874902
     'erlef/setup-beam@54075bcc5e249e4758d363f27d099f55d843f124':
-        ref: '54075bcc5e249e4758d363f27d099f55d843f124'
+        ref: 'v1.24.1'
         commit: 'sha1-54075bcc5e249e4758d363f27d099f55d843f124'
         owner_id: 47606891
         repo_id: 331103973
@@ -235,12 +235,12 @@ dependencies:
         owner_id: 75048950
         repo_id: 623796603
     'hyperpolymath/deed-ecosystem@f7a40a4d5cc82b2e73f861119baa6818d77a448d':
-        ref: 'f7a40a4d5cc82b2e73f861119baa6818d77a448d'
+        ref: 'main'
         commit: 'sha1-f7a40a4d5cc82b2e73f861119baa6818d77a448d'
         owner_id: 6759885
         repo_id: 1275649586
     'hyperpolymath/k9-ecosystem@89f3c2702f4f650a92aa7411502f38da06abd562':
-        ref: '89f3c2702f4f650a92aa7411502f38da06abd562'
+        ref: 'main'
         commit: 'sha1-89f3c2702f4f650a92aa7411502f38da06abd562'
         owner_id: 6759885
         repo_id: 1275650185
@@ -255,7 +255,7 @@ dependencies:
         owner_id: 6759885
         repo_id: 1352485172
     'hyperpolymath/standards@0f2d9b5447d3d6e56b41fe69d54e834849d7c932':
-        ref: '0f2d9b5447d3d6e56b41fe69d54e834849d7c932'
+        ref: 'main'
         commit: 'sha1-0f2d9b5447d3d6e56b41fe69d54e834849d7c932'
         owner_id: 6759885
         repo_id: 1116521501
@@ -270,7 +270,7 @@ dependencies:
             - 'ossf/scorecard-action@2d1146689b8cda280b9bc96326124645441f03bc'
             - 'webfactory/ssh-agent@e83874834305fe9a4a2997156cb26c5de65a8555'
     'hyperpolymath/standards@9f68971b9fa254a80559432d9fcb7652b72e941d':
-        ref: '9f68971b9fa254a80559432d9fcb7652b72e941d'
+        ref: 'main'
         commit: 'sha1-9f68971b9fa254a80559432d9fcb7652b72e941d'
         owner_id: 6759885
         repo_id: 1116521501
@@ -305,7 +305,7 @@ dependencies:
         owner_id: 18365890
         repo_id: 220359305
     'slsa-framework/slsa-github-generator@f7dd8c54c2067bafc12ca7a55595d5ee9b75204a':
-        ref: 'f7dd8c54c2067bafc12ca7a55595d5ee9b75204a'
+        ref: 'v2.1.0'
         commit: 'sha1-f7dd8c54c2067bafc12ca7a55595d5ee9b75204a'
         owner_id: 80431187
         repo_id: 475074978
