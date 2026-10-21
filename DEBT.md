@@ -37,13 +37,13 @@ other, so they are derived rather than carried forward. `HIGH` is split as
 |---|---|---|
 | Build | 1 | 0 / 1 |
 | Supply chain | 4 | 2 / 1 |
-| CI/CD | 5 | 3 / 1 |
+| CI/CD | 6 | 4 / 1 |
 | Licence | 4 | 2 / 2 |
 | Documentation | 6 | 2 / 1 |
 | Code | 9 | 5 / 0 |
 | Proof | 4 | 2 / 0 |
 | Test | 3 | 1 / 0 |
-| **Total** | **36** | **17 / 6** |
+| **Total** | **37** | **18 / 6** |
 
 ---
 
@@ -219,6 +219,80 @@ advisory, nothing to keep in sync.
 `elixir-ci.yml:170` `continue-on-error: true`, honestly commented
 "GATE NARROWED 2026-05-25 … re-arm in a follow-up". The follow-up has not
 happened.
+
+### C-6 — every external-reusable caller stopped starting at 17:18, with no file change · HIGH · OPEN
+
+Six workflows report `startup_failure` — zero steps, no log, no annotation —
+on every commit since `86e139dd`. The set is exactly the set of workflows that
+call a reusable workflow in another repository:
+
+| Workflow | Callee | Conclusion |
+|---|---|---|
+| `governance.yml` | `hyperpolymath/standards/…/governance-reusable.yml` | startup_failure |
+| `secret-scanner.yml` | `…/secret-scanner-reusable.yml` | startup_failure |
+| `scorecard.yml` | `…/scorecard-reusable.yml` | startup_failure |
+| `spark-theatre-gate.yml` | `…/spark-theatre-gate.yml` | startup_failure |
+| `hypatia-scan.yml` | `…/hypatia-scan-reusable.yml` | startup_failure |
+| `conformance.yml` (new) | `…/deed-conformance.yml`, `…/k9-conformance.yml` | startup_failure |
+
+`mirror.yml` calls a reusable too, but only on `push: main`, where it has been
+`skipped`. Every workflow that does **not** call an external reusable —
+`Web Client Tests`, `Lock Sync Gate`, `Dogfood Gate`, `Idris2 ABI`,
+`Static Analysis Gate`, `AffineScript Canary`, `Workflow safety`, CodeQL, and
+the rest — is green on the same SHAs.
+
+The transition is one commit and no workflow edit:
+
+```
+17:17:17  d265df87  governance.yml  failure           # ran; failed in "Set up job" with the
+                                                      # erlef/setup-beam annotation fixed by 88b84ed
+17:18:55  86e139dd  governance.yml  startup_failure   # 86e139dd changed
+                                                      # client/web/tests/signaling_relay_test.js only
+```
+
+So neither the YAML, the pin, nor the callee is the variable *within* this
+repository's history. What was ruled out, in order:
+
+- **the callee is missing at the pin** — all eight callee files exist at
+  `0d47b892`, and every `with:` input we pass is declared by the callee's
+  `on.workflow_call.inputs` (checked mechanically for all eight);
+- **a poisoned callee lock** — `scripts/check-upstream-pins.sh` reports
+  *9 pins clean* at `0d47b892`; the 13-self-SHA defect was `0f2d9b54`/`9f68971b`
+  and is what `88b84ed` fixed;
+- **the callee repo moved** — `hyperpolymath/standards` is public,
+  not archived, not disabled, and answered normally throughout;
+- **the estate is down** — `cicd-squabbler` and `panic-attack` ran
+  standards-calling scheduled lanes green at 04:02 and 04:00 today, so external
+  reusable calls work elsewhere in the estate.
+
+What is left is repository-level Actions policy in **this** repository: the
+"Allow select actions and reusable workflows" setting keeps a *separate*
+allowlist for reusable workflows, and a reusable workflow that is not on it is
+refused before the job starts — silently, as `startup_failure`. That also
+explains why ordinary third-party actions (`actions/checkout`,
+`oven-sh/setup-bun`, `erlef/setup-beam` …) keep working: they are governed by
+the other list.
+
+It cannot be confirmed from here. The token this repository's automation runs
+with is read-only for Actions administration:
+
+```
+gh api repos/metadatastician/burble/actions/permissions                 # 403
+gh api repos/metadatastician/burble/actions/permissions/selected-actions # 403
+gh workflow run governance.yml --ref <branch>                           # 403 on dispatch
+```
+
+**Next move (needs repository admin, ~1 minute):** Settings → Actions →
+General → *Allow select actions and reusable workflows*, and check that
+`hyperpolymath/standards/.github/workflows/*` is permitted (or set "Allow all
+actions and reusable workflows"). If the setting is already permissive, the
+next suspects, in order, are (a) an organisation-level policy overriding it,
+(b) `merge_group`/`pull_request` fork-secret approval being toggled to
+*Require approval for all outside collaborators*. Either way, the fact to
+record is that **`startup_failure` with no steps and no annotation on exactly
+the external-reusable callers is a policy symptom, not a YAML symptom** — this
+repository spent 2026-10-13 → 10-21 chasing it as if it were a YAML symptom
+(C-1, and `88b84ed`).
 
 ---
 
