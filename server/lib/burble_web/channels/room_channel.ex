@@ -412,11 +412,16 @@ defmodule BurbleWeb.RoomChannel do
   # Keys travel base64-encoded because channel payloads are JSON.
 
   @impl true
-  def handle_in("e2ee_register_key", %{"public_key" => encoded}, socket) do
+  def handle_in(
+        "e2ee_register_key",
+        %{"public_key" => encoded, "identity_sig" => identity_sig, "sig_alg" => sig_alg},
+        socket
+      ) do
     room_id = socket.assigns.room_id
     user_id = socket.assigns.user_id
 
     with {:ok, public_key} <- decode_public_key(encoded),
+         :ok <- verify_e2ee_key_identity_binding(room_id, user_id, public_key, identity_sig, sig_alg),
          {:ok, %{epoch: epoch, peer_count: count}} <-
            safe_e2ee(fn -> E2EE.register_peer_key(room_id, user_id, public_key) end) do
       broadcast!(socket, "e2ee_key_set", %{
@@ -434,7 +439,7 @@ defmodule BurbleWeb.RoomChannel do
 
   @impl true
   def handle_in("e2ee_register_key", _params, socket) do
-    {:reply, {:error, %{reason: "invalid_public_key"}}, socket}
+    {:reply, {:error, %{reason: "invalid_public_key_or_identity_proof"}}, socket}
   end
 
   @impl true
