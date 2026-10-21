@@ -227,7 +227,7 @@ project/
 * TypeScript/JavaScript (use AffineScript)
 * CUE (use Guile/Nickel)
 * `Dockerfile` (use `Containerfile`)
-* npm, Bun, pnpm, yarn (use Deno)
+* npm, pnpm, yarn (use Bun — Bun is the estate default; `deno.json` tasks delegate to it)
 * Go (use Rust)
 
 == STATE.a2ml

@@ -18,7 +18,7 @@ notes = "P2P mode needs no deployment — just open p2p-voice.html + run bridge.
 
 [p2p-quickstart]
 steps = [
-  "1. deno run --allow-net --allow-env client/web/burble-ai-bridge.js &",
+  "1. bun client/web/burble-ai-bridge.js &",
   "2. Open client/web/p2p-voice.html in browser",
   "3. Exchange room codes or use signaling relay (just relay on port 6476)",
   "4. Verify green 'bridge online' dot in AI Channel card",
@@ -39,7 +39,7 @@ steps = [
 steps = [
   "1. Update version in STATE.a2ml, META.a2ml, Justfile",
   "2. Run `just test` — all green",
-  "3. Run `deno test --allow-net --allow-env --allow-run client/web/tests/` — AI bridge tests green",
+  "3. Run `cd client/web && bun test tests/` — AI bridge tests green",
   "4. Run `just scan` — panic-attacker clean",
   "5. Update CHANGELOG.md",
   "6. Tag: git tag -a v<version> -m 'Release <version>'",
@@ -50,7 +50,7 @@ steps = [
 [maintenance-operations]
 operations = [
   { name = "full-test", command = "just test", frequency = "every commit" },
-  { name = "ai-bridge-test", command = "deno test --allow-net --allow-env --allow-run client/web/tests/", frequency = "every commit touching client/web/" },
+  { name = "ai-bridge-test", command = "cd client/web && bun test tests/", frequency = "every commit touching client/web/" },
   { name = "static-scan", command = "just scan", frequency = "pre-release" },
   { name = "proof-check", command = "cd src && idris2 --check ABI.idr", frequency = "when src/Burble/ABI/*.idr changes" },
   { name = "zig-ffi-test", command = "just test-ffi", frequency = "when ffi/zig/ changes" },

@@ -11,7 +11,7 @@
 // It is kept as a failing stub so a call site breaks loudly instead of sending
 // plaintext, and so the next reader is sent to the real module:
 //
-//   implementation   client/web/e2ee.js          (WebCrypto, 44 tests)
+//   implementation   client/web/e2ee.js          (WebCrypto, covered by the 97-test web suite)
 //   key exchange     client/web/e2ee-session.js
 //   protocol         docs/decisions/0016-peer-held-group-keys.adoc
 //

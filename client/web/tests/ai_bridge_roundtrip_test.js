@@ -15,7 +15,7 @@
 // aren't mistaken for live ones.
 
 import assert from "node:assert";
-import { test } from "./runner.js";
+import { test, spawnServer } from "./runner.js";
 
 // Use non-default ports so this suite can run even if the user has a normal
 // bridge on 6474.
@@ -25,22 +25,17 @@ const BRIDGE_B_HTTP = 7484;
 const BRIDGE_B_WS = BRIDGE_B_HTTP + 1;
 
 async function startBridge(port) {
-  const cmd = new Deno.Command("deno", {
-    args: ["run", "--allow-net", "--allow-env", "../burble-ai-bridge.js"],
+  const proc = await spawnServer("../burble-ai-bridge.js", {
     cwd: import.meta.dirname,
     env: { BURBLE_AI_BRIDGE_PORT: String(port) },
-    stdout: "null",
-    stderr: "null",
   });
-  const proc = cmd.spawn();
-  // Give Deno.serve a moment to bind both ports.
-  await new Promise((r) => setTimeout(r, 800));
+  await proc.waitReady(`http://127.0.0.1:${port}/status`);
   return proc;
 }
 
-function stopBridge(proc) {
-  if (!proc) return;
-  try { proc.kill("SIGTERM"); } catch (_) {}
+async function stopBridge(proc) {
+  // Waits for exit, so the next test can bind the same ports.
+  if (proc) await proc.stop();
 }
 
 // Open a WebSocket to a bridge's relay port and mimic a connected p2p-voice page.
@@ -143,8 +138,8 @@ test({
     } finally {
       try { pageA?.ws.close(); } catch (_) {}
       try { pageB?.ws.close(); } catch (_) {}
-      stopBridge(bridgeA);
-      stopBridge(bridgeB);
+      await stopBridge(bridgeA);
+      await stopBridge(bridgeB);
       await new Promise((r) => setTimeout(r, 100));
     }
   },
@@ -179,8 +174,8 @@ test({
     } finally {
       try { pageA?.ws.close(); } catch (_) {}
       try { pageB?.ws.close(); } catch (_) {}
-      stopBridge(bridgeA);
-      stopBridge(bridgeB);
+      await stopBridge(bridgeA);
+      await stopBridge(bridgeB);
       await new Promise((r) => setTimeout(r, 100));
     }
   },
@@ -217,7 +212,7 @@ test({
       assert.strictEqual(status.connected, true, "socket should still be alive after 2 s");
     } finally {
       try { page?.ws.close(); } catch (_) {}
-      stopBridge(bridge);
+      await stopBridge(bridge);
       await new Promise((r) => setTimeout(r, 100));
     }
   },
@@ -270,8 +265,8 @@ test({
     } finally {
       try { pageA?.ws.close(); } catch (_) {}
       try { pageB?.ws.close(); } catch (_) {}
-      stopBridge(bridgeA);
-      stopBridge(bridgeB);
+      await stopBridge(bridgeA);
+      await stopBridge(bridgeB);
       await new Promise((r) => setTimeout(r, 100));
     }
   },
@@ -329,7 +324,7 @@ test({
       assert.strictEqual(recvData.messages[0].type, "before-drop");
     } finally {
       try { page?.ws.close(); } catch (_) {}
-      stopBridge(bridge);
+      await stopBridge(bridge);
       await new Promise((r) => setTimeout(r, 100));
     }
   },

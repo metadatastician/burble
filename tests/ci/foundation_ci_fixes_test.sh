@@ -4,6 +4,29 @@
 # Regression tests for the CI configuration hardened in PR #232.
 # These checks intentionally use only POSIX text-processing tools so they can
 # run in a clean checkout without installing a YAML parser.
+#
+# WHAT THIS FILE DOES NOT DO (2026-10-21)
+# ---------------------------------------
+# It used to pin eight individual `uses:` revisions — e.g. "CodeQL init stays
+# on cdf488f5". Every one of those hashes moved, so the file failed 5 of 15
+# assertions against a perfectly healthy tree, and nothing ran it, so nobody
+# noticed. A test that pins a revision and is not run on every change is just a
+# stale copy of the tree.
+#
+# Revision equality is already enforced, more strictly, by the tools it was
+# duplicating:
+#   * scripts/check-lock-sync.sh — every `uses:` must be recorded in
+#     .github/workflows/actions.lock, both directions;
+#   * scripts/check-upstream-pins.sh — every reusable-workflow pin must be
+#     lock-clean at its own sha;
+#   * tests/ci/workflow_hardening_test.sh — pin shape, `persist-credentials`,
+#     workflow_dispatch coverage.
+# Both of the first two run in lock-sync-gate.yml, and this file now runs there
+# too, so "nobody runs it" cannot recur.
+#
+# What is left here is the part nothing else checks: the Dependabot volume caps
+# and the CodeQL credential setting. Those are policy numbers, not revisions,
+# so they do not rot when a pin moves.
 
 set -uo pipefail
 
@@ -51,22 +74,27 @@ dependabot_limit() {
     ' "$REPO_DIR/.github/dependabot.yml"
 }
 
-workflow_refs() {
-    local workflow="$1" action="$2"
-
-    awk -v prefix="$action@" '
-        $1 == "uses:" && index($2, prefix) == 1 { print $2 }
-    ' "$REPO_DIR/$workflow"
+checkout_persist_credentials_values() {
+    awk '
+        /^[[:space:]]*-[[:space:]]+name:[[:space:]]+Checkout[[:space:]]*$/ {
+            in_checkout = 1
+            next
+        }
+        in_checkout && /^[[:space:]]*-[[:space:]]+name:/ { exit }
+        in_checkout && /^[[:space:]]+persist-credentials:/ {
+            value = $0
+            sub(/^[^:]+:[[:space:]]*/, "", value)
+            sub(/[[:space:]]+#.*$/, "", value)
+            gsub(/[[:space:]]/, "", value)
+            print value
+        }
+    ' "$REPO_DIR/.github/workflows/codeql.yml"
 }
 
-assert_exact_workflow_ref() {
-    local description="$1" workflow="$2" action="$3" expected_sha="$4"
-    local actual
-
-    actual="$(workflow_refs "$workflow" "$action")"
-    assert_equals "$description" "$action@$expected_sha" "$actual"
-}
-
+# Workflows that ship a `uses:` pin must use the full forty hex characters: a
+# tag or branch can be moved under us, and a shortened sha is not a pin. This is
+# deliberately independent of actions.lock — it catches `@v7` even if the
+# lockfile was regenerated from the same mistake.
 assert_all_workflow_refs_are_sha_pinned() {
     local workflow="$1"
     local count=0 invalid="" ref revision
@@ -89,23 +117,6 @@ assert_all_workflow_refs_are_sha_pinned() {
     fi
 }
 
-checkout_persist_credentials_values() {
-    awk '
-        /^[[:space:]]*-[[:space:]]+name:[[:space:]]+Checkout[[:space:]]*$/ {
-            in_checkout = 1
-            next
-        }
-        in_checkout && /^[[:space:]]*-[[:space:]]+name:/ { exit }
-        in_checkout && /^[[:space:]]+persist-credentials:/ {
-            value = $0
-            sub(/^[^:]+:[[:space:]]*/, "", value)
-            sub(/[[:space:]]+#.*$/, "", value)
-            gsub(/[[:space:]]/, "", value)
-            print value
-        }
-    ' "$REPO_DIR/.github/workflows/codeql.yml"
-}
-
 assert_equals \
     "GitHub Actions updates are capped at two open pull requests" \
     "2" \
@@ -123,49 +134,17 @@ assert_equals \
     "3" \
     "$(dependabot_limit pip)"
 
-assert_exact_workflow_ref \
-    "CodeQL checkout stays on the reviewed revision" \
-    ".github/workflows/codeql.yml" \
-    "actions/checkout" \
-    "3d3c42e5aac5ba805825da76410c181273ba90b1"
-assert_exact_workflow_ref \
-    "CodeQL initialization stays on the reviewed revision" \
-    ".github/workflows/codeql.yml" \
-    "github/codeql-action/init" \
-    "cdf488f595d80d6e07e03d4674febd5ab45fa938"
-assert_exact_workflow_ref \
-    "CodeQL analysis uses the same reviewed revision" \
-    ".github/workflows/codeql.yml" \
-    "github/codeql-action/analyze" \
-    "cdf488f595d80d6e07e03d4674febd5ab45fa938"
 assert_equals \
     "CodeQL checkout disables persisted credentials exactly once" \
     "false" \
     "$(checkout_persist_credentials_values)"
 
-assert_exact_workflow_ref \
-    "governance uses its reviewed reusable workflow revision" \
-    ".github/workflows/governance.yml" \
-    "hyperpolymath/standards/.github/workflows/governance-reusable.yml" \
-    "8f31a5a4ba591d544b65f91f6d78b136e07756f0"
-assert_exact_workflow_ref \
-    "Hypatia uses its reviewed reusable workflow revision" \
-    ".github/workflows/hypatia-scan.yml" \
-    "hyperpolymath/standards/.github/workflows/hypatia-scan-reusable.yml" \
-    "cc58c0cb23f73fc2019ce85a56a468e5248a93b3"
-assert_exact_workflow_ref \
-    "Scorecard uses its reviewed reusable workflow revision" \
-    ".github/workflows/scorecard.yml" \
-    "hyperpolymath/standards/.github/workflows/scorecard-reusable.yml" \
-    "8750b94ac1bbe8c51ad13fe106669b13478f0b62"
-
-# Negative/regression coverage: a tag, branch, shortened SHA, or a second
-# duplicate reference in any affected workflow must fail this test.
 for workflow in \
     .github/workflows/codeql.yml \
     .github/workflows/governance.yml \
     .github/workflows/hypatia-scan.yml \
-    .github/workflows/scorecard.yml
+    .github/workflows/scorecard.yml \
+    .github/workflows/conformance.yml
 do
     assert_all_workflow_refs_are_sha_pinned "$workflow"
 done

@@ -29,10 +29,11 @@ defmodule Burble.Security.KeyRotation do
   Automatic E2EE key rotation scheduler for Burble voice rooms.
 
   Ensures forward secrecy by periodically calling
-  `Burble.Media.E2EE.request_rotation/1` — an epoch bump plus revocation of the
-  distributed key blobs. The server never holds the key itself (ADR-0016).
-  for every active room. Subscribes to room lifecycle events via Phoenix PubSub
-  to track which rooms are active.
+  `Burble.Media.E2EE.request_rotation/1` for every active room — an epoch bump
+  plus deletion of the coordinator's stored sealed key blobs. This does not
+  revoke blobs already distributed to peers. The server never holds the key
+  itself (ADR-0016). Subscribes to room lifecycle events via Phoenix PubSub to
+  track which rooms are active.
 
   ## Configuration
 
@@ -376,9 +377,10 @@ defmodule Burble.Security.KeyRotation do
   #
   # Measures latency, calls E2EE.request_rotation/1, and updates room metrics.
   #
-  # "Rotation" here means the epoch advances and every sealed room key is
-  # discarded, so peers re-derive with fresh ephemeral keys. The server cannot
-  # ratchet the key itself — by design it never holds one (ADR-0016).
+  # "Rotation" here means the epoch advances and the coordinator's stored
+  # sealed key blobs are discarded, so peers must distribute a new room key.
+  # The server cannot ratchet the key itself — by design it never holds one
+  # (ADR-0016).
   # Returns {result, updated_room_state, %{rotations: n, errors: n}}.
   @spec perform_rotation(String.t(), room_rotation_state()) ::
           {{:ok, non_neg_integer()} | {:error, term()}, room_rotation_state(),

@@ -205,7 +205,7 @@ test("frames round-trip and are bound to sender, epoch and counter", async () =>
   await assert.rejects(E2EE.decryptFrame(key, wire, "room-1", 2, "alice", 8), /operation failed|decrypt/i);
 });
 
-test("a peer cannot derive another peer's frame key from the group key", async () => {
+test("sender ids separate frame keys, but any group-key holder can derive them", async () => {
   const groupKey = E2EE.randomGroupKey();
 
   const alice = await E2EE.deriveSenderFrameKey(groupKey, 0, "alice", 0);
@@ -216,10 +216,27 @@ test("a peer cannot derive another peer's frame key from the group key", async (
   const frame = new TextEncoder().encode("forged");
   const wire = await E2EE.encryptFrame(alice, frame, "room-1", 0, "alice", 0);
 
-  // Bob holds the group key, so he can compute his own key — and it does not
-  // open Alice's frame. He cannot speak as her.
+  // What the separation buys: Bob's own frame key does not open a frame
+  // attributed to Alice. It stops two senders' keys being confused, nothing more.
   await assert.rejects(E2EE.decryptFrame(bob, wire, "room-1", 0, "alice", 0), /operation failed|decrypt/i);
   assert.deepStrictEqual(await E2EE.decryptFrame(alice, wire, "room-1", 0, "alice", 0), frame);
+
+  // The limitation, asserted so it cannot quietly become a claim again: Bob
+  // holds the group key, so he can derive Alice's frame key himself and produce
+  // a frame that is indistinguishable from hers. The boundary E2EE defends is
+  // "outsiders and the server", not "members cannot impersonate each other".
+  // ADR-0016 §Gaps, and the honest sentence in `deriveSenderFrameKey`.
+  const derivedByBob = await E2EE.deriveSenderFrameKey(groupKey, 0, "alice", 1);
+  const forged = await E2EE.encryptFrame(
+    derivedByBob,
+    new TextEncoder().encode("anything, as alice"),
+    "room-1",
+    0,
+    "alice",
+    1
+  );
+  const opened = await E2EE.decryptFrame(derivedByBob, forged, "room-1", 0, "alice", 1);
+  assert.deepStrictEqual(new TextDecoder().decode(opened), "anything, as alice");
 });
 
 test("ReplayWindow accepts new counters, refuses repeats and ancient ones", () => {

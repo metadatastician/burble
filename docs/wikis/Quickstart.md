@@ -17,7 +17,7 @@ Full guide: [QUICKSTART-USER.adoc](https://github.com/hyperpolymath/burble/blob/
 If you also want Claude Code (or another AI tool) to talk over the same channel, run the AI bridge:
 
 ```bash
-deno run --allow-net --allow-env client/web/burble-ai-bridge.js
+bun client/web/burble-ai-bridge.js
 ```
 
 …then the page picks it up automatically (look for the green "bridge online" dot in the **AI Channel** card).

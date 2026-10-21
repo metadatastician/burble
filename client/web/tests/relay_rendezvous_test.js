@@ -9,27 +9,26 @@
 // opaque SDP blobs.
 
 import assert from "node:assert";
-import { test } from "./runner.js";
+import { test, spawnServer } from "./runner.js";
 
 const PORT = 7601;
 const BASE = `http://127.0.0.1:${PORT}`;
 
 async function startRelay(env = {}) {
-  const cmd = new Deno.Command("deno", {
-    args: ["run", "--allow-net", "--allow-env", "../../../signaling/relay.js"],
+  const proc = await spawnServer("../../../signaling/relay.js", {
     cwd: import.meta.dirname,
     env: { RELAY_PORT: String(PORT), RELAY_HOST: "127.0.0.1", ...env },
-    stdout: "null",
-    stderr: "null",
   });
-  const proc = cmd.spawn();
-  await new Promise((r) => setTimeout(r, 800));
+  // Poll instead of sleeping: the relay must be listening before the first
+  // request, and a dead child has to say so rather than look like a wrong
+  // status code.
+  await proc.waitReady(`${BASE}/health`);
   return proc;
 }
 
-function stopRelay(proc) {
-  if (!proc) return;
-  try { proc.kill("SIGTERM"); } catch (_) {}
+async function stopRelay(proc) {
+  // Waits for exit, so the next test's relay can bind the same port.
+  if (proc) await proc.stop();
 }
 
 test({
@@ -60,7 +59,7 @@ test({
       assert.strictEqual(get2.status, 200);
       assert.strictEqual(await get2.text(), answer, "creator gets exactly the answer bytes");
     } finally {
-      stopRelay(relay);
+      await stopRelay(relay);
       await new Promise((r) => setTimeout(r, 100));
     }
   },
@@ -78,7 +77,7 @@ test({
       assert.strictEqual(res.status, 413, "body over the cap is refused");
       await res.body?.cancel();
     } finally {
-      stopRelay(relay);
+      await stopRelay(relay);
       await new Promise((r) => setTimeout(r, 100));
     }
   },
@@ -103,7 +102,7 @@ test({
       const upd = await fetch(`${BASE}/room/room-a/answer`, { method: "PUT", body: "a-ans" });
       assert.strictEqual(upd.status, 200, "existing rooms remain writable at the ceiling");
     } finally {
-      stopRelay(relay);
+      await stopRelay(relay);
       await new Promise((r) => setTimeout(r, 100));
     }
   },
@@ -122,7 +121,7 @@ test({
       assert.strictEqual(body.ok, true);
       assert.strictEqual(typeof body.rooms, "number");
     } finally {
-      stopRelay(relay);
+      await stopRelay(relay);
       await new Promise((r) => setTimeout(r, 100));
     }
   },
@@ -157,7 +156,7 @@ test({
       );
       await denied.body?.cancel();
     } finally {
-      stopRelay(relay);
+      await stopRelay(relay);
       await new Promise((r) => setTimeout(r, 100));
     }
   },

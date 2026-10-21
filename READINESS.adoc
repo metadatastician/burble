@@ -167,7 +167,7 @@ CI status (2026-05-30):
   every PR + push, as an advisory (`continue-on-error: true`) job. Graduation to
   required-for-merge is gated on parity with the `.res` fallback (Burble grade B
   target).
-* Web-client tests: `web-client-tests.yml` runs the Deno test suite at
+* Web-client tests: `web-client-tests.yml` runs the Bun test suite at
   `client/web/tests/` (5 files / 659 lines) against the compiled ReScript output
   (`*.res.mjs`) on every PR. Migration of the test suite to the `.affine` output
   is gated by STATE.a2ml Phase 5 closure.

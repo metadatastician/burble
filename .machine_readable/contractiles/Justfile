@@ -91,7 +91,7 @@ build-proofs:
 
 # Build web client
 build-client:
-    cd client/web && deno task build
+    cd client/web && bun run build
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # RUN
@@ -119,22 +119,22 @@ p2p:
 
 # Start AI bridge (lets Claude Code send/receive via curl)
 ai-bridge:
-    deno run --allow-net client/web/burble-ai-bridge.js
+    bun client/web/burble-ai-bridge.js
 
 # P2P voice + AI bridge together
 p2p-ai:
-    deno run --allow-net client/web/burble-ai-bridge.js &
+    bun client/web/burble-ai-bridge.js &
     sleep 1
     xdg-open "file://{{justfile_directory()}}/client/web/p2p-voice.html"
 
 # Start signaling relay (room-name discovery — run on any reachable machine)
 relay:
-    deno run --allow-net --allow-env signaling/relay.js
+    bun signaling/relay.js
 
 # Full stack: relay + AI bridge + P2P voice (run this on the host machine)
 full:
-    deno run --allow-net --allow-env signaling/relay.js &
-    deno run --allow-net client/web/burble-ai-bridge.js &
+    bun signaling/relay.js &
+    bun client/web/burble-ai-bridge.js &
     sleep 1
     xdg-open "file://{{justfile_directory()}}/client/web/p2p-voice.html"
 
@@ -205,7 +205,7 @@ wiki-sync:
 
 # Start the web client dev server
 client:
-    cd client/web && deno task dev
+    cd client/web && bun run dev
 
 # Build the selur-compose binary from the tools/selur-compose/ workspace.
 # Once selur-compose ships as a submodule with a published crate, this becomes

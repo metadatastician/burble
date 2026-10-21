@@ -5,7 +5,14 @@
 #
 # Publish VeriSimDB container image to GHCR.
 #
-# Triggered manually or on a weekly schedule.
+# Triggered manually. It used to run weekly as well; that schedule was removed
+# on 2026-10-21 because it published an image for a *different* project — it
+# builds from hyperpolymath/nextgen-databases, not from this tree — so every
+# Monday 04:00 turned burble's board red over something burble cannot fix
+# (11 of its last 15 runs failed, mostly on that dependency, not on a change
+# here). Publishing that image is nextgen-databases' job. Kept as a manual
+# dispatch in case someone needs it from here.
+#
 # Builds from hyperpolymath/nextgen-databases (verisimdb/ subdirectory).
 # Pushes to ghcr.io/hyperpolymath/verisimdb.
 #
@@ -19,8 +26,6 @@ on:
         description: 'Image tag to publish (default: latest)'
         required: false
         default: latest
-  schedule:
-    - cron: '0 4 * * 1' # weekly, Monday 04:00 UTC
 permissions:
   actions: read
   contents: read

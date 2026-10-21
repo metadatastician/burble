@@ -19,6 +19,9 @@ workflows:
     '.github/workflows/codeql.yml':
         - 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1'
         - 'github/codeql-action@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee'
+    '.github/workflows/conformance.yml':
+        - 'actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333'
+        - 'hyperpolymath/standards@01c9b0c9f2646ebea0b30a9588462642ac94aee9'
     '.github/workflows/dependency-audit.yml':
         - 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1'
         - 'dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8'
@@ -33,9 +36,10 @@ workflows:
         - 'mlugg/setup-zig@v2.2.1'
         - 'taiki-e/install-action@8cca0918f8471c33515202b73f56ab27f2bed283'
     '.github/workflows/governance.yml':
-        - 'hyperpolymath/standards@0f2d9b5447d3d6e56b41fe69d54e834849d7c932'
+        - 'hyperpolymath/standards@01c9b0c9f2646ebea0b30a9588462642ac94aee9'
     '.github/workflows/hypatia-scan.yml':
-        - 'hyperpolymath/standards@0f2d9b5447d3d6e56b41fe69d54e834849d7c932'
+        - 'actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333'
+        - 'hyperpolymath/standards@01c9b0c9f2646ebea0b30a9588462642ac94aee9'
     '.github/workflows/idris-abi.yml':
         - 'actions/checkout@v7.0.1'
     '.github/workflows/install-roundtrip.yml':
@@ -53,17 +57,13 @@ workflows:
     '.github/workflows/labels.yml': []
     '.github/workflows/lock-sync-gate.yml': []
     '.github/workflows/mirror.yml':
-        - 'hyperpolymath/standards@0f2d9b5447d3d6e56b41fe69d54e834849d7c932'
+        - 'hyperpolymath/standards@01c9b0c9f2646ebea0b30a9588462642ac94aee9'
     '.github/workflows/no-js-scan.yml':
         - 'actions/checkout@v7.0.1'
     '.github/workflows/oikosbot.yml':
         - 'actions/checkout@v7.0.1'
         - 'github/codeql-action@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee'
         - 'hyperpolymath/oikosbot@3fdad0c2b027f328e784ecf08caf62bf80a784c1'
-    '.github/workflows/pages.yml':
-        - 'actions/checkout@v7.0.1'
-        - 'actions/deploy-pages@v5.0.1'
-        - 'actions/upload-pages-artifact@v5.0.0'
     '.github/workflows/publish-verisimdb.yml':
         - 'actions/attest-build-provenance@v4.2.2'
         - 'actions/checkout@v7.0.1'
@@ -84,11 +84,11 @@ workflows:
     '.github/workflows/rhodibot.yml':
         - 'actions/checkout@v7.0.1'
     '.github/workflows/scorecard.yml':
-        - 'hyperpolymath/standards@9f68971b9fa254a80559432d9fcb7652b72e941d'
+        - 'hyperpolymath/standards@01c9b0c9f2646ebea0b30a9588462642ac94aee9'
     '.github/workflows/secret-scanner.yml':
-        - 'hyperpolymath/standards@0f2d9b5447d3d6e56b41fe69d54e834849d7c932'
+        - 'hyperpolymath/standards@01c9b0c9f2646ebea0b30a9588462642ac94aee9'
     '.github/workflows/spark-theatre-gate.yml':
-        - 'hyperpolymath/standards@0f2d9b5447d3d6e56b41fe69d54e834849d7c932'
+        - 'hyperpolymath/standards@01c9b0c9f2646ebea0b30a9588462642ac94aee9'
     '.github/workflows/static-analysis-gate.yml':
         - 'actions/checkout@v7.0.1'
         - 'actions/download-artifact@v8.0.2'
@@ -96,7 +96,6 @@ workflows:
         - 'erlef/setup-beam@v1.24.1'
     '.github/workflows/web-client-tests.yml':
         - 'actions/checkout@v7.0.1'
-        - 'denoland/setup-deno@v2.0.5'
         - 'oven-sh/setup-bun@v2.2.0'
     '.github/workflows/workflow-safety.yml':
         - 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1'
@@ -148,6 +147,11 @@ dependencies:
         commit: 'sha1-9000827ccba6bdab643e8b6fd33ac0654aef8333'
         owner_id: 44036562
         repo_id: 192626254
+    'actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333':
+        ref: 'v8.0.2'
+        commit: 'sha1-9000827ccba6bdab643e8b6fd33ac0654aef8333'
+        owner_id: 44036562
+        repo_id: 192626254
     'actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a':
         ref: 'v7.0.1'
         commit: 'sha1-043fb46d1a93c77aae656e7c1c64a875d1fc6a0a'
@@ -170,11 +174,6 @@ dependencies:
         repo_id: 496012378
         uses:
             - 'actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f'
-    'denoland/setup-deno@v2.0.5':
-        ref: 'v2.0.5'
-        commit: 'sha1-22d081ff2d3a40755e97629de92e3bcbfa7cf2ed'
-        owner_id: 42048915
-        repo_id: 356423100
     'docker/build-push-action@v7.4.0':
         ref: 'v7.4.0'
         commit: 'sha1-c3c9e263c25d99ce0380d002d59b67737d91b0dc'
@@ -255,31 +254,11 @@ dependencies:
         commit: 'sha1-c1c9fa07992a02c1fd3d67a0dc1b08cccb852aef'
         owner_id: 6759885
         repo_id: 1352485172
-    'hyperpolymath/standards@0f2d9b5447d3d6e56b41fe69d54e834849d7c932':
+    'hyperpolymath/standards@01c9b0c9f2646ebea0b30a9588462642ac94aee9':
         ref: 'main'
-        commit: 'sha1-0f2d9b5447d3d6e56b41fe69d54e834849d7c932'
+        commit: 'sha1-01c9b0c9f2646ebea0b30a9588462642ac94aee9'
         owner_id: 6759885
         repo_id: 1116521501
-        uses:
-            - 'actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9'
-            - 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1'
-            - 'actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a'
-            - 'dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de'
-            - 'editorconfig-checker/action-editorconfig-checker@51f63319f592f97930c73d9c46184d20bd206393'
-            - 'erlef/setup-beam@54075bcc5e249e4758d363f27d099f55d843f124'
-            - 'github/codeql-action@b96794f015dfd88f77b49b1c93e0fa7110f94c63'
-            - 'ossf/scorecard-action@2d1146689b8cda280b9bc96326124645441f03bc'
-            - 'webfactory/ssh-agent@e83874834305fe9a4a2997156cb26c5de65a8555'
-    'hyperpolymath/standards@9f68971b9fa254a80559432d9fcb7652b72e941d':
-        ref: 'main'
-        commit: 'sha1-9f68971b9fa254a80559432d9fcb7652b72e941d'
-        owner_id: 6759885
-        repo_id: 1116521501
-        uses:
-            - 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1'
-            - 'actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a'
-            - 'github/codeql-action@b96794f015dfd88f77b49b1c93e0fa7110f94c63'
-            - 'ossf/scorecard-action@2d1146689b8cda280b9bc96326124645441f03bc'
     'mlugg/setup-zig@v2.2.1':
         ref: 'v2.2.1'
         commit: 'sha1-d1434d08867e3ee9daa34448df10607b98908d29'

@@ -29,17 +29,21 @@ Severity is about **consequence if left alone**, not effort.
 
 ## Summary
 
-| Domain | Items | HIGH |
+Counted from the entries below on 2026-10-21 — the numbers are a claim like any
+other, so they are derived rather than carried forward. `HIGH` is split as
+`open / resolved`; the two add up to the HIGH-labelled items in that section.
+
+| Domain | Items | HIGH (open / resolved) |
 |---|---|---|
-| Build | 1 | 0 (resolved) |
-| Supply chain | 4 | 3 |
-| CI/CD | 5 | 3 |
-| Licence | 4 | 3 |
-| Documentation | 6 | 3 |
-| Code | 4 | 3 |
-| Proof | 4 | 2 |
-| Test | 3 | 1 |
-| **Total** | **31** | **18 open + 1 resolved** |
+| Build | 1 | 0 / 1 |
+| Supply chain | 4 | 1 / 2 |
+| CI/CD | 9 | 2 / 3 |
+| Licence | 4 | 4 / 0 |
+| Documentation | 6 | 3 / 0 |
+| Code | 9 | 5 / 0 |
+| Proof | 4 | 1 / 1 |
+| Test | 3 | 1 / 0 |
+| **Total** | **40** | **17 / 7** |
 
 ---
 
@@ -111,7 +115,7 @@ persistent-store client.
 
 **Next move:** add `tag:` or `ref:` pinning an audited commit.
 
-### S-3 — three `deno.json` manifests, zero `deno.lock` · HIGH
+### S-3 — three `deno.json` manifests, zero `deno.lock` · HIGH · PARTIAL 2026-10-21
 
 ```
 git ls-tree -r --name-only origin/main | grep -c deno.lock   # -> 0
@@ -120,7 +124,17 @@ git ls-tree -r --name-only origin/main | grep deno.json      # -> admin/, client
 
 Deno dependencies are unpinned and the JS/TS side is not reproducible.
 
-**Next move:** `deno cache --lock=deno.lock --lock-write` in each, commit.
+**Partly resolved 2026-10-21, on the Bun path.** Bun is now the estate default,
+and each of the three JS/TS packages has a committed `bun.lock`
+(`client/web`, `client/lib`, `scripts`), so the default install is reproducible.
+The Deno route is still unpinned for `admin/`, `client/lib/` and `client/web/`
+(only `scripts/deno.lock` exists, and `client/lib/deno.lock` is deliberately
+gitignored). That is the remaining half, and it now matters only if someone runs
+Deno by hand: nothing in CI does, and no documented command does.
+
+**Next move:** `deno cache --lock=deno.lock --lock-write` in each, commit — or
+record that Deno installs are unsupported as reproducible and say so in the
+compatibility job's comment.
 
 ### S-4 — two `build.zig`, zero `build.zig.zon` · MEDIUM
 
@@ -131,40 +145,91 @@ currently vendors rather than fetches.
 
 ## CI/CD
 
-### C-1 — eight workflows have NEVER produced a single success · HIGH
+### C-1 — six workflows have NEVER started, and four more have not run since the summer · HIGH
+
+Re-measured 2026-10-21 18:30Z, last twelve runs per workflow, excluding the
+20-run mass event at 18:26 (C-8). The previous version of this entry counted
+the whole history, which conflated three different failures: a workflow that
+never *starts*, one that starts and fails, and one that has not been *triggered*
+in months. Only the first is a workflow defect.
 
 ```
-gh run list --repo metadatastician/burble --workflow <w>.yml --limit 100 \
-  --json conclusion | jq 'group_by(.conclusion)|map({(.[0].conclusion):length})|add'
+for w in .github/workflows/*.yml; do
+  gh api "repos/metadatastician/burble/actions/workflows/$(basename $w)/runs?per_page=12" \
+    --jq '[.workflow_runs[].conclusion // .status] | group_by(.) | map("\(.[0]):\(length)") | join(",")'
+done
 ```
 
-| Workflow | Conclusions (last ≤100) |
+**Never starts (6) — `startup_failure`, zero jobs, no log, no annotation.**
+Every one of them calls a reusable workflow in another repository; see C-6.
+
+| Workflow | Last 12 |
 |---|---|
-| `governance.yml` | failure 99, startup_failure 1 |
-| `instant-sync.yml` | failure 98, startup_failure 2 — logs `Bad credentials` (expired PAT) |
-| `secret-scanner.yml` | failure 95, startup_failure 5 |
-| `install-roundtrip.yml` | failure 47, startup_failure 3, cancelled 9 |
-| `pages.yml` | startup_failure 1 (one run, ever) |
-| `publish-verisimdb.yml` | failure 12, startup_failure 1 |
-| `release.yml` | failure 1 |
-| `push-email-notify.yml` | skipped 93, startup_failure 7 — never ran a real job |
+| `governance.yml` | startup_failure 11, failure 1 |
+| `hypatia-scan.yml` | startup_failure 11, failure 1 |
+| `scorecard.yml` | startup_failure 11, failure 1 |
+| `secret-scanner.yml` | startup_failure 11, success 1 |
+| `spark-theatre-gate.yml` | startup_failure 11, success 1 |
+| `conformance.yml` | startup_failure 5 (new; never run) |
 
-Five more sit above 80% red. **`secret-scanner` is a security gate that has
-never once run clean.** Red is the normal state here, which means nobody can
-be reading the board — the signal is gone.
+**Starts and fails (2).**
 
-**Next move:** triage as a batch, not individually. Six of these are
-reusable-callers whose lockfile entries were missing until #190; re-measure
-after it merges and only then chase what remains.
+| Workflow | Last 12 | Why |
+|---|---|---|
+| `publish-verisimdb.yml` | failure 9, startup_failure 3 | Weekly build of `nextgen-databases`' image from this tree — nothing here can fix it. Weekly cron removed 2026-10-21; dispatch kept. |
+| `instant-sync.yml` | failure 10, startup_failure 2 | `FARM_DISPATCH_TOKEN` present but expired (`Bad credentials`). The guard checks presence, not validity. Dormant since 2026-07-20. |
 
-### C-2 — `no-js-scan` is structurally incapable of failing · HIGH
+**Dormant — not red, not green either (3).**
 
-`no-js-scan.yml:99` ends `exit 0`, commented `# Warn-first: never fail the
-build.` History: **24 runs, 24 successes** — because it cannot be anything
-else.
+| Workflow | Last run | Why |
+|---|---|---|
+| `install-tests.yml` | 2026-09-12 success | Path-filtered to installer files; nothing has touched them. Green when it runs. |
+| `install-roundtrip.yml` | 2026-09-12 success | Same. |
+| `mirror.yml` | never ran a job | 12/12 `skipped`: `mirror-reusable.yml` gates every forge on a repo variable (`GITLAB_MIRROR_ENABLED`, …) and none is set here. Opt-in by design, but it means burble is mirrored nowhere. |
+| `release.yml` | 2026-03-22 failure | One run, ever. Untested, not a red streak. |
+| `push-email-notify.yml` | 2026-07-20 skipped | Dormant by design (`PUSH_EMAIL_ENABLED` unset). |
 
-**Next move:** either arm it or delete it. A gate that cannot fail is worse
-than no gate: it converts an unknown into a false assurance.
+**Green (18)** — `boj-build`, `casket-pages`, `codeql`, `dependency-audit`,
+`dogfood-gate`, `elixir-ci`, `idris-abi`, `joinery-native`, `lock-sync-gate`,
+`no-js-scan`, `oikosbot`, `rhodibot`, `static-analysis-gate`,
+`web-client-tests`, `workflow-safety`, `affinescript-canary`, `label-triage`,
+`labels` — measured, not assumed. (31 workflows: 18 + 5 dormant + 6 that never
+start + 2 that fail; `pages.yml` was deleted on 2026-10-21.)
+
+So the board is not "mostly red". It is **twenty green lanes, six lanes that
+cannot start, and two that never could have passed** — and because the six are
+the security and conformance lanes, the green majority is the wrong half of
+the surface. `secret-scanner` is the one to keep in view: it is a security gate
+with a single success in its last twelve runs.
+
+**Next move:** C-6 for the six. For the rest, the actions landed on 2026-10-21:
+the weekly VeriSimDB cron is gone, `pages.yml` (a second, never-working
+deployer of the same Pages environment) is deleted, and CodeQL no longer
+cancels its own `main` scan.
+
+### C-2 — `no-js-scan` cannot fail, and the policy says it must not yet · HIGH · PARTIAL 2026-10-21
+
+`no-js-scan.yml` ends `exit 0`, commented `# Warn-first: never fail the build.`
+History: 45 runs, 45 successes — it is green on every input, which is
+indistinguishable from a workflow that does nothing.
+
+The obvious "fix" is wrong. `standards/docs/NO-JAVASCRIPT-SOURCE-POLICY.adoc`
+is explicit that a repo flips from warn to block **when its own surface reaches
+zero** (`gossamer` is the worked example) and records burble at **14 files** on
+2026-06-02. Arming `exit 1` here would be red on every run from the day it
+landed, on 25 files that the migration plan already knows about.
+
+What *was* missing is any measurement of direction, and that is the actual
+defect: burble is at **25 files today**, up 79% since the policy was written,
+and 45 consecutive green runs said nothing about it. The workflow now fetches
+the base commit, diffs additions, lists them in the step summary and annotates
+them — still non-blocking, per policy, but no longer blind.
+
+**Next move (owner decision, upstream):** the policy has two states, "warn
+while non-zero" and "block at zero", and no state for "non-zero and growing".
+Either accept growth, or add a ratchet state (`standards` issue needed) so that
+`a repo at N files may not exceed N`. Until then this entry records the number
+and its direction: **25, rising.**
 
 ### C-3 — `static-analysis-gate` zeroes its own findings on error · HIGH
 
@@ -178,7 +243,7 @@ History: 96/100 green, on a repo that does not compile.
 zero. `|| echo 0` on a *severity count* is the fake-gate pattern in its purest
 form.
 
-### C-4 — `web-client-tests` masks ~5 known-broken test files · HIGH
+### C-4 — `web-client-tests` masks ~5 known-broken test files · HIGH · RESOLVED 2026-10-21
 
 `web-client-tests.yml:46` is `continue-on-error: true`. `TEST-NEEDS.md`
 separately records that ~5 of the 10 JS test files import
@@ -186,13 +251,239 @@ separately records that ~5 of the 10 JS test files import
 a path that does not exist (the modules live at `client/lib/src/`). All 22
 "success" runs are green regardless.
 
-**Next move:** fix the import paths, then arm the job.
+**Resolved 2026-10-21.** The import paths were the symptom; the cause was that
+only the two E2EE files ran under Bun and the other ten ran under Deno in a
+`continue-on-error` job. `tests/runner.js` now picks the runner and
+`spawnServer()` starts the helpers on either, so *all* twelve files run in one
+gating Bun job with no `continue-on-error` anywhere on that path:
+
+```
+cd client/web && bun install && bun run res:build && bun test tests/
+ 97 pass, 0 fail — 12 files
+```
+
+There is no Deno job left in that workflow at all — one runner, nothing
+advisory, nothing to keep in sync.
 
 ### C-5 — Dialyzer advisory lane 74 days past its stated re-arm · MEDIUM
 
 `elixir-ci.yml:170` `continue-on-error: true`, honestly commented
 "GATE NARROWED 2026-05-25 … re-arm in a follow-up". The follow-up has not
 happened.
+
+### C-6 — every external-reusable caller stopped starting at 17:18, with no file change · HIGH · RESOLVED 2026-10-21
+
+Six workflows report `startup_failure` — zero steps, no log, no annotation —
+on every commit since `86e139dd`. The set is exactly the set of workflows that
+call a reusable workflow in another repository:
+
+| Workflow | Callee | Conclusion |
+|---|---|---|
+| `governance.yml` | `hyperpolymath/standards/…/governance-reusable.yml` | startup_failure |
+| `secret-scanner.yml` | `…/secret-scanner-reusable.yml` | startup_failure |
+| `scorecard.yml` | `…/scorecard-reusable.yml` | startup_failure |
+| `spark-theatre-gate.yml` | `…/spark-theatre-gate.yml` | startup_failure |
+| `hypatia-scan.yml` | `…/hypatia-scan-reusable.yml` | startup_failure |
+| `conformance.yml` (new) | `…/deed-conformance.yml`, `…/k9-conformance.yml` | startup_failure |
+
+`mirror.yml` calls a reusable too, but only on `push: main`, where it has been
+`skipped`. Every workflow that does **not** call an external reusable —
+`Web Client Tests`, `Lock Sync Gate`, `Dogfood Gate`, `Idris2 ABI`,
+`Static Analysis Gate`, `AffineScript Canary`, `Workflow safety`, CodeQL, and
+the rest — is green on the same SHAs.
+
+The transition is one commit and no workflow edit:
+
+```
+17:17:17  d265df87  governance.yml  failure           # ran; failed in "Set up job" with the
+                                                      # erlef/setup-beam annotation fixed by 88b84ed
+17:18:55  86e139dd  governance.yml  startup_failure   # 86e139dd changed
+                                                      # client/web/tests/signaling_relay_test.js only
+```
+
+So neither the YAML, the pin, nor the callee is the variable *within* this
+repository's history. What was ruled out, in order:
+
+- **the callee is missing at the pin** — all eight callee files exist at
+  `0d47b892`, and every `with:` input we pass is declared by the callee's
+  `on.workflow_call.inputs` (checked mechanically for all eight);
+- **a poisoned callee lock** — `scripts/check-upstream-pins.sh` reports
+  *9 pins clean* at `0d47b892`; the 13-self-SHA defect was `0f2d9b54`/`9f68971b`
+  and is what `88b84ed` fixed;
+- **the callee repo moved** — `hyperpolymath/standards` is public,
+  not archived, not disabled, and answered normally throughout;
+- **the estate is down** — `cicd-squabbler` and `panic-attack` ran
+  standards-calling scheduled lanes green at 04:02 and 04:00 today, so external
+  reusable calls work elsewhere in the estate.
+
+There is also a discriminator inside this repository. `dogfood-gate.yml` is
+green and calls two **actions** in another repository
+(`hyperpolymath/deed-ecosystem/validate-action`, `hyperpolymath/k9-ecosystem/
+validate-action`); the six red workflows call **reusable workflows** in another
+repository. Cross-repo actions resolve; cross-repo reusable workflows do not.
+This difference is consistent with a selected-actions policy permitting those
+action references while excluding the reusable-workflow references; it does
+not establish the cause.
+
+A remaining hypothesis is the effective Actions policy for **this** repository.
+"Allow select actions and reusable workflows" uses a single selected-actions
+policy covering both actions and reusable workflows. Allowed owners, patterns
+and references can permit one set while excluding another. Repository and
+organisation policies must be inspected before attributing `startup_failure`
+to a policy restriction.
+
+It cannot be confirmed from here. The token this repository's automation runs
+with is read-only for Actions administration:
+
+```
+gh api repos/metadatastician/burble/actions/permissions                 # 403
+gh api repos/metadatastician/burble/actions/permissions/selected-actions # 403
+gh workflow run governance.yml --ref <branch>                           # 403 on dispatch
+```
+
+**Next move (needs repository/organisation admin):** inspect the effective
+repository and organisation Actions policies, including the selected-actions
+rules and inherited restrictions. In Settings → Actions → General, check
+whether `hyperpolymath/standards/.github/workflows/*` is permitted and adjust
+the selected references if needed. Consider "Allow all actions and reusable
+workflows" only after that inspection and if the organisation policy permits
+it. If the effective policy already permits these references, investigate
+fork-secret and outside-collaborator approval settings and other startup
+diagnostics. **`startup_failure` with no steps or annotation on the external
+reusable callers is evidence to investigate policy, not proof of the cause.**
+The earlier YAML investigation is recorded in C-1 and `88b84ed`.
+
+**Resolved 2026-10-21.** It was the pin, not the policy. The A/B is in
+`e085bb9`: one caller moved to `standards@01c9b0c9`, five stayed on
+`0d47b892`, and on that single push the moved one started and ran while the
+other five reported `startup_failure`. All seven pins moved; all six lanes now
+start and pass. `0d47b892` is lock-clean and identical to `01c9b0c9` in every
+way this repository can observe — see the amendment to ADR-0017, which now
+requires a pin to be *demonstrated callable* rather than inferred.
+
+### C-8 — every workflow on the branch failed to start at 18:26, for one commit only · MEDIUM · DID NOT RECUR
+
+At 18:26Z on 2026-10-21, all twenty workflows triggered by `9731bd0` reported
+`startup_failure` — including `lock-sync-gate.yml`, which has no `uses:`, no
+secrets, no matrix and no container, and `web-client-tests.yml`, which had been
+green nine minutes earlier on the parent commit. Four minutes before, at 18:20,
+the same twenty ran normally on `ce5aa20` (all green except the six in C-6).
+
+So this is a second, distinct event: C-6 is six lanes that never start, C-8 is
+everything failing to start at once, once.
+
+What is known:
+
+- `9731bd0` is authored by `coderabbitai[bot]`, and the pull request was
+  `MERGEABLE` throughout; `git diff --name-status ce5aa20 9731bd0 -- .github/`
+  is **empty** — not one workflow file differs;
+- all 31 workflow YAML files parse, and `actions.lock` matches all 65 `uses:`
+  refs in both directions (checked locally, same algorithm as
+  `scripts/check-lock-sync.sh`);
+- the same owner's other repositories ran external-reusable lanes normally
+  inside that half hour (`marid` at 18:06, `gossamer` at 19:16), so it was not
+  the callee and not the organisation's reusable-workflow access.
+
+That leaves a repository-level Actions condition that existed for the length of
+that run: disabled Actions, a spending limit, or a policy change reverted
+afterwards. None of them is readable with the token available here (403 on
+`/actions/permissions`), and none of them leaves a log — `startup_failure` runs
+have zero jobs, so `GET /actions/runs/<id>/logs` is a 404.
+
+
+**Outcome:** the check this entry asked for was run. `6350164` (same branch,
+next push, human-authored) started thirteen workflows normally; only the six in
+C-6 failed, and those were failing for their own reason. The event did not
+recur, so it stays an observation rather than a defect. What it demonstrated is
+worth keeping: `startup_failure` is also what a repository-level condition
+looks like, and it is indistinguishable from a workflow-file fault without a
+control run. The control run is the next push.
+
+---
+
+### C-9 — the findings grid works; two of its three "critical" signals are rule defects · MEDIUM · OPEN
+
+The Hypatia grid posted its first real verdict on 2026-10-21: `panic-attack`
+2 critical / 1 high / 44 medium / 62 minor, `hypatia` 26 high / 68 medium,
+`pons asinorum` 15 medium. That is the grid doing its job. Adjudicating the
+top of it, however:
+
+| Finding | Verdict |
+|---|---|
+| `critical` · `CommandInjection` · `rel/commands/bolt.sh` | **False positive.** The match is `burble eval "Burble.Bolt.cli_main(System.argv())" -- "$@"` — an Elixir release `eval`, matched on the word. `"$@"` is quoted; there is no shell `eval` and no injection. |
+| `critical` · `HardcodedSecret` · `server/priv/repo/init_verisimdb.sh` | **False positive as stated** — the line is `VERISIMDB_API_KEY="${VERISIMDB_API_KEY:-}"`, an environment read with an empty default. It flagged the right line for the wrong reason: the header it fed was assembled as a string for the shell to re-split, so POSIX sh passed curl `"Authorization:`, `Bearer`, `key"` as three words and the key never authenticated. **Fixed** (2026-10-21) by building the argv directly; the finding would have been correct if it had said "quoted string passed unquoted". |
+| 20 of the 26 `high` | `code_scanning_alerts/CSA003`: "code-scanning alert … is 36 days old (threshold: 30 days)". This is an ageing rule, not a defect; it counts how long *other* scanners' alerts have been open, and will report `high` forever unless those alerts are dismissed. |
+| `high` · `AtomExhaustion` · `server/test/.../circuit_breaker_test.exs` | `String.to_atom` in a test. Real rule, wrong weight: a test process cannot exhaust the atom table in any way that matters. |
+
+None of these is a reason to weaken the grid — the grid reported exactly what
+its inputs said. The refinement belongs upstream, in the rules:
+
+1. **panic-attack** — `CommandInjection` must not match a release-script `eval`
+   whose arguments are the language's own evaluator (`bin/<app> eval`, `mix
+   eval`, `iex`); and `HardcodedSecret` must not match a variable whose entire
+   value is an environment read with an empty default.
+2. **hypatia** — an ageing bucket (`CSA003`) is not the same severity class as
+   a defect, and should not colour a repository's badge the same way.
+3. Neither is Burble's to change from here; this entry is the record of the
+   adjudication and the reason the two `critical` cells do not describe two
+   live vulnerabilities.
+
+**Found — the findings grid can never compare revisions when the K9 grid is
+also posted.** `hypatia-scan-reusable.yml`'s "Read the previous verdict grid"
+step selects the previous comment with
+
+    select(.user.login == "github-actions[bot]"
+           and (.body | contains("<!-- verdict-grid:"))) | last
+
+That prefix matches **both** lanes: the K9 grid's marker is
+`<!-- verdict-grid:k9 …` and the findings grid's is `<!-- verdict-grid:hypatia …`.
+`last` then returns whichever was created most recently — the K9 comment, since
+the K9 lane posts second — so the findings renderer is handed a grid whose
+profile is the K9 lane's, correctly refuses to compare, and prints
+`— no comparable baseline`. The K9 side is unaffected because
+`k9-conformance.yml` matches its own marker exactly.
+
+Verified here rather than inferred: the baseline block in this pull request's
+findings comment is stable and well-formed across runs (profile `d99bca26…`
+unchanged, sha moving `4550fb23` → `3ebe7d13`), and the run where the caller's
+workflow file did not change still reported no baseline — which falsifies the
+first explanation considered (that the profile covered the caller's file).
+
+**Upstream fix (one line):** filter on the lane marker —
+`contains("<!-- verdict-grid:hypatia")` — which is what the K9 lane already
+does. Until then, the delta column of the findings grid is uninformative in
+every repository that posts both grids, i.e. by design in all of them.
+
+**Next move:** file the two rule refinements against `panic-attack` and one
+against `hypatia`; keep the grid purple until then, because it is telling the
+truth about its inputs.
+
+### C-10 — the grid badges cost more than they bought · LOW · OPEN
+
+Both grid lanes could publish `badges/k9.json` and `badges/hypatia-grid.json`
+to a `governance-badges` branch on `main`, so a README could carry a live
+shields endpoint. The jobs were removed on 2026-10-21, an hour after they were
+written, because of what they cost:
+
+- a job with `contents: write` inside a workflow that runs on `pull_request`
+  scores 0 on the estate's token-permissions check. The check is reported per
+  pull request, so every PR would carry a red — which is exactly what happened:
+  after every lane went green, `Scorecard` was the only failure on #250, twice,
+  once for each new file;
+- splitting the job into a push-only workflow is the standard fix, but it only
+  moves the permission, it does not remove it: publishing to a branch in the
+  same repository needs either a write token or a GitHub App, and the App is the
+  only version that does not hand a general-purpose token to a job.
+
+What it bought: nothing the PR comment does not already carry. The grid renders
+its own shields line from the verdict (`![K9 L0–L2 green](…)`), so a reader sees
+the state where the state is. A repository README badge is a second copy of one
+number, in a different place, with a branch and a token behind it.
+
+**If it is wanted:** publish from a push-only workflow using a GitHub App
+installation token scoped to contents, never `github.token`, and accept the
+permanent token-permissions red on that one file — or keep the badge inside the
+comment, which is what happens now.
 
 ---
 
@@ -374,8 +665,9 @@ extension changed, and ReScript does not parse as AffineScript. Upstream
 > `.res` written in ReScript is not a face, and renaming `Foo.res` to
 > `Foo.affine` does not make it one — it produces a file that fails to parse.
 
-Measured on `affinescript-canary.yml` for this branch: **35 of 37 `.affine` files
-report `affinescript check failed`**. The number had never been visible — GitHub
+Measured on `affinescript-canary.yml` for this branch: **35 of 36 `.affine` files
+report `affinescript check failed`** (a 37th, deliberately broken probe file, was
+added and then removed to prove the canary was actually reporting). The number had never been visible — GitHub
 caps annotations at ten per check run, and the job log archive is not always
 reachable, so the canary reported a handful of files and hid the rest. It now
 emits the whole result as one annotation.
@@ -392,8 +684,8 @@ Two things hid it:
 Corrected in this branch: `MIGRATION.md` states that the compiler exists, that
 `.affine` must be valid AffineScript, and that it is not on the app's build path;
 `src/app/voice/E2EE.affine` (written here, and wrong in exactly this way) is
-rewritten as real AffineScript and **verified by the canary** — it is one of the
-two files that compile; the canary now emits the complete failure list as one
+rewritten as real AffineScript and **verified by the canary** — it is the only
+one of the 36 that compiles; the canary now emits the complete failure list as one
 annotation instead of being capped at ten.
 
 The rewrite is also the worked answer for the other 35: the failure was not the
@@ -412,6 +704,67 @@ AffineScript's `extern fn` is synchronous on the wasm target, and the Bun-ESM
 target's async externs are partial (upstream #122/#103). The pure parts — frame
 header, replay window, leader election, AAD, epoch bookkeeping — are portable
 now; the WebCrypto boundary is not.
+
+### CODE-1d — `admin/deno.json` names entry points that do not exist · LOW · OPEN 2026-10-21
+
+`admin/deno.json` defines `gossamer:dev` / `gossamer:build` / `check` in terms of
+`dev-server.ts` and `build.ts`. Neither file is in the tree, and neither has ever
+existed in the 389 commits of history visible from this shallow clone:
+
+```
+find . -name '*.ts' -not -path '*/node_modules/*'           # -> nothing
+git log --all --pretty=format: --name-only --diff-filter=A \
+  | sort -u | grep -E '\.ts$'                               # -> signaling/relay-deno-deploy.ts only
+```
+
+So those tasks cannot run, and they are the reason the admin app "cannot
+currently be run from this repo" is stated twice (missing entry points *and*
+missing Gossamer shell). The `res:build` / `res:watch` / `clean` tasks shell
+out to `npx rescript` and require legacy npm/Node tooling; they are not ready
+for a Bun-only environment.
+
+**Next move:** either delete the three tasks and say so in `admin/README.adoc`
+(current: the README points at CODE-1d), or write the entry points. Do not
+convert the manifest to Bun until they exist — a `package.json` whose scripts
+point at missing files would just move the problem.
+
+### CODE-1e — nothing enforces that only the epoch leader seals the room key · HIGH · OPEN 2026-10-21
+
+The design says one peer per epoch seals the group key: `e2ee.ex:16` — "One
+peer per epoch (the "key leader" — lowest peer id, deterministic)" — and
+`seal_group_key` / `seal_for_peer` are documented "**Peer-side** (leader only)".
+The server does not check it:
+
+```
+git show origin/main:server/lib/burble/media/e2ee.ex | sed -n 260,261p
+#   The caller must authenticate `from`; this function checks membership but
+#   does not enforce leadership or validate the blob's cryptographic contents.
+```
+
+`publish_sealed/5` therefore accepts a blob from any member, and the receiving
+side is no laxer: `E2EESession.onSealedKey` (`client/web/e2ee-session.js:213`)
+accepts a blob from any peer present in the key set and calls `setRoomKey`.
+Because only one blob per recipient per epoch is stored (later ones get
+`already_published`), a non-leader that publishes first wins the race and the
+victim encrypts under a key the attacker chose.
+
+This is **not** a documentation contradiction — the docstring is accurate about
+what is enforced. It is a missing control.
+
+**Found by** an automated review on #248, whose proposed patch was wrong in
+three ways and is not the fix: it mapped the failed check into the `else` clause
+so a non-leader's valid blob reports `:invalid_sealed_blob` instead of
+`:not_leader`; it made `room_channel_e2ee_test.exs:155` and `:220`
+intermittent, because `Auth.create_guest_session/1` assigns random ids
+(`auth.ex:63`) and those tests publish from Alice; and it ignored failover, which
+`e2ee.ex:40` records as not implemented mid-epoch.
+
+**A correct fix has to do all of:** compute the leader deterministically from the
+current membership and return a distinct `:not_leader` error (not a blob error);
+reject non-leader blobs on the client too, so the server is not the only
+defence; make the tests name the leader explicitly instead of assuming Alice is
+it; and decide what happens when the leader leaves mid-epoch, since a
+leader-only rule with no failover can strand a room without a key.
 
 ### CODE-1a — the client's E2EE module was not encryption · RESOLVED 2026-10-21
 
@@ -476,22 +829,22 @@ worth preserving.
 
 ## Proof
 
-### P-1 — no proof gate in CI at all · HIGH
+### P-1 — no proof gate in CI at all · HIGH · RESOLVED (found stale) 2026-10-21
 
-11 `.idr` modules and `burble-abi.ipkg` exist. No workflow builds them.
+This entry said "no workflow builds them" and cited `pages.yml` as the only
+idris2-touching workflow. Both halves are wrong, and the second one was
+actively misleading: `idris-abi.yml` exists, runs in an
+`idris2-pack` container, and executes `idris2 --build burble-abi.ipkg` — the
+ipkg form this entry asked for — on every pull request that touches
+`src/Burble/ABI/**`. It is green (9 of its last 12 runs, the rest the C-8
+event).
 
-```
-grep -rniE 'idris|coq|lean|proof' .github/workflows/
-# only pages.yml (an idris2-pack container running the Ddraig SSG — not the
-# ABI proofs) and rhodibot.yml (a grep count)
-```
+`pages.yml` never touched the proofs at all; it ran the Ddraig static-site
+generator. It has been deleted (see C-1) because `casket-pages.yml` deploys the
+same `github-pages` environment on the same trigger and is the one that works.
 
-The single idris2-touching workflow, `pages.yml`, has **one run in its entire
-history and it was a startup_failure.**
-
-**Next move:** an ipkg-based `idris2 --typecheck burble-abi.ipkg` job. Note the
-estate rule: per-file `idris2 --check` exits 0 on module-not-found *and* on
-unsolved holes, so it is a fake gate — the ipkg form is the honest one.
+What remains genuinely unverified is P-2 — that the Idris ABI and the Zig FFI
+still agree — which type-checking cannot answer.
 
 ### P-2 — `PROOF-NEEDS.md` marks Idris↔Zig mirroring "(DONE)" with nothing checking it · HIGH
 

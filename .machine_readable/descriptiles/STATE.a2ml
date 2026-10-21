@@ -21,8 +21,8 @@ purpose = "Modern, self-hostable, voice-first communications platform. Mumble su
 # path; "absent" = documented or stubbed only.
 works = [
   "P2P 1:1 voice page (client/web/p2p-voice.html, manual + relay signaling)",
-  "Claude-to-Claude AI data channel + Deno bridge (localhost:6474/6475)",
-  "Signaling relay (Deno + Cloudflare Worker variants)",
+  "Claude-to-Claude AI data channel + Bun bridge (localhost:6474/6475)",
+  "Signaling relay (Bun + Cloudflare Worker variants)",
   "Server SFU via ex_webrtc (media/peer.ex) + Phoenix control plane",
   "Auth (Guardian/bcrypt/magic links), rooms, presence, moderation, audit",
   "TURN REST credentials (RFC 5766)",

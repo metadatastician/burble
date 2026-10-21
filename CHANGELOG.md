@@ -10,6 +10,216 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — the two conformance matrices run on every pull request (2026-10-21)
+
+Both lanes now execute and both post their grid as an upserted comment on the
+pull request, which is what "in the PR system" means for a caller: the
+reusable workflow does the measuring, the caller only supplies the trigger,
+the permissions and the posting job.
+
+```
+DEED-K9 conformance   Validate DEED manifests / lint         pass
+                      Validate K9 contracts / validate      pass
+                      Post the K9 verdict grid              pass
+Hypatia Security Scan scan / Hypatia Neurosymbolic Analysis  pass
+                      Post the Hypatia verdict grid         pass
+```
+
+The K9 grid on this pull request, first run: contract typecheck 1/1, validator
+self-test 37/37, live corpus 3 pass / 8 fail. Second run, after the corpus fix
+below: 4/4, green, with the "since previous revision" baseline now embedded for
+the next comparison.
+
+### Removed — the grid badges, an hour after they were written (2026-10-21)
+
+`conformance.yml` and `hypatia-scan.yml` each grew a job that published the
+grid's `badge.json` to a `governance-badges` branch, so a README could carry a
+live shields endpoint. Both jobs needed `contents: write`, and a write-scoped
+job in a workflow that runs on `pull_request` scores 0 on the estate's
+token-permissions check — reported per pull request, so every PR would carry a
+red for a picture. With every other lane green, `Scorecard` was the only
+failure left on this one, twice, once per new file.
+
+The grid comment renders its own shields line from the verdict, so the endpoint
+duplicated a number that is already where the number is. Removed; DEBT C-10
+records what a badge branch would actually require.
+
+### Fixed — the K9 lane was right, and seven of its eight findings were the corpus's shape (2026-10-21)
+
+The first real run of the K9 lane reported eight failures in three groups; only
+one was a component defect.
+
+- **Three templates were being validated as components.** `template-{hunt,
+  kennel,yard}.k9.ncl` failed on unfilled `TODO:` placeholders — correctly, and
+  for the wrong reason: a template is not a component. The K9 contract says so
+  in as many words (`k9_contract.ncl` §6: the estate's templates are
+  `template-*.k9.ncl.in` — *"`.in` because a template is not a component and is
+  never loaded"*). Renamed to match. Validated as a component, one still fails
+  with seven errors — that is the point.
+- **Four generated files were tracked.** `generated/k9iser/*.k9` are
+  machine-written build output, covered by a `.gitignore` rule since before they
+  were committed. Untracked; nothing in the tree reads them.
+- **One real defect, in the most-read file in the directory.**
+  `examples/setup-repo.k9.ncl` demonstrates a `'Hunt` component that requests
+  network, filesystem and subprocess access while granting no capabilities
+  (`K9-S007`), carrying no `pedigree.signature` (`K9-S009`) and describing no
+  `side_effects` (`K9-S010`). Every copy of that example would have failed the
+  gate it is meant to teach. Fixed with all three, each annotated with the
+  section it satisfies.
+
+### Fixed — a false positive that was hiding a real defect (2026-10-21)
+
+The Hypatia grid's first verdict was `critical`, on two findings. One —
+`CommandInjection` in `rel/commands/bolt.sh` — is a false positive: the match is
+`burble eval "Burble.Bolt.cli_main(System.argv())" -- "$@"`, an Elixir release
+`eval` matched on the word, with `"$@"` quoted.
+
+The other, `HardcodedSecret` in `server/priv/repo/init_verisimdb.sh`, was wrong
+about its reason and right about its line. The line is an environment read with
+an empty default. But the value it fed was assembled as a string for the shell
+to re-split:
+
+```
+AUTH_HEADER="-H \"Authorization: Bearer ${VERISIMDB_API_KEY}\""
+curl ... ${AUTH_HEADER} ...
+```
+
+POSIX sh removes quotes during *parsing*, so by the time the unquoted expansion
+reached `curl` the quotes were literal characters and it received
+`"Authorization:`, `Bearer`, `key"` — three words, one malformed header. Any
+API key set through the environment was silently ignored. The header is now
+built as a real argument list, which both fixes the authentication and removes
+the pattern that produced the finding. Both `panic-attack` rule refinements this
+suggests are recorded in DEBT C-9.
+
+### Fixed — four workflows that were red for reasons that had nothing to do with the code (2026-10-21)
+
+The board read as "mostly red"; measured per workflow over the last twelve runs,
+it is 18 green, 6 that never start (DEBT C-6), 2 that never could have passed,
+and 5 dormant. Of the reds, only one was a fault in this repository's code, and
+none was a fault in this repository's YAML.
+
+- **`pages.yml` deleted.** It deployed the same `github-pages` environment as
+  `casket-pages.yml`, on the same `push: main` trigger, and had exactly one run
+  in its history — a `startup_failure` in July. `casket-pages` is the deployer
+  that works. Two workflow files racing for one environment is a coin flip, not
+  a fallback; if the Ddraig site generator is wanted it has to *replace*
+  casket-ssg, not run beside it. Its other effect was to `mkdir -p src` and copy
+  the README there, in a tree where `src/` holds the Idris ABI modules.
+- **`publish-verisimdb.yml` loses its weekly cron.** It builds and publishes an
+  image for `hyperpolymath/nextgen-databases` — a different project — from this
+  repository's CI, and 9 of its last 12 runs failed on that dependency. Monday
+  04:00 turned burble's board red over something burble cannot fix. The manual
+  dispatch stays.
+- **CodeQL stops cancelling its own `main` scan.** `cancel-in-progress: true`
+  applied to `push` as well, so a second push killed the analysis that uploads
+  the code-scanning baseline the next pull request is compared against — its
+  history was success 5 / cancelled 5. Now scoped to `pull_request`, where
+  cancelling a superseded run is always safe.
+- **`tests/ci/foundation_ci_fixes_test.sh` repaired and wired in.** It pinned
+  eight revision hashes, every one of which had moved, so it failed 5 of its 15
+  assertions against a healthy tree — and nothing ran it. The revision
+  assertions were duplicating `check-lock-sync.sh` and
+  `check-upstream-pins.sh` (which cover them more strictly), so they are gone;
+  the checks nothing else makes — Dependabot volume caps, CodeQL
+  `persist-credentials`, 40-hex `uses:` pins — stay, and now run as a step of
+  `lock-sync-gate.yml`. That step immediately caught the two new conformance
+  lanes using `actions/download-artifact@v8.0.2`, a movable tag; both are now
+  pinned to the sha the lock already recorded for it.
+
+### Changed — `no-js-scan` reports the trend, not just the total (2026-10-21)
+
+The gate is non-blocking on purpose: `NO-JAVASCRIPT-SOURCE-POLICY.adoc` flips a
+repository from warn to block once its surface reaches zero, and burble's is
+25 files. Arming it would have been red on every run from the day it landed.
+
+What it could not do was say anything about direction, and the policy records
+burble at **14** files on 2026-06-02 — so the surface has grown 79% during
+forty-five consecutive green runs. It now fetches the base commit, lists the
+files this change adds, and annotates them, while still exiting 0. Making *growth*
+blocking needs a third state in the upstream policy (DEBT C-2).
+
+### Fixed — three checks were red on `main` because of a lockfile one hop away (2026-10-21)
+
+`Validate Hypatia Baseline`, `Hypatia Neurosymbolic Analysis` and
+`Run Scorecard PR` failed in **"Set up job"** with zero steps, on every PR and on
+`main`, while nothing in this repository was wrong. The annotation blamed
+`erlef/setup-beam@54075bcc…` and `actions/checkout@3d3c42e5…` — actions this
+repository never references.
+
+A reusable-workflow pin `…/@<sha>` is validated at startup against **the
+callee's** `actions.lock` at that sha. `hyperpolymath/standards@0f2d9b54` and
+`@9f68971b` recorded 13 and 16 actions whose `ref:` was the commit sha itself; a
+self-SHA `ref:` is an invalid lockfile pin (standards#1271) and the runner
+refuses the job. `scripts/check-lock-sync.sh` could not see it: our lock and our
+YAML agreed.
+
+- **All six `hyperpolymath/standards` pins move to `0d47b8925912`** (2026-10-20),
+  the newest commit whose lock is clean for every action our called workflows
+  use. `actions.lock`'s transitive `uses:` list for that pin is regenerated to
+  what the callee actually uses at that commit (11 actions, not 9).
+- **`scripts/check-upstream-pins.sh`** makes the class detectable before a push:
+  for each pinned reusable workflow it reads the callee's workflow *and* lock at
+  the pinned sha, and fails on a missing record or a self-SHA `ref:`. It runs as
+  the `upstream-pins` job of `lock-sync-gate.yml` — the one workflow that
+  carries no `uses:` of its own, so the gate cannot be disabled by the fault it
+  detects. NO-LOCK and fetch failures warn rather than fail; see ADR-0017.
+
+### Changed — Bun is the runner, not an alternative (2026-10-21)
+
+The whole web-client suite now runs under Bun: **97 tests across 12 files, 0
+failures**. It used to be a split — Bun ran the two E2EE files, Deno ran
+everything else — because four suites spawned helper servers with
+`new Deno.Command("deno", …)`.
+
+- **`signaling/runtime.js`** is the one place that knows which runtime it is on.
+  It exports `env()`, `serve()`, `isBun`, `isDeno`, and adapts
+  `Deno.upgradeWebSocket` to Bun's `server.upgrade` + `websocket` handler
+  object. `signaling/relay.js` and `client/web/burble-ai-bridge.js` no longer
+  call a `Deno.*` API, and no documented command invokes Deno.
+- **`spawnServer()` in `tests/runner.js`** replaces the per-file `Deno.Command`
+  call sites (`Bun.spawn` under Bun, `Deno.Command` under Deno). The raw
+  WebSocket-upgrade probe was rewritten on `node:net`.
+- **The policy files were the cause.** Ten files told every agent and
+  contributor to prefer Deno over Bun — `0-AI-MANIFEST.a2ml` said
+  `deno-js-runtime = "NOT Node NOT npm NOT Bun"`,
+  `.github/copilot-instructions.md` said "No Node.js / npm / bun (use Deno)",
+  and `.machine_readable/ai/{.clinerules,.cursorrules,.windsurfrules}` said the
+  same. That is why a bot opened #248 to migrate the Elixir syntax checker to
+  Deno, and why #247's squash carried that migration into `main`. All ten now
+  say Bun, and `deno.json` files are described for what they are: template
+  compliance, with every task delegating to Bun.
+- **The Bun lane was red for a reason nobody could see.** GitHub's
+  `ubuntu-latest` image sets `HTTP_PROXY` (Ubuntu 26 since 2026-10-19) and Bun's
+  `fetch` honours it, so every request the tests made to a relay or bridge they
+  had just started on `127.0.0.1` went to the proxy and came back `200` with an
+  empty body. `tests/runner.js` now pins loopback into `NO_PROXY` before the
+  first request, and reports the proxy variables in failure messages. Deno's
+  fetch ignores them, which is why only the Bun lane showed it.
+- **`package.json` + `bun.lock`** in `client/web`, `client/lib` and `scripts`.
+  A manifest per ReScript package is mandatory for the Bun path: without one,
+  `bun x rescript` fails with `try_package_path: upward traversal did not find
+  '@rescript/core'`.
+- **`client/web/deno.json` tasks delegate to Bun** (`res:build` → `bun run
+  res:build`); there is no Deno-native task left to pick by mistake.
+- **CI**: `web-client-tests.yml` is a single gating Bun job. The Deno job is
+  gone, along with `denoland/setup-deno` — one runner, nothing advisory. Drift
+  check added: `client/lib` rebuilds its published artifacts and fails when
+  `git status --porcelain --untracked-files=all -- src` reports any change,
+  including newly generated files.
+
+That drift check found a real one: `client/lib/src/BurbleClient.res.mjs` had
+been **hand-edited** by the #33 security fix. It carried a `function
+secureIdSuffix()` definition and no export, where the compiler emits
+`let secureIdSuffix = (function () {…})` and exports it. Behaviour was
+identical, but the published artifact had stopped being compiler output — the
+exact thing `client/lib/README.adoc` tells contributors not to do. Regenerated,
+along with the long-missing `BurbleLOL.res.mjs`, so every published `.res` now
+has its compiled sibling in-tree.
+
+Also in this pass: `scripts/package.json` gives `check-elixir-syntax.mjs` a Bun
+route (`parsed 208 file(s), 0 with parse errors`); it never needed Deno.
+
 ### Added — the browser half of E2EE, and a frame format that works (2026-10-21)
 
 `client/web/e2ee.js` now covers the Encoded Transform layer and
@@ -102,8 +312,10 @@ end-to-end encrypted today** — DTLS-SRTP only — and
   `e2ee_requested:` (policy, not proof); `Privacy.e2ee_config/1` returns
   `enabled: false, implemented: false`; `GET /api/v1/setup/check` reports
   `e2ee_coordinator_running:` instead of the untrue `e2ee_keys_generated:`.
-- **Not implemented, stated plainly:** the browser half (WebCrypto X25519,
-  AES-GCM frames, WebRTC Encoded Transform) does not exist; the server-side
+- **Not implemented, stated plainly:** at the time of this entry the browser
+  half (WebCrypto X25519, AES-GCM frames, WebRTC Encoded Transform) did not
+  exist — it was written later the same day and is still not attached to calls;
+  the server-side
   coprocessor pipeline still runs in `:e2ee` rooms (keyless, but it should not
   run at all per ADR-0011 §3); there is no mid-epoch leader failover; nothing
   on this path is formally verified.

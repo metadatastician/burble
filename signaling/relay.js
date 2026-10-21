@@ -7,7 +7,7 @@
 // other by room name instead of copy-pasting codes. Zero data stored
 // after connection. No accounts, no logs, no tracking.
 //
-// Deploy: deno run --allow-net signaling/relay.js
+// Deploy: bun signaling/relay.js   (or: deno run --allow-net signaling/relay.js)
 // Or:     Cloudflare Workers (see signaling/worker.js)
 //
 // Protocol:
@@ -17,20 +17,22 @@
 //   GET  /room/:name/answer  — creator fetches SDP answer
 //   GET  /health              — health check
 
-const PORT = parseInt(Deno.env.get("RELAY_PORT") || "6476");
+import { env, serve } from "./runtime.js";
+
+const PORT = parseInt(env("RELAY_PORT", "6476"));
 // Bind address. Defaults to all interfaces so LAN peers can rendezvous; set
 // RELAY_HOST=127.0.0.1 to keep it loopback-only.
-const HOST = Deno.env.get("RELAY_HOST") || "0.0.0.0";
+const HOST = env("RELAY_HOST", "0.0.0.0");
 const TTL_MS = 60_000; // Rooms expire after 60 seconds
 
 // Cap a single stored blob. An SDP offer/answer is a few KiB; 64 KiB is a
 // generous ceiling that stops one PUT from ballooning memory on this
 // unauthenticated, all-interfaces-bound endpoint. Override with RELAY_MAX_BODY.
-const MAX_BODY_BYTES = parseInt(Deno.env.get("RELAY_MAX_BODY") || "65536");
+const MAX_BODY_BYTES = parseInt(env("RELAY_MAX_BODY", "65536"));
 
 // Cap the number of concurrent rooms so a flood of distinct names can't grow
 // the map without bound between the 30 s sweeps. Override with RELAY_MAX_ROOMS.
-const MAX_ROOMS = parseInt(Deno.env.get("RELAY_MAX_ROOMS") || "1000");
+const MAX_ROOMS = parseInt(env("RELAY_MAX_ROOMS", "1000"));
 
 // CORS origin policy.
 // This is a PUBLIC WebRTC signaling relay — browsers from any origin need to
@@ -41,7 +43,7 @@ const MAX_ROOMS = parseInt(Deno.env.get("RELAY_MAX_ROOMS") || "1000");
 // In production, restrict origins by setting ALLOWED_ORIGINS to a
 // comma-separated list:
 //   ALLOWED_ORIGINS="https://burble.example.com,https://app.example.com"
-const ALLOWED_ORIGINS = Deno.env.get("ALLOWED_ORIGINS") || "*";
+const ALLOWED_ORIGINS = env("ALLOWED_ORIGINS", "*");
 if (ALLOWED_ORIGINS === "*") {
   console.warn("[Burble Relay] WARNING: CORS allows all origins (ALLOWED_ORIGINS not set). Fine for local dev; set ALLOWED_ORIGINS in production.");
 }
@@ -56,7 +58,7 @@ setInterval(() => {
   }
 }, 30_000);
 
-Deno.serve({ port: PORT, hostname: HOST }, async (req) => {
+serve({ port: PORT, hostname: HOST }, async (req) => {
   const url = new URL(req.url);
   const origin = req.headers.get("Origin") || "";
   const allowedOrigin = ALLOWED_ORIGINS === "*"

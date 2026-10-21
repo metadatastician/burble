@@ -9,7 +9,9 @@ this repo**:
 
 * `public/index.html` loads `/src/App.res.mjs`, which is **not committed**
   — it requires a ReScript build (`deno task res:build` against
-  `deno.json`/`rescript.json`).
+  `deno.json`/`rescript.json`; the task shells out to `npx rescript`, and the
+  `dev-server.ts`/`build.ts` entry points it names are not in this checkout —
+  see `DEBT.md` CODE-1d).
 * Even built, it only runs inside the **Gossamer webview shell** (invoked
   via `window.__gossamer_invoke`), which is **not vendored** in this repo.
   In a plain browser every privileged command rejects by design

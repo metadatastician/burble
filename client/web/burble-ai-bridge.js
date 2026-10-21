@@ -3,7 +3,7 @@
 //
 // Burble AI Bridge — connects Claude Code to the P2P data channel.
 //
-// Run this in Deno alongside p2p-voice.html to give Claude programmatic
+// Run this with Bun (or Deno) alongside p2p-voice.html to give Claude programmatic
 // access to the WebRTC data channel. Exposes a local HTTP API that Claude
 // can call via shell commands (curl).
 //
@@ -16,7 +16,9 @@
 
 // Port can be overridden by env var so tests can run two bridges side-by-side.
 // Defaults to 6474 (HTTP) + 6475 (WebSocket relay) for normal use.
-const PORT = parseInt(Deno.env.get("BURBLE_AI_BRIDGE_PORT") || "6474");
+import { env, serve } from "../../signaling/runtime.js";
+
+const PORT = parseInt(env("BURBLE_AI_BRIDGE_PORT", "6474"));
 const messageQueue = [];
 let wsClient = null;
 
@@ -35,7 +37,7 @@ const MAX_SEND_PAYLOAD_BYTES = 65536;
 // every HTTP request (except /health) and the WebSocket upgrade must present
 // it — as `Authorization: Bearer <token>` or `?token=<token>`. Unset (the
 // default) keeps the zero-config localhost behaviour for the single-user case.
-const AUTH_TOKEN = Deno.env.get("BURBLE_AI_BRIDGE_TOKEN") || "";
+const AUTH_TOKEN = env("BURBLE_AI_BRIDGE_TOKEN", "");
 
 // SECURITY: the WebSocket relay (PORT+1) is the control channel that lets the
 // page drive Claude's data channel. WebSocket upgrades are NOT subject to the
@@ -83,7 +85,7 @@ const jsonResponse = (data, status = 200) =>
   });
 
 // HTTP server for Claude to interact with
-Deno.serve({ port: PORT, hostname: "127.0.0.1" }, async (req) => {
+serve({ port: PORT, hostname: "127.0.0.1" }, async (req) => {
   const url = new URL(req.url);
 
   // SECURITY: refuse requests a web page made to this localhost API. A browser
@@ -197,7 +199,19 @@ const HEARTBEAT_INTERVAL_MS = 15_000;
 const HEARTBEAT_TIMEOUT_MS = 5_000;
 
 // WebSocket server for p2p-voice.html to connect to.
-Deno.serve({ port: PORT + 1, hostname: "127.0.0.1" }, (req) => {
+//
+// The handler refuses, in this order, before it upgrades anything: 400 when the
+// request is not a WebSocket upgrade; 403 when `Origin` is not local (drive-by
+// hijack from a visited page); 401 when a shared secret is configured and the
+// token is missing or wrong; 409 when a page is already connected, because one
+// active client per bridge is part of the security model. On success it assigns
+// wsClient immediately rather than in onopen — under Deno 2.x an upgraded
+// socket can already be OPEN, so `open` may never fire — and returns
+// ctx.upgrade's response, which is a Response on Deno and undefined on Bun.
+// Received payloads are queued for /recv, evicting the oldest at
+// MAX_MESSAGE_QUEUE_SIZE (1000); a frame that fails to parse is logged and
+// dropped rather than closing the socket.
+serve({ port: PORT + 1, hostname: "127.0.0.1" }, (req, ctx) => {
   if (req.headers.get("upgrade") !== "websocket") {
     return new Response("WebSocket only", { status: 400 });
   }
@@ -223,7 +237,7 @@ Deno.serve({ port: PORT + 1, hostname: "127.0.0.1" }, (req) => {
     return new Response("bridge already has an active client", { status: 409 });
   }
 
-  const { socket, response } = Deno.upgradeWebSocket(req);
+  const { socket, response } = ctx.upgrade(req);
 
   // Assign wsClient IMMEDIATELY after upgrade rather than inside onopen.
   // Under Deno 2.x upgraded sockets are frequently already in readyState=1

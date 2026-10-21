@@ -24,7 +24,7 @@ NEVER create STATE.a2ml, META.a2ml, or ECOSYSTEM.a2ml in the repository root.
 1. **Elixir for control plane** — auth, rooms, presence, permissions, signaling, telemetry, audit
 2. **WebRTC for media** — browser-compatible, standards-based
 3. **ReScript for web client** — NOT TypeScript
-4. **Deno for JS runtime** — NOT Node.js, NOT npm, NOT Bun
+4. **Bun for the JS/TS runtime and package manager** — NOT Node.js, NOT npm/yarn/pnpm. Bun is the estate default; `deno.json` files exist to satisfy the template and delegate to Bun, so do not migrate anything to Deno.
 5. **Chainguard base images** — for containers
 6. **"Containerfile" not "Dockerfile"**
 7. **MPL-2.0** license (MPL-2.0 fallback where required)
@@ -44,7 +44,7 @@ burble/
 │   ├── test/            # ExUnit test suite (49 tests)
 │   └── priv/            # Static assets + Zig NIF .so
 ├── client/
-│   ├── web/             # ReScript web client (Deno + Vite)
+│   ├── web/             # ReScript web client (Bun + Vite)
 │   ├── lib/             # Embeddable client library (@burble/client)
 │   │   └── src/extensions/  # IDApTIKVoice, PanLLVoice
 │   └── desktop/         # Tauri 2 desktop wrapper (stub)

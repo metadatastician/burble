@@ -136,9 +136,17 @@ K9 contractiles integrate with other RSR standards:
 
 Use these as starting points for your own K9 components:
 
-- `template-kennel.k9.ncl` - Pure data template
-- `template-yard.k9.ncl` - Validated config template
-- `template-hunt.k9.ncl` - Full execution template
+- `template-kennel.k9.ncl.in` - Pure data template
+- `template-yard.k9.ncl.in` - Validated config template
+- `template-hunt.k9.ncl.in` - Full execution template
+
+The `.in` suffix is not decoration and should not be dropped from a copy:
+`K9-CONTRACT-SPEC` §6 states the estate convention that *a template is not a
+component and is never loaded*, and the conformance lane enumerates
+`*.k9.ncl` — components. A template named `*.k9.ncl` is therefore validated as
+a component, and fails, correctly: its `component_type` and `metadata.name` are
+`TODO:` placeholders by design. Renaming them is what made this repository's K9
+corpus conformant on 2026-10-21.
 
 == Dependencies
 

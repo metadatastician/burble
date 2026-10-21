@@ -8,6 +8,21 @@ name: No-JS Scan (warn-first)
 # WARN-FIRST: it reports the authored-JS surface for migration but never fails
 # the build. The authoritative hard-block for NEW JS in non-carve-out paths is
 # hypatia (cicd_rules/javascript_detected); this is an additive companion.
+#
+# The non-blocking behaviour is not an oversight and must not be "armed" here
+# in isolation. NO-JAVASCRIPT-SOURCE-POLICY.adoc ties the flip to a condition:
+# a repo goes from warn to block "once its surface reaches zero" (gossamer is
+# the example that has). burble's surface is 25 files, so it is in the warn
+# phase by owner decision, and a repo-wide `exit 1` today would be red on all
+# 25 from the day it landed.
+#
+# What was missing is the TREND. The same policy records burble at 14 files on
+# 2026-06-02; it is 25 now, so the surface has grown by 79% while every run of
+# this workflow stayed green and said nothing. A count with no comparison is
+# not a measurement. This run therefore reports the delta as well — files
+# added by the change are listed and called out — while still exiting 0, per
+# the policy. Making growth *blocking* is an owner decision plus an upstream
+# policy change (a non-zero repo has no ratchet today); see DEBT C-7.
 
 on:
   push:
@@ -45,8 +60,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7.0.1
 
-      - name: Report authored JS/TS (warn-first, non-blocking)
+      - name: Report the authored surface and this change's delta
         shell: bash
+        env:
+          # pull_request: the base tip. push: the tip before this push.
+          NOJS_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
         run: |
           # Exclude only things that are NOT hand-authored source: vendored
           # (node_modules, deps, vendor, .git), generated/compiled (*.res.js,
@@ -66,6 +84,34 @@ jobs:
           )
 
           count=${#hits[@]}
+          # ── trend: what did THIS change add? ──────────────────────────────
+          # `actions/checkout` fetches one commit, so the base has to be fetched
+          # explicitly before it can be diffed. On a pull request the base is
+          # the PR's base tip; on a push it is the tip before the push. A new
+          # branch reports 0000… as its "before"; there is nothing to diff then,
+          # so say so rather than guess.
+          BASE="${NOJS_BASE:-}"
+          added=""
+          if [ -n "$BASE" ] && [ "$BASE" != "0000000000000000000000000000000000000000" ]; then
+            if git fetch -q --no-tags --depth=1 origin "$BASE" 2>/dev/null; then
+              added="$(git diff --name-only --diff-filter=A "$BASE" HEAD -- 2>/dev/null | while read -r f; do
+                case "$f" in
+                  *.js|*.jsx|*.mjs|*.cjs|*.ts|*.tsx) ;;
+                  *) continue ;;
+                esac
+                case "$f" in
+                  # Same carve-outs as the report below, so a vendored or
+                  # generated addition is not counted as authored source.
+                  */node_modules/*|*/deps/*|*/vendor/*|*/lib/js/*|*/lib/es6/*|*/lib/bs/*|*/out/*|*/dist/*|*/.deno/*|*/generated/*) continue ;;
+                  *.res.js|*.res.mjs|*.min.js|*.d.ts) continue ;;
+                esac
+                printf '%s\n' "$f"
+              done)"
+            else
+              echo "::warning::No-JS: could not fetch base ${BASE}; this run cannot report a trend."
+            fi
+          fi
+          added_count=$(printf '%s' "$added" | grep -c . || true)
 
           {
             echo "# No-JS scan (warn-first)"
@@ -77,6 +123,16 @@ jobs:
             echo "Policy: standards \`docs/NO-JAVASCRIPT-SOURCE-POLICY.adoc\`."
             echo
             echo "**Hand-authored JS/TS files found: ${count}**"
+            echo "**Added by this change: ${added_count}**"
+            if [ "${added_count}" -gt 0 ]; then
+              echo
+              echo '| Added by this change |'
+              echo '|---|'
+              while IFS= read -r f; do
+                [ -n "$f" ] || continue
+                echo "| \`${f}\` |"
+              done <<< "$added"
+            fi
             if [ "${count}" -gt 0 ]; then
               echo
               echo '| # | File |'
@@ -96,5 +152,19 @@ jobs:
             echo "::warning title=No-JS (warn-first)::${count} hand-authored JS/TS file(s) present. Estate target is AffineScript->typed-wasm / Rust+Zig->wasm. See standards docs/NO-JAVASCRIPT-SOURCE-POLICY.adoc (non-blocking)."
           fi
 
-          # Warn-first: never fail the build.
+          # The trend line. Still non-blocking per policy, but a change that
+          # adds hand-authored JS/TS now says so, in the annotations as well as
+          # the summary, instead of being one more silent green.
+          if [ "${added_count}" -gt 0 ]; then
+            while IFS= read -r f; do
+              [ -n "$f" ] || continue
+              echo "::notice file=${f},line=1::New hand-authored JS/TS source (non-blocking, policy warn phase). Adding to the migration surface: ${count} today."
+            done <<< "$added"
+            echo "No-JS trend: this change ADDS ${added_count} hand-authored JS/TS file(s)."
+          else
+            echo "No-JS trend: this change adds none."
+          fi
+
+          # Warn-first: never fail the build. The flip to blocking is tied to a
+          # zero surface in NO-JAVASCRIPT-SOURCE-POLICY.adoc, not to this file.
           exit 0

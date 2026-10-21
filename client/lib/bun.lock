@@ -1,0 +1,36 @@
+{
+  "lockfileVersion": 2,
+  "configVersion": 1,
+  "workspaces": {
+    "": {
+      "name": "@burble/client",
+      "dependencies": {
+        "phoenix": "1.7.11",
+      },
+      "devDependencies": {
+        "@rescript/core": "1.6.1",
+        "@rescript/runtime": "12.2.0",
+        "rescript": "12.2.0",
+      },
+    },
+  },
+  "packages": {
+    "@rescript/core": ["@rescript/core@1.6.1", "", { "peerDependencies": { "rescript": ">=11.1.0" } }, "sha512-vyb5k90ck+65Fgui+5vCja/mUfzKaK3kOPT4Z6aAJdHLH1eljEi1zKhXroCiCtpNLSWp8k4ulh1bdB5WS0hvqA=="],
+
+    "@rescript/darwin-arm64": ["@rescript/darwin-arm64@12.2.0", "", { "os": "darwin", "cpu": "arm64" }, "sha512-xc3K/J7Ujl1vPiFY2009mRf3kWRlUe/VZyJWprseKxlcEtUQv89ter7r6pY+YFbtYvA/fcaEncL9CVGEdattAg=="],
+
+    "@rescript/darwin-x64": ["@rescript/darwin-x64@12.2.0", "", { "os": "darwin", "cpu": "x64" }, "sha512-qqcTvnlSeoKkywLjG7cXfYvKZ1e4Gz2kUKcD6SiqDgCqm8TF+spwlFAiM6sloRUOFsc0bpC/0R0B3yr01FCB1A=="],
+
+    "@rescript/linux-arm64": ["@rescript/linux-arm64@12.2.0", "", { "os": "linux", "cpu": "arm64" }, "sha512-ODmpG3ji+Nj/8d5yvXkeHlfKkmbw1Q4t1iIjVuNwtmFpz7TiEa7n/sQqoYdE+WzbDX3DoJfmJNbp3Ob7qCUoOg=="],
+
+    "@rescript/linux-x64": ["@rescript/linux-x64@12.2.0", "", { "os": "linux", "cpu": "x64" }, "sha512-2W9Y9/g19Y4F/subl8yV3T8QBG2oRaP+HciNRcBjptyEdw9LmCKH8+rhWO6sp3E+nZLwoE2IAkwH0WKV3wqlxQ=="],
+
+    "@rescript/runtime": ["@rescript/runtime@12.2.0", "", {}, "sha512-NwfljDRq1rjFPHUaca1nzFz13xsa9ZGkBkLvMhvVgavJT5+A4rMcLu8XAaVTi/oAhO/tlHf9ZDoOTF1AfyAk9Q=="],
+
+    "@rescript/win32-x64": ["@rescript/win32-x64@12.2.0", "", { "os": "win32", "cpu": "x64" }, "sha512-fhf8CBj3p1lkIXPeNko3mVTKQfXXm4BoxJtR1xAXxUn43wDpd8Lox4w8/EPBbbW6C/YFQW6H7rtpY+2AKuNaDA=="],
+
+    "phoenix": ["phoenix@1.7.11", "", {}, "sha512-aeikMR/Qh6gAygY45d5p/B7srqH60h0GbCIauEAStAtRUq4hvlkzDTyDj1NJidJEV9IKFhZe7f9L+zosUJdF/g=="],
+
+    "rescript": ["rescript@12.2.0", "", { "dependencies": { "@rescript/runtime": "12.2.0" }, "optionalDependencies": { "@rescript/darwin-arm64": "12.2.0", "@rescript/darwin-x64": "12.2.0", "@rescript/linux-arm64": "12.2.0", "@rescript/linux-x64": "12.2.0", "@rescript/win32-x64": "12.2.0" }, "bin": { "bsc": "cli/bsc.js", "rescript": "cli/rescript.js", "bstracing": "cli/bstracing.js", "rescript-tools": "cli/rescript-tools.js", "rescript-legacy": "cli/rescript-legacy.js" } }, "sha512-1Jf2cmNhyx5Mj2vwZ4XXPcXvNSjGj9D1jPBUcoqIOqRpLPo1ch2Ta/7eWh23xAHWHK5ow7BCDyYFjvZSjyjLzg=="],
+  }
+}
