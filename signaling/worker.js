@@ -17,6 +17,12 @@
 //   id = "<your-namespace-id>"
 
 export default {
+  /**
+   * Store offer/answer text in env.ROOMS for 60 seconds, or fetch it once ready.
+   * GET deletes fetched answers; missing data returns 404 without polling.
+   * PUT rejects declared or UTF-8 body sizes over 65,536 bytes with 413.
+   * Request-body and KV errors propagate; ALLOWED_ORIGINS controls CORS headers.
+   */
   async fetch(request, env) {
     const url = new URL(request.url);
 

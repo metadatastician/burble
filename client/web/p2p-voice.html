@@ -453,12 +453,13 @@
     // ── Auto-connect via relay ────────────────────────────────────────
 
     /**
-     * Use the page's relay and room inputs to create (`role === 'create') or join.
-     * Fall back to manual signaling for missing inputs or a failed health check.
-     * Joining polls for an offer against a 45-second deadline; creation polls for
-     * an answer at most 20 times. Update the connection and UI, reporting relay
-     * refusals and exhausted polling in the UI. Health and polling errors are
-     * caught; other relay request and WebRTC errors reject the returned promise.
+     * Exchange SDP through the configured relay: role "create" posts an offer,
+     * otherwise joins. Missing settings or a failed health check fall back to
+     * manual signalling. Joining polls for an offer against a 45-second deadline;
+     * creation polls for an answer at most 20 times. Relay refusals and exhausted
+     * polling are reported in the UI; health and polling errors are caught, while
+     * initial WebRTC setup and PUT network errors reject the returned promise.
+     */
      */
     async function autoConnect(role) {
       const relay = document.getElementById('relay-url').value.trim().replace(/\/$/, '');
