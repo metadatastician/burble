@@ -625,6 +625,13 @@ defmodule Burble.Media.E2EE do
     end
   end
 
+  defp room_leader_id(room) do
+    room.peers
+    |> Map.keys()
+    |> Enum.sort()
+    |> List.first()
+  end
+
   @impl true
   def handle_call({:publish_sealed, room_id, from, to, epoch, blob}, _from, state) do
     with {:ok, room} <- fetch_room(state, room_id),
@@ -634,6 +641,7 @@ defmodule Burble.Media.E2EE do
          true <- byte_size(blob) <= @max_sealed_bytes,
          true <- Map.has_key?(room.peers, from),
          true <- Map.has_key?(room.peers, to),
+         true <- from == room_leader_id(room),
          :ok <- check_epoch(room, epoch),
          nil <- Map.get(room.sealed, to) do
       room = put_in(room, [:sealed, to], %{epoch: epoch, from: from, blob: blob})
