@@ -16,13 +16,12 @@ async function startBridge() {
   bridgeProcess = await spawnServer("../burble-ai-bridge.js", {
     cwd: import.meta.dirname,
   });
-  // Give the server time to start.
-  await new Promise((r) => setTimeout(r, 1000));
+  await bridgeProcess.waitReady(`${BASE_URL}/status`);
 }
 
 async function stopBridge() {
   if (bridgeProcess) {
-    try { bridgeProcess.kill("SIGTERM"); } catch (_) {}
+    await bridgeProcess.stop();
     bridgeProcess = null;
   }
 }

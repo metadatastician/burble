@@ -22,13 +22,13 @@ async function startBridge(port, env = {}) {
     cwd: import.meta.dirname,
     env: { BURBLE_AI_BRIDGE_PORT: String(port), ...env },
   });
-  await new Promise((r) => setTimeout(r, 800)); // let both ports bind
+  await proc.waitReady(`http://127.0.0.1:${port}/status`);
   return proc;
 }
 
-function stopBridge(proc) {
-  if (!proc) return;
-  try { proc.kill("SIGTERM"); } catch (_) {}
+async function stopBridge(proc) {
+  // Waits for exit, so the next test can bind the same ports.
+  if (proc) await proc.stop();
 }
 
 // Try to open a WebSocket; resolve { opened } once we know the outcome.
@@ -117,7 +117,7 @@ test({
       assert.strictEqual(status.connected, true, "original client stays connected");
     } finally {
       try { first?.close(); } catch (_) {}
-      stopBridge(bridge);
+      await stopBridge(bridge);
       await new Promise((r) => setTimeout(r, 100));
     }
   },
@@ -148,7 +148,7 @@ test({
       assert.strictEqual(health.status, 200, "/health needs no token");
       await health.body?.cancel();
     } finally {
-      stopBridge(bridge);
+      await stopBridge(bridge);
       await new Promise((r) => setTimeout(r, 100));
     }
   },
@@ -170,7 +170,7 @@ test({
       good = ok.ws;
     } finally {
       try { good?.close(); } catch (_) {}
-      stopBridge(bridge);
+      await stopBridge(bridge);
       await new Promise((r) => setTimeout(r, 100));
     }
   },
@@ -194,7 +194,7 @@ test({
         "a localhost page origin is allowed to upgrade",
       );
     } finally {
-      stopBridge(bridge);
+      await stopBridge(bridge);
       await new Promise((r) => setTimeout(r, 100));
     }
   },
@@ -232,7 +232,7 @@ test({
       assert.strictEqual(health.status, 200);
       await health.body?.cancel();
     } finally {
-      stopBridge(bridge);
+      await stopBridge(bridge);
       await new Promise((r) => setTimeout(r, 100));
     }
   },

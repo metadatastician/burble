@@ -29,14 +29,13 @@ async function startBridge(port) {
     cwd: import.meta.dirname,
     env: { BURBLE_AI_BRIDGE_PORT: String(port) },
   });
-  // Give Deno.serve a moment to bind both ports.
-  await new Promise((r) => setTimeout(r, 800));
+  await proc.waitReady(`http://127.0.0.1:${port}/status`);
   return proc;
 }
 
-function stopBridge(proc) {
-  if (!proc) return;
-  try { proc.kill("SIGTERM"); } catch (_) {}
+async function stopBridge(proc) {
+  // Waits for exit, so the next test can bind the same ports.
+  if (proc) await proc.stop();
 }
 
 // Open a WebSocket to a bridge's relay port and mimic a connected p2p-voice page.
@@ -139,8 +138,8 @@ test({
     } finally {
       try { pageA?.ws.close(); } catch (_) {}
       try { pageB?.ws.close(); } catch (_) {}
-      stopBridge(bridgeA);
-      stopBridge(bridgeB);
+      await stopBridge(bridgeA);
+      await stopBridge(bridgeB);
       await new Promise((r) => setTimeout(r, 100));
     }
   },
@@ -175,8 +174,8 @@ test({
     } finally {
       try { pageA?.ws.close(); } catch (_) {}
       try { pageB?.ws.close(); } catch (_) {}
-      stopBridge(bridgeA);
-      stopBridge(bridgeB);
+      await stopBridge(bridgeA);
+      await stopBridge(bridgeB);
       await new Promise((r) => setTimeout(r, 100));
     }
   },
@@ -213,7 +212,7 @@ test({
       assert.strictEqual(status.connected, true, "socket should still be alive after 2 s");
     } finally {
       try { page?.ws.close(); } catch (_) {}
-      stopBridge(bridge);
+      await stopBridge(bridge);
       await new Promise((r) => setTimeout(r, 100));
     }
   },
@@ -266,8 +265,8 @@ test({
     } finally {
       try { pageA?.ws.close(); } catch (_) {}
       try { pageB?.ws.close(); } catch (_) {}
-      stopBridge(bridgeA);
-      stopBridge(bridgeB);
+      await stopBridge(bridgeA);
+      await stopBridge(bridgeB);
       await new Promise((r) => setTimeout(r, 100));
     }
   },
@@ -325,7 +324,7 @@ test({
       assert.strictEqual(recvData.messages[0].type, "before-drop");
     } finally {
       try { page?.ws.close(); } catch (_) {}
-      stopBridge(bridge);
+      await stopBridge(bridge);
       await new Promise((r) => setTimeout(r, 100));
     }
   },
