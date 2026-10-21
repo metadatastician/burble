@@ -253,10 +253,16 @@ export async function openGroupKey(wire, pairwise, roomId, epoch, fromId, toId) 
   return plaintext;
 }
 
-/** Encode/decode the wire form explicitly (the channel carries base64 text). */
+/**
+ * Encode a sealed key for the channel, which carries text.
+ *
+ * Returns base64. It used to return the raw `Uint8Array`, which made the
+ * docstring a lie and meant a real client would have handed a byte array to a
+ * JSON encoder — found when `e2ee-session.js` started using it.
+ */
 export const encodeSealed = wire => {
   if (wire.length !== SEALED_BYTES) throw new RangeError("sealed key must be 60 bytes");
-  return wire;
+  return toBase64(wire);
 };
 
 export const decodeSealed = text => {
@@ -508,11 +514,21 @@ export class KeyEpoch {
 // crypto error in a log.
 
 const FRAME_VERSION = 1;
-const FRAME_HEADER_BYTES = 1 + 4 + 4;
+// Minimum: version, idLen, epoch, counter — plus the sender id.
+const FRAME_HEADER_BYTES = 1 + 1 + 4 + 4;
 const UINT32_MAX = 0xffffffff;
 
-/** Build a frame header. Both fields are uint32 by construction. */
-export function encodeFrameHeader(epoch, counter) {
+/**
+ * Build a frame header: `version(1) || idLen(1) || sender(utf8, ≤255) ||
+ * epoch(4) || counter(4)`.
+ *
+ * The sender id travels with the frame because Burble's media plane is an SFU:
+ * one receive path carries every speaker, so a receiver that assumed "the one
+ * remote peer" would have to guess whose key to derive. Carrying it also makes
+ * the AAD check do the attribution: a peer can rewrite the id, but then the
+ * frame will not decrypt.
+ */
+export function encodeFrameHeader(epoch, counter, senderId = null) {
   if (!Number.isInteger(epoch) || epoch < 0 || epoch > UINT32_MAX) {
     throw new RangeError("epoch must be a uint32");
   }
@@ -520,11 +536,18 @@ export function encodeFrameHeader(epoch, counter) {
     throw new RangeError("counter must be a uint32");
   }
 
-  const header = new Uint8Array(FRAME_HEADER_BYTES);
+  const sender = senderId === null ? new Uint8Array(0) : enc(senderId);
+  if (sender.length > 255) throw new RangeError("sender id must be at most 255 bytes");
+
+  const header = new Uint8Array(1 + 1 + sender.length + 4 + 4);
   header[0] = FRAME_VERSION;
+  header[1] = sender.length;
+  header.set(sender, 2);
+
   const view = new DataView(header.buffer);
-  view.setUint32(1, epoch);
-  view.setUint32(5, counter);
+  const tail = 2 + sender.length;
+  view.setUint32(tail, epoch);
+  view.setUint32(tail + 4, counter);
   return header;
 }
 
@@ -537,12 +560,21 @@ export function decodeFrameHeader(bytes) {
     throw new Error(`unsupported frame version ${bytes[0]}`);
   }
 
+  const idLen = bytes[1];
+  const headerLen = 1 + 1 + idLen + 4 + 4;
+  if (bytes.length < headerLen) throw new RangeError("frame is shorter than its header");
+
+  const decoder = new TextDecoder();
+  const senderId = idLen === 0 ? null : decoder.decode(bytes.subarray(2, 2 + idLen));
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const tail = 2 + idLen;
+
   return {
     version: bytes[0],
-    epoch: view.getUint32(1),
-    counter: view.getUint32(5),
-    body: bytes.subarray(FRAME_HEADER_BYTES)
+    senderId,
+    epoch: view.getUint32(tail),
+    counter: view.getUint32(tail + 4),
+    body: bytes.subarray(headerLen)
   };
 }
 
@@ -554,7 +586,7 @@ export function decodeFrameHeader(bytes) {
 export async function sealFrame(groupKey, plaintext, roomId, epoch, senderId, counter) {
   const key = await deriveSenderFrameKey(groupKey, epoch, senderId, counter);
   const body = await encryptFrame(key, plaintext, roomId, epoch, senderId, counter);
-  return concat(encodeFrameHeader(epoch, counter), body);
+  return concat(encodeFrameHeader(epoch, counter, senderId), body);
 }
 
 /**
@@ -563,7 +595,7 @@ export async function sealFrame(groupKey, plaintext, roomId, epoch, senderId, co
  */
 export async function sealFrameWithKey(frameKey, plaintext, roomId, epoch, senderId, counter) {
   const body = await encryptFrame(frameKey, plaintext, roomId, epoch, senderId, counter);
-  return concat(encodeFrameHeader(epoch, counter), body);
+  return concat(encodeFrameHeader(epoch, counter, senderId), body);
 }
 
 /**
@@ -578,7 +610,7 @@ export class FrameCryptor {
   #roomId;
   #localId;
   #counter = 0;
-  #window = null;
+  #windows = new Map();
   #remoteId;
   #onError;
 
@@ -586,8 +618,8 @@ export class FrameCryptor {
     if (!epochs || typeof epochs.frameKey !== "function") throw new TypeError("FrameCryptor needs a KeyEpoch");
     if (typeof roomId !== "string" || roomId.length === 0) throw new TypeError("roomId is required");
     if (typeof localId !== "string" || localId.length === 0) throw new TypeError("localId is required");
-    if (typeof remoteId !== "string" || remoteId.length === 0) {
-      throw new TypeError("remoteId is required: a frame key is bound to its sender");
+    if (remoteId !== null && (typeof remoteId !== "string" || remoteId.length === 0)) {
+      throw new TypeError("remoteId must be a peer id or null (SFU receive path)");
     }
 
     this.#epochs = epochs;
@@ -595,7 +627,6 @@ export class FrameCryptor {
     this.#localId = localId;
     this.#remoteId = remoteId;
     this.#onError = onError;
-    this.#window = new ReplayWindow(windowSize);
     this.windowSize = windowSize;
   }
 
@@ -607,10 +638,10 @@ export class FrameCryptor {
     return this.#counter;
   }
 
-  /** Drop the replay window — call when the epoch moves. */
+  /** Drop every replay window — call when the epoch moves. */
   reset() {
     this.#counter = 0;
-    this.#window = new ReplayWindow(this.windowSize);
+    this.#windows.clear();
   }
 
   /** Seal one outgoing frame. Counter starts at 0 for each epoch. */
@@ -623,29 +654,48 @@ export class FrameCryptor {
   }
 
   /**
-   * Open one incoming frame from `remoteId` (defaults to the address this
-   * cryptor was built for).
+   * Open one incoming frame.
    *
-   * Rejects: wrong epoch, replay or too-old counter, wrong sender (the AAD
-   * binds it), tampered ciphertext.
+   * The speaker is taken from the frame header, and `expectedSender` (when
+   * given) pins it: a mesh peer connection belongs to one peer and passes its
+   * id, while an SFU receive path passes nothing and trusts the header, which
+   * the AAD then verifies against the key it was sealed under.
+   *
+   * Rejects: wrong epoch, replay or too-old counter, wrong sender, tampered
+   * ciphertext.
    */
-  async open(wire, remoteId = this.#remoteId) {
-    const { epoch, counter, body } = decodeFrameHeader(wire);
+  async open(wire, expectedSender = this.#remoteId) {
+    const { senderId, epoch, counter, body } = decodeFrameHeader(wire);
 
     if (epoch !== this.#epochs.epoch) {
       throw new Error(`frame is from epoch ${epoch}, current is ${this.#epochs.epoch}`);
     }
-    if (!this.#window.wouldAccept(counter)) {
+    if (!senderId) throw new Error("frame carries no sender id");
+    if (expectedSender !== null && senderId !== expectedSender) {
+      throw new Error(`frame is from ${senderId}, expected ${expectedSender}`);
+    }
+
+    const window = this.#windowFor(senderId);
+    if (!window.wouldAccept(counter)) {
       throw new Error(`frame counter ${counter} is a replay or outside the window`);
     }
 
-    const key = await this.#epochs.frameKey(remoteId, counter);
-    const plaintext = await decryptFrame(key, body, this.#roomId, epoch, remoteId, counter);
+    const key = await this.#epochs.frameKey(senderId, counter);
+    const plaintext = await decryptFrame(key, body, this.#roomId, epoch, senderId, counter);
 
-    // Only now is the counter spent: a frame that failed to decrypt leaves the
+    // Only now is the counter spent: a frame that fails to decrypt leaves the
     // window untouched, so a genuine retransmission is still accepted.
-    this.#window.accept(counter);
+    window.accept(counter);
     return plaintext;
+  }
+
+  #windowFor(senderId) {
+    let window = this.#windows.get(senderId);
+    if (!window) {
+      window = new ReplayWindow(this.windowSize);
+      this.#windows.set(senderId, window);
+    }
+    return window;
   }
 }
 

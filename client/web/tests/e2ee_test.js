@@ -293,15 +293,22 @@ Deno.test("KeyEpoch.frameKey requires a room key for the current epoch", async (
 // than papered over.
 // ---------------------------------------------------------------------------
 
-Deno.test("encodeFrameHeader/decodeFrameHeader round-trip epoch and counter", () => {
-  const header = E2EE.encodeFrameHeader(7, 123456);
+Deno.test("encodeFrameHeader/decodeFrameHeader round-trip sender, epoch and counter", () => {
+  const bare = E2EE.encodeFrameHeader(7, 123456);
+  assert.strictEqual(bare.length, E2EE.CONSTANTS.FRAME_HEADER_BYTES);
 
-  assert.strictEqual(header.length, E2EE.CONSTANTS.FRAME_HEADER_BYTES);
+  const header = E2EE.encodeFrameHeader(7, 123456, "alice");
+  assert.strictEqual(header.length, E2EE.CONSTANTS.FRAME_HEADER_BYTES + "alice".length);
+
   const parsed = E2EE.decodeFrameHeader(new Uint8Array([...header, 0xaa, 0xbb]));
   assert.strictEqual(parsed.version, 1);
+  assert.strictEqual(parsed.senderId, "alice");
   assert.strictEqual(parsed.epoch, 7);
   assert.strictEqual(parsed.counter, 123456);
   assert.deepStrictEqual(parsed.body, new Uint8Array([0xaa, 0xbb]));
+
+  // A frame with no sender id parses as such rather than inventing one.
+  assert.strictEqual(E2EE.decodeFrameHeader(bare).senderId, null);
 });
 
 Deno.test("decodeFrameHeader refuses a short frame and an unknown version", () => {
@@ -325,10 +332,14 @@ Deno.test("sealFrame embeds its header and opens with the derived key", async ()
   const wire = await E2EE.sealFrame(groupKey, plaintext, "room-1", 3, "alice", 42);
 
   const parsed = E2EE.decodeFrameHeader(wire);
+  assert.strictEqual(parsed.senderId, "alice");
   assert.strictEqual(parsed.epoch, 3);
   assert.strictEqual(parsed.counter, 42);
   // 12-byte IV + 16-byte tag + 8 bytes of payload, on top of the header.
-  assert.strictEqual(wire.length, E2EE.CONSTANTS.FRAME_HEADER_BYTES + 12 + 16 + plaintext.length);
+  assert.strictEqual(
+    wire.length,
+    E2EE.CONSTANTS.FRAME_HEADER_BYTES + "alice".length + 12 + 16 + plaintext.length
+  );
 
   const key = await E2EE.deriveSenderFrameKey(groupKey, 3, "alice", 42);
   const opened = await E2EE.decryptFrame(key, parsed.body, "room-1", 3, "alice", 42);
@@ -367,10 +378,11 @@ Deno.test("FrameCryptor refuses a replay, a foreign sender and a tampered frame"
   assert.deepStrictEqual(await bob.open(wire), new Uint8Array([1]));
   await assert.rejects(bob.open(wire), /replay or outside the window/);
 
-  // AAD binds the sender: claiming the frame came from carol fails.
+  // A mesh connection knows who is on the other end, so a frame that claims a
+  // different speaker is refused by name — before any crypto.
   const { alice: alice2, bob: bob2 } = pairOfCryptors();
   const wire2 = await alice2.seal(new Uint8Array([2]));
-  await assert.rejects(bob2.open(wire2, "carol"), /OperationError|decrypt/i);
+  await assert.rejects(bob2.open(wire2, "carol"), /frame is from alice, expected carol/);
 
   // Byte-flip in the ciphertext.
   const { alice: alice3, bob: bob3 } = pairOfCryptors();
@@ -518,4 +530,40 @@ Deno.test("attachFrameCrypto wires a fake peer connection end to end", async () 
   await receiverSide.writer.write(sealed.value);
   const opened = await receiverSide.reader.read();
   assert.deepStrictEqual(new Uint8Array(opened.value.data), plaintext);
+});
+
+Deno.test("an SFU receive path attributes frames by their header, not by connection", async () => {
+  // One receive path, many speakers: this is what an SFU looks like to a
+  // client, and it is why the sender id is in the frame.
+  const groupKey = E2EE.randomGroupKey();
+  const listenerEpochs = new E2EE.KeyEpoch("room-1");
+  listenerEpochs.setRoomKey(groupKey);
+
+  const alice = new E2EE.FrameCryptor({ epochs: listenerEpochs, roomId: "room-1", localId: "alice", remoteId: null });
+  const bob = new E2EE.FrameCryptor({ epochs: listenerEpochs, roomId: "room-1", localId: "bob", remoteId: null });
+  const carol = new E2EE.FrameCryptor({ epochs: listenerEpochs, roomId: "room-1", localId: "carol", remoteId: null });
+
+  const fromAlice = await alice.seal(new Uint8Array([1]));
+  const fromBob = await bob.seal(new Uint8Array([2]));
+
+  assert.deepStrictEqual(await carol.open(fromAlice), new Uint8Array([1]));
+  assert.deepStrictEqual(await carol.open(fromBob), new Uint8Array([2]));
+
+  // Replay windows are per speaker: Alice's counter 0 and Bob's counter 0 are
+  // both accepted, because they are different streams.
+  await assert.rejects(carol.open(fromAlice), /replay or outside the window/);
+});
+
+Deno.test("a frame whose header claims another speaker does not decrypt", async () => {
+  const { alice, bob } = pairOfCryptors();
+  const wire = await alice.seal(new Uint8Array([4, 2]));
+
+  // Rewrite the sender id in the header to "carol" (same length as "alice") and
+  // open it with the pin lifted, as an SFU receiver would: the header now says
+  // carol, so the key derived is carol's, and the AAD sealed into the frame
+  // says alice. That mismatch is what makes the attribution un-forgeable.
+  const forged = wire.slice();
+  forged.set(new TextEncoder().encode("carol"), 2);
+
+  await assert.rejects(bob.open(forged, null), /OperationError|decrypt/i);
 });
