@@ -1,0 +1,113 @@
+// SPDX-License-Identifier: CC-BY-SA-4.0
+// Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+= Architecture Decision Record: 0017-upstream-pin-lock-cleanliness
+// Status: Accepted.
+// Supersedes: nothing. Depends on: the actions-lock regime (hyperpolymath/standards).
+
+# 17. Reusable-workflow pins are checked against the callee's lockfile, not only ours
+
+Date: 2026-10-21
+
+## Status
+
+Accepted — implemented as `scripts/check-upstream-pins.sh`, run by the
+`upstream-pins` job in `.github/workflows/lock-sync-gate.yml`.
+
+## Context
+
+For most of October 2026 three checks were red on `main` and on every PR, on a
+repository in which nothing was wrong:
+
+| check | reusable workflow called | pin |
+|---|---|---|
+| `governance / Validate Hypatia Baseline` | `governance-reusable.yml` | `standards@0f2d9b54` |
+| `scan / Hypatia Neurosymbolic Analysis` | `hypatia-scan-reusable.yml` | `standards@0f2d9b54` |
+| `scorecard / Run Scorecard PR` | `scorecard-reusable.yml` | `standards@9f68971b` |
+
+All three failed in **"Set up job"**, with zero steps run:
+
+```
+Unable to resolve action `erlef/setup-beam@54075bcc5e249e4758d363f27d099f55d843f124`:
+invalid lockfile pin. Run `gh actions-lock` to update the lockfile
+```
+
+Nothing in Burble references `erlef/setup-beam`. The reference is one hop away,
+inside `hyperpolymath/standards`.
+
+A reusable-workflow call `uses: org/repo/.github/workflows/x.yml@<sha>` is
+resolved at workflow startup, and GitHub validates **every action that callee
+uses** against **the callee's own `.github/workflows/actions.lock` as it exists
+at that sha**. A lock record is only usable when its `ref:` is the tag or
+branch the sha was resolved from. If `ref:` *is* the sha — a "self-SHA ref",
+hyperpolymath/standards#1271 — the runner rejects the pin, and the failure is
+nearly unreadable:
+
+- the conclusion is `failure`, not `startup_failure`;
+- `check-runs/<id>/annotations` carries the only reason, and it names an action
+  the caller has never heard of;
+- the caller's own `scripts/check-lock-sync.sh` reports **clean**, because the
+  caller's lock and the caller's YAML really do agree.
+
+Measured with the callee's lockfiles:
+
+| standards sha | actions our pin needs | self-SHA records among them |
+|---|---|---|
+| `0f2d9b54` | 9 | 13 in the file, 4 used by `hypatia-scan-reusable.yml`, 2 by `governance-reusable.yml`, 7 by `mirror-reusable.yml` |
+| `9f68971b` | 4 | 16 in the file, 4 used by `scorecard-reusable.yml` |
+| `0d47b892` | 11 | 0 |
+
+The self-SHA records were repaired upstream between `ce768a6a` (2026-10-17) and
+`cf8f9121` (2026-10-19); `0d47b8925912` (2026-10-20) is the newest commit that
+is clean for every action our six pins touch.
+
+## Decision
+
+1. **Pins are chosen for lock-cleanliness, not recency.** "Bump every caller to
+   HEAD" is wrong in both directions: a newer commit can be strictly *less*
+   usable than an older one (that is what the Dependabot sweeps kept
+   discovering), and an older one can hide defects that a newer one fixes.
+2. **Cleanliness is verified, not assumed.** `scripts/check-upstream-pins.sh`
+   reads, for every `uses: <org>/<repo>/.github/workflows/<file>@<sha>` in
+   `.github/workflows/`, the callee's workflow *and* the callee's lock at that
+   sha, and fails if any action the callee uses is missing from that lock or is
+   recorded with a self-SHA ref. It runs in CI on every PR, in the one workflow
+   that carries no `uses:` of its own, so the gate cannot be disabled by the
+   failure it detects.
+3. **Absence is not the same as poison.** A callee with no `actions.lock` at the
+   pinned sha is reported as NO-LOCK and does not fail: there is nothing to
+   validate against, so the run starts. It is still a warning, because such a
+   caller gets no action-pinning guarantee.
+4. **A network failure is not a verdict.** If the callee's files cannot be
+   fetched, the script warns and exits 0. A flaky mirror must not manufacture
+   red; `STANDARDS_SRC=<checkout>` runs it offline when certainty is needed.
+
+## Consequences
+
+- The three checks now start, which is the only way their real result can be
+  known. If the shared workflows enforce something Burble does not satisfy, it
+  will now say so instead of hanging at startup — that is a gain in signal, not
+  a regression, and the next red is actionable.
+- The pins move together to `standards@0d47b892`. At that commit the called
+  workflows add jobs Burble has not run before (`UUID v7 conformance`,
+  `UUID v8 conformance`, the JS-runtimes matrix) and gain one optional input
+  (`hypatia-ref`, defaulted). Nothing is formerly required that is now absent,
+  and no input became required.
+- `actions.lock` records a reusable pin's transitive `uses:` list; that list is
+  now the one measured at `0d47b892` (11 actions, including `denoland/setup-deno`
+  and `oven-sh/setup-bun`), not the stale 9 from `0f2d9b54`.
+- Upstream can poison a *tag*, never a sha: a sha-pinned caller is only exposed
+  to the lock as it existed at that sha. This is the argument for pins over
+  tags, and it is why the check re-reads the callee at the pinned sha rather
+  than at `main`.
+
+## Alternatives rejected
+
+- **Run the shared workflows' steps inline.** It removes the dependency, but it
+  forks a 1,592-line governance workflow into this repository, and the estate
+  would then have two versions of the same gate.
+- **Drop the three checks from branch protection.** It converts a visible
+  failure into an invisible absence, and the security checks would stop running
+  altogether.
+- **Bump to `main` and re-check by hand.** That is the reflex that produced the
+  breakages in the first place; without the script, the next bump is unchecked
+  again.

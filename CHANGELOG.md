@@ -10,6 +10,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed — three checks were red on `main` because of a lockfile one hop away (2026-10-21)
+
+`Validate Hypatia Baseline`, `Hypatia Neurosymbolic Analysis` and
+`Run Scorecard PR` failed in **"Set up job"** with zero steps, on every PR and on
+`main`, while nothing in this repository was wrong. The annotation blamed
+`erlef/setup-beam@54075bcc…` and `actions/checkout@3d3c42e5…` — actions this
+repository never references.
+
+A reusable-workflow pin `…/@<sha>` is validated at startup against **the
+callee's** `actions.lock` at that sha. `hyperpolymath/standards@0f2d9b54` and
+`@9f68971b` recorded 13 and 16 actions whose `ref:` was the commit sha itself; a
+self-SHA `ref:` is an invalid lockfile pin (standards#1271) and the runner
+refuses the job. `scripts/check-lock-sync.sh` could not see it: our lock and our
+YAML agreed.
+
+- **All six `hyperpolymath/standards` pins move to `0d47b8925912`** (2026-10-20),
+  the newest commit whose lock is clean for every action our called workflows
+  use. `actions.lock`'s transitive `uses:` list for that pin is regenerated to
+  what the callee actually uses at that commit (11 actions, not 9).
+- **`scripts/check-upstream-pins.sh`** makes the class detectable before a push:
+  for each pinned reusable workflow it reads the callee's workflow *and* lock at
+  the pinned sha, and fails on a missing record or a self-SHA `ref:`. It runs as
+  the `upstream-pins` job of `lock-sync-gate.yml` — the one workflow that
+  carries no `uses:` of its own, so the gate cannot be disabled by the fault it
+  detects. NO-LOCK and fetch failures warn rather than fail; see ADR-0017.
+
 ### Changed — Bun is the runner, not an alternative (2026-10-21)
 
 The whole web-client suite now runs under Bun: **97 tests across 12 files, 0
