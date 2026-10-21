@@ -270,15 +270,16 @@ green and calls two **actions** in another repository
 (`hyperpolymath/deed-ecosystem/validate-action`, `hyperpolymath/k9-ecosystem/
 validate-action`); the six red workflows call **reusable workflows** in another
 repository. Cross-repo actions resolve; cross-repo reusable workflows do not.
-That is the split Actions keeps in two different allowlists.
+This difference is consistent with a selected-actions policy permitting those
+action references while excluding the reusable-workflow references; it does
+not establish the cause.
 
-What is left is repository-level Actions policy in **this** repository: the
-"Allow select actions and reusable workflows" setting keeps a *separate*
-allowlist for reusable workflows, and a reusable workflow that is not on it is
-refused before the job starts — silently, as `startup_failure`. That also
-explains why ordinary third-party actions (`actions/checkout`,
-`oven-sh/setup-bun`, `erlef/setup-beam` …) keep working: they are governed by
-the other list.
+A remaining hypothesis is the effective Actions policy for **this** repository.
+"Allow select actions and reusable workflows" uses a single selected-actions
+policy covering both actions and reusable workflows. Allowed owners, patterns
+and references can permit one set while excluding another. Repository and
+organisation policies must be inspected before attributing `startup_failure`
+to a policy restriction.
 
 It cannot be confirmed from here. The token this repository's automation runs
 with is read-only for Actions administration:
@@ -289,17 +290,17 @@ gh api repos/metadatastician/burble/actions/permissions/selected-actions # 403
 gh workflow run governance.yml --ref <branch>                           # 403 on dispatch
 ```
 
-**Next move (needs repository admin, ~1 minute):** Settings → Actions →
-General → *Allow select actions and reusable workflows*, and check that
-`hyperpolymath/standards/.github/workflows/*` is permitted (or set "Allow all
-actions and reusable workflows"). If the setting is already permissive, the
-next suspects, in order, are (a) an organisation-level policy overriding it,
-(b) `merge_group`/`pull_request` fork-secret approval being toggled to
-*Require approval for all outside collaborators*. Either way, the fact to
-record is that **`startup_failure` with no steps and no annotation on exactly
-the external-reusable callers is a policy symptom, not a YAML symptom** — this
-repository spent 2026-10-13 → 10-21 chasing it as if it were a YAML symptom
-(C-1, and `88b84ed`).
+**Next move (needs repository/organisation admin):** inspect the effective
+repository and organisation Actions policies, including the selected-actions
+rules and inherited restrictions. In Settings → Actions → General, check
+whether `hyperpolymath/standards/.github/workflows/*` is permitted and adjust
+the selected references if needed. Consider "Allow all actions and reusable
+workflows" only after that inspection and if the organisation policy permits
+it. If the effective policy already permits these references, investigate
+fork-secret and outside-collaborator approval settings and other startup
+diagnostics. **`startup_failure` with no steps or annotation on the external
+reusable callers is evidence to investigate policy, not proof of the cause.**
+The earlier YAML investigation is recorded in C-1 and `88b84ed`.
 
 ---
 
@@ -535,8 +536,9 @@ git log --all --pretty=format: --name-only --diff-filter=A \
 
 So those tasks cannot run, and they are the reason the admin app "cannot
 currently be run from this repo" is stated twice (missing entry points *and*
-missing Gossamer shell). The `res:build` / `res:watch` / `clean` tasks are fine —
-they shell out to `npx rescript`, which works.
+missing Gossamer shell). The `res:build` / `res:watch` / `clean` tasks shell
+out to `npx rescript` and require legacy npm/Node tooling; they are not ready
+for a Bun-only environment.
 
 **Next move:** either delete the three tasks and say so in `admin/README.adoc`
 (current: the README points at CODE-1d), or write the entry points. Do not

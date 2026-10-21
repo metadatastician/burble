@@ -147,7 +147,7 @@ assert_exact_workflow_ref \
     "governance uses its reviewed reusable workflow revision" \
     ".github/workflows/governance.yml" \
     "hyperpolymath/standards/.github/workflows/governance-reusable.yml" \
-    "8f31a5a4ba591d544b65f91f6d78b136e07756f0"
+    "0d47b89259128962bc0609f223dbff559724bfb1"
 assert_exact_workflow_ref \
     "Hypatia uses its reviewed reusable workflow revision" \
     ".github/workflows/hypatia-scan.yml" \

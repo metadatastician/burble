@@ -123,7 +123,7 @@ server has none. Binary fields are base64 because the channel transport is JSON.
 | `e2ee_register_key` | client → server | `{"public_key": <b64, 32 B>}` | Idempotent per peer. Reply `{"epoch", "peers"}`; broadcasts `e2ee_key_set`. |
 | `e2ee_key_set` | client → server | `{}` | Reply `{"epoch", "public_keys": {peer_id: b64}}`. |
 | `e2ee_publish_sealed` | client → server | `{"to": peer_id, "epoch": n, "blob": <b64, ≤512 B>}` | Leader-side distribution. Reply `{"epoch"}`; broadcasts `e2ee_sealed_key`. |
-| `e2ee_fetch_sealed` | client → server | `{}` | Reply `{"epoch", "blob"}` or an error (`not_found`, `stale_epoch`). **Known gap:** the reply omits the publisher id, which the recipient needs for the pairwise key and AAD — so a peer that missed the broadcast cannot open what it fetches (`DEBT.md` CODE-1g). |
+| `e2ee_fetch_sealed` | client → server | `{}` | Reply `{"epoch", "from", "blob"}` or an error (`not_found`, `stale_epoch`). `from` identifies the publisher for the pairwise key and AAD. **Known gap:** clients do not yet fetch and process a missed blob, so a peer that missed the broadcast cannot recover it automatically. |
 | `e2ee_status` | client → server | `{}` | Reply `{"epoch", "peers", "sealed_peers", "key_custody": "peers"}`. |
 
 `e2ee_sealed_key` is broadcast to the room, not unicast. That is safe by

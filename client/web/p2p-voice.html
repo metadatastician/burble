@@ -460,7 +460,6 @@
      * polling are reported in the UI; health and polling errors are caught, while
      * initial WebRTC setup and PUT network errors reject the returned promise.
      */
-     */
     async function autoConnect(role) {
       const relay = document.getElementById('relay-url').value.trim().replace(/\/$/, '');
       const room = normalizeRoomName(document.getElementById('room-name').value);

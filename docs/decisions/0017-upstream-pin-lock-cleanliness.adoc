@@ -18,11 +18,14 @@ Accepted — implemented as `scripts/check-upstream-pins.sh`, run by the
 For most of October 2026 three checks were red on `main` and on every PR, on a
 repository in which nothing was wrong:
 
-| check | reusable workflow called | pin |
-|---|---|---|
-| `governance / Validate Hypatia Baseline` | `governance-reusable.yml` | `standards@0f2d9b54` |
-| `scan / Hypatia Neurosymbolic Analysis` | `hypatia-scan-reusable.yml` | `standards@0f2d9b54` |
-| `scorecard / Run Scorecard PR` | `scorecard-reusable.yml` | `standards@9f68971b` |
+[cols="1,1,1",options="header"]
+|===
+| check | reusable workflow called | pin
+
+| `governance / Validate Hypatia Baseline` | `governance-reusable.yml` | `standards@0f2d9b54`
+| `scan / Hypatia Neurosymbolic Analysis` | `hypatia-scan-reusable.yml` | `standards@0f2d9b54`
+| `scorecard / Run Scorecard PR` | `scorecard-reusable.yml` | `standards@9f68971b`
+|===
 
 All three failed in **"Set up job"**, with zero steps run:
 
@@ -50,11 +53,14 @@ nearly unreadable:
 
 Measured with the callee's lockfiles:
 
-| standards sha | actions our pin needs | self-SHA records among them |
-|---|---|---|
-| `0f2d9b54` | 9 | 13 in the file, 4 used by `hypatia-scan-reusable.yml`, 2 by `governance-reusable.yml`, 7 by `mirror-reusable.yml` |
-| `9f68971b` | 4 | 16 in the file, 4 used by `scorecard-reusable.yml` |
-| `0d47b892` | 11 | 0 |
+[cols="1,1,1",options="header"]
+|===
+| standards sha | actions our pin needs | self-SHA records among them
+
+| `0f2d9b54` | 9 | 13 in the file, 4 used by `hypatia-scan-reusable.yml`, 2 by `governance-reusable.yml`, 7 by `mirror-reusable.yml`
+| `9f68971b` | 4 | 16 in the file, 4 used by `scorecard-reusable.yml`
+| `0d47b892` | 11 | 0
+|===
 
 The self-SHA records were repaired upstream between `ce768a6a` (2026-10-17) and
 `cf8f9121` (2026-10-19); `0d47b8925912` (2026-10-20) is the newest commit that

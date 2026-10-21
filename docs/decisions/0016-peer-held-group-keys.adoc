@@ -77,8 +77,9 @@ There is no key-returning function in the module's API. The public API is
 
 Leader election is deterministic — the lowest peer id in the epoch — so no
 election traffic is needed and no consensus round exists to fail open. The
-server relays; it cannot substitute itself for the leader, because it cannot
-produce a blob that any peer's pairwise key will open.
+server relays. Preventing it from substituting itself for the leader depends
+on authenticated, trusted peer-key distribution, which is still missing
+(§Gaps, item 5).
 
 Because the pairwise key is `X25519(my_private, their_public)`, AAD binds
 `label | room | epoch | from | to`, and labels are domain-separated
@@ -237,10 +238,12 @@ These are open, tracked, and must stay in the README until closed:
    id into the AAD stops *sender ids* being confused, but every holder of the
    room key can derive any other member's frame key and produce a frame that
    attributes to that member. Members cannot be told apart from each other by
-   cryptography here — only outsiders, and the server, are excluded. A sender
-   -specific secret or a signature per frame would be needed, and neither is
-   implemented. `client/web/tests/e2ee_test.js` asserts this limitation rather
-   than describing it away.
+   cryptography here. Excluding outsiders, including the server, also depends
+   on authenticated, trusted peer-key distribution (§Gaps, item 5). A secret
+   specific to each sender or a signature per frame would be needed to
+   distinguish members, and neither is implemented.
+   `client/web/tests/e2ee_test.js` asserts this limitation rather than describing
+   it away.
 2. **The server-side pipeline still runs in `:e2ee` rooms.** It now has no key
    and cannot decrypt, but ADR-0011 §3 puts content DSP at the edge; running
    echo-cancel/denoise on opaque bytes is pointless, and running it on
@@ -254,15 +257,26 @@ These are open, tracked, and must stay in the README until closed:
    44 browser), the coordinator's state machine, the channel wiring and the key
    exchange against a fake channel; they do not exercise a real call, because
    the client still has to be wired in.
+5. **Authenticated peer keys are required before claiming server exclusion.**
+   `E2EESession` trusts the public keys supplied by the signalling server and
+   does not authenticate their binding to peer identities. Default coordinator
+   registration accepts keys without proof; an optional signature under a
+   supplied identity key does not establish that identity key's trust. A
+   compromised signalling server can substitute peer public keys, impersonate
+   a peer and obtain the room key. Authenticated, trusted peer-key distribution
+   and client verification remain required work before asserting server
+   exclusion. Neither half is on the call path today, as stated in §Status.
 
 ## Consequences
 
 ### Positive
 
-- The strong claim becomes true by construction: a server that never receives a
-  private key or an unsealed room key cannot read the room, whatever it is
-  asked to do. No promise, no toggle, no audit trail of good intentions.
-- Compromise of the signalling server leaks public keys, epochs and ciphertext.
+- With authenticated, trusted peer-key distribution, a server that receives
+  only public keys and sealed blobs cannot read the room. That protection
+  remains conditional on closing §Gaps, item 5, and wiring the call path.
+- A passive signalling server sees public keys, epochs and ciphertext. A
+  compromised signalling server can currently substitute keys and impersonate
+  a peer (§Gaps, item 5).
 - Rotation is cheap — an epoch bump plus deletion — and cannot fail open.
 
 ### Negative

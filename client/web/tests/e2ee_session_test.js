@@ -214,9 +214,8 @@ test("a third peer bumps the epoch and the leader redistributes", async () => {
 test("a retry after a partial distribution keeps the same room key", async () => {
   const room = new FakeRoom();
 
-  // The leader's first sealed key for Carol is refused, as `already_published`
-  // would be after a lost broadcast. By then Bob already holds the key, so a
-  // retry reaches only Carol.
+  // Simulate a temporary failure before Carol's sealed key is stored. By then
+  // Bob already holds the key, so a retry reaches only Carol.
   const aliceChannel = room.channelFor("alice");
   let refused = false;
   const alice = new E2EESession({
@@ -226,7 +225,7 @@ test("a retry after a partial distribution keeps the same room key", async () =>
       push(event, payload) {
         if (event === "e2ee_publish_sealed" && payload.to === "carol" && !refused) {
           refused = true;
-          return Promise.resolve({ ok: false, data: { reason: "already_published" } });
+          return Promise.resolve({ ok: false, data: { reason: "temporary_failure" } });
         }
         return aliceChannel.push(event, payload);
       }

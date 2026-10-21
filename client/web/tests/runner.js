@@ -178,9 +178,9 @@ export async function spawnServer(script, { cwd, env = {} } = {}) {
         await new Promise((r) => setTimeout(r, intervalMs));
       }
 
-      throw new Error(
-        `server not ready at ${url} after ${timeoutMs}ms (${lastError?.message ?? "no response"})\n${describe()}`
-      );
+      const message = `server not ready at ${url} after ${timeoutMs}ms (${lastError?.message ?? "no response"})\n${describe()}`;
+      await handle.stop(1000);
+      throw new Error(message);
     },
 
     /** Captured output, for assertions and for failure messages. */

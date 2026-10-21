@@ -114,6 +114,7 @@ export function serve(options, handler) {
   return globalThis.Bun.serve({
     port: options.port,
     hostname: options.hostname,
+    idleTimeout: 35, // Relay GETs may wait up to 30 seconds for an offer or answer.
 
     /**
      * Dispatch one request, handing the handler a `ctx` that can upgrade it.

@@ -20,7 +20,7 @@
     :enforcement ".github/workflows/")
   (status
     :evidence-source ".github/workflows/web-client-tests.yml"
-    :evidence-status "The five-state K9-DEED conformance grid and the Hypatia findings grid are not yet posted on this repository; this deed records routing only, and claims no readiness grade. A2ML has moved to DEED estate-wide, but most of this tree's machine-readable files are still .a2ml (see DEBT CODE-1c); that migration is outstanding rather than done."
+    :evidence-status "The five-state K9-DEED conformance grid and the Hypatia findings grid are not yet posted on this repository; this deed records routing only, and claims no readiness grade. A2ML has moved to DEED estate-wide, but most of this tree's machine-readable files are still .a2ml; that migration is outstanding rather than done."
     :interaction-source ".machine_readable/ai/AI.a2ml")
   (policies
     (licensing
