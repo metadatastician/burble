@@ -33,13 +33,13 @@ Severity is about **consequence if left alone**, not effort.
 |---|---|---|
 | Build | 1 | 0 (resolved) |
 | Supply chain | 4 | 3 |
-| CI/CD | 5 | 3 |
+| CI/CD | 5 | 2 |
 | Licence | 4 | 3 |
 | Documentation | 6 | 3 |
-| Code | 4 | 3 |
+| Code | 5 | 3 |
 | Proof | 4 | 2 |
 | Test | 3 | 1 |
-| **Total** | **31** | **18 open + 1 resolved** |
+| **Total** | **32** | **16 open + 6 resolved** |
 
 ---
 
@@ -111,7 +111,7 @@ persistent-store client.
 
 **Next move:** add `tag:` or `ref:` pinning an audited commit.
 
-### S-3 — three `deno.json` manifests, zero `deno.lock` · HIGH
+### S-3 — three `deno.json` manifests, zero `deno.lock` · HIGH · PARTIAL 2026-10-21
 
 ```
 git ls-tree -r --name-only origin/main | grep -c deno.lock   # -> 0
@@ -120,7 +120,17 @@ git ls-tree -r --name-only origin/main | grep deno.json      # -> admin/, client
 
 Deno dependencies are unpinned and the JS/TS side is not reproducible.
 
-**Next move:** `deno cache --lock=deno.lock --lock-write` in each, commit.
+**Partly resolved 2026-10-21, on the Bun path.** Bun is now the estate default,
+and each of the three JS/TS packages has a committed `bun.lock`
+(`client/web`, `client/lib`, `scripts`), so the default install is reproducible.
+The Deno route is still unpinned for `admin/`, `client/lib/` and `client/web/`
+(only `scripts/deno.lock` exists, and `client/lib/deno.lock` is deliberately
+gitignored). That is the remaining half; it matters only for the Deno
+compatibility path.
+
+**Next move:** `deno cache --lock=deno.lock --lock-write` in each, commit — or
+record that Deno installs are unsupported as reproducible and say so in the
+compatibility job's comment.
 
 ### S-4 — two `build.zig`, zero `build.zig.zon` · MEDIUM
 
@@ -178,7 +188,7 @@ History: 96/100 green, on a repo that does not compile.
 zero. `|| echo 0` on a *severity count* is the fake-gate pattern in its purest
 form.
 
-### C-4 — `web-client-tests` masks ~5 known-broken test files · HIGH
+### C-4 — `web-client-tests` masks ~5 known-broken test files · HIGH · RESOLVED 2026-10-21
 
 `web-client-tests.yml:46` is `continue-on-error: true`. `TEST-NEEDS.md`
 separately records that ~5 of the 10 JS test files import
@@ -186,7 +196,19 @@ separately records that ~5 of the 10 JS test files import
 a path that does not exist (the modules live at `client/lib/src/`). All 22
 "success" runs are green regardless.
 
-**Next move:** fix the import paths, then arm the job.
+**Resolved 2026-10-21.** The import paths were the symptom; the cause was that
+only the two E2EE files ran under Bun and the other ten ran under Deno in a
+`continue-on-error` job. `tests/runner.js` now picks the runner and
+`spawnServer()` starts the helpers on either, so *all* twelve files run in one
+gating Bun job with no `continue-on-error` anywhere on that path:
+
+```
+cd client/web && bun install && bun run res:build && bun test tests/
+ 97 pass, 0 fail — 12 files
+```
+
+The Deno job survives as an explicitly advisory *compatibility* check, which is
+a different claim than "we do not know whether these pass".
 
 ### C-5 — Dialyzer advisory lane 74 days past its stated re-arm · MEDIUM
 
@@ -374,8 +396,9 @@ extension changed, and ReScript does not parse as AffineScript. Upstream
 > `.res` written in ReScript is not a face, and renaming `Foo.res` to
 > `Foo.affine` does not make it one — it produces a file that fails to parse.
 
-Measured on `affinescript-canary.yml` for this branch: **35 of 37 `.affine` files
-report `affinescript check failed`**. The number had never been visible — GitHub
+Measured on `affinescript-canary.yml` for this branch: **35 of 36 `.affine` files
+report `affinescript check failed`** (a 37th, deliberately broken probe file, was
+added and then removed to prove the canary was actually reporting). The number had never been visible — GitHub
 caps annotations at ten per check run, and the job log archive is not always
 reachable, so the canary reported a handful of files and hid the rest. It now
 emits the whole result as one annotation.
@@ -392,8 +415,8 @@ Two things hid it:
 Corrected in this branch: `MIGRATION.md` states that the compiler exists, that
 `.affine` must be valid AffineScript, and that it is not on the app's build path;
 `src/app/voice/E2EE.affine` (written here, and wrong in exactly this way) is
-rewritten as real AffineScript and **verified by the canary** — it is one of the
-two files that compile; the canary now emits the complete failure list as one
+rewritten as real AffineScript and **verified by the canary** — it is the only
+one of the 36 that compiles; the canary now emits the complete failure list as one
 annotation instead of being capped at ten.
 
 The rewrite is also the worked answer for the other 35: the failure was not the
@@ -412,6 +435,28 @@ AffineScript's `extern fn` is synchronous on the wasm target, and the Bun-ESM
 target's async externs are partial (upstream #122/#103). The pure parts — frame
 header, replay window, leader election, AAD, epoch bookkeeping — are portable
 now; the WebCrypto boundary is not.
+
+### CODE-1d — `admin/deno.json` names entry points that do not exist · LOW · OPEN 2026-10-21
+
+`admin/deno.json` defines `gossamer:dev` / `gossamer:build` / `check` in terms of
+`dev-server.ts` and `build.ts`. Neither file is in the tree, and neither has ever
+existed in the 389 commits of history visible from this shallow clone:
+
+```
+find . -name '*.ts' -not -path '*/node_modules/*'           # -> nothing
+git log --all --pretty=format: --name-only --diff-filter=A \
+  | sort -u | grep -E '\.ts$'                               # -> signaling/relay-deno-deploy.ts only
+```
+
+So those tasks cannot run, and they are the reason the admin app "cannot
+currently be run from this repo" is stated twice (missing entry points *and*
+missing Gossamer shell). The `res:build` / `res:watch` / `clean` tasks are fine —
+they shell out to `npx rescript`, which works.
+
+**Next move:** either delete the three tasks and say so in `admin/README.adoc`
+(current: the README points at CODE-1d), or write the entry points. Do not
+convert the manifest to Bun until they exist — a `package.json` whose scripts
+point at missing files would just move the problem.
 
 ### CODE-1a — the client's E2EE module was not encryption · RESOLVED 2026-10-21
 

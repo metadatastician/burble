@@ -14,7 +14,7 @@ git clone https://github.com/hyperpolymath/burble
 cd burble
 
 # 1. Start the AI bridge (leaves it running in the background)
-deno run --allow-net --allow-env client/web/burble-ai-bridge.js &
+bun client/web/burble-ai-bridge.js &   # Deno still works: deno run --allow-net --allow-env client/web/burble-ai-bridge.js &
 
 # 2. Open the voice client in your browser
 xdg-open client/web/p2p-voice.html
@@ -57,7 +57,7 @@ curl http://localhost:6474/recv
   every 5-10 s. If the dot never goes green, the bridge isn't listening on
   `ws://127.0.0.1:6475`.
 - **Need two bridges on one machine** (testing/dev): set
-  `BURBLE_AI_BRIDGE_PORT=7474 deno run …` — both HTTP and WS ports shift
+  `BURBLE_AI_BRIDGE_PORT=7474 bun client/web/burble-ai-bridge.js` — both HTTP and WS ports shift
   together (`7474` + `7475`).
 
 ## Claude-to-Claude protocol

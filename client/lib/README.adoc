@@ -71,8 +71,14 @@ client (`../desktop/`). Those build on top of this library.
 [source,bash]
 ----
 cd client/lib
-deno task build              # bundle for publication
-deno task test               # unit tests
+bun install                  # once — installs @rescript/core, rescript, phoenix
+bun run res:build            # recompile src/*.res -> src/*.res.mjs (committed)
+bun run res:dev              # the same, in watch mode
+
+The compiled `*.res.mjs` files are committed because `deno.json` publishes them
+(`publish.include`). CI rebuilds them and fails on drift, so they cannot go
+stale or be hand-edited. There is no test task in this package: `BurbleVoice`'s
+unit coverage lives in `client/web/tests/`, which consumes these artifacts.
 ----
 
 == Consumers

@@ -55,14 +55,27 @@ CRG C artefact checklist:
 - **SDP Barrier Test:** Attempt unauthorised access without SPA packets to verify firewall rejection.
 
 ### Client
-- **Client (ReScript → AffineScript):** 8 Deno-based test files at `client/web/tests/`:
-  - **3 NEW (2026-05-30, target real source modules):**
-    - `room_test.js` — `Room.generateRoomName` + `Room.isValidRoomName` (8 tests, exhaustive shape + variety coverage)
-    - `webrtc_offer_answer_test.js` — WebRTC SDP cycle against stubbed `RTCPeerConnection` (caller + callee happy paths, ICE-gathering, data channel + addTrack sanity)
-    - `signaling_relay_test.js` — `Signaling.Relay` HTTP API against stubbed `fetch` (PUT/GET offer/answer + 2-side e2e sequences)
-  - **5 EXISTING (pre-2026-05-30, stale imports):** `signaling_test.js`, `voice_test.js`, `ai_bridge_test.js`, `ai_bridge_roundtrip_test.js`, `client_test.js`. These import from `BurbleSignaling.res.mjs` / `BurbleVoice.res.mjs` under `client/web/lib/src/` — neither the modules nor the directory exist in current source (actual modules are `Signaling.res` / `WebRTC.res` / `Room.res` under `src/`). They fail at import; the workflow runs in advisory mode (`continue-on-error: true`) until they are either rewritten against the real modules or moved out of `tests/`.
-  - Wired into CI via `.github/workflows/web-client-tests.yml` (advisory) — closes #48 acceptance bullet 2.
-  - Migration to running against `.affine` output is gated by STATE.a2ml Phase 5 closure (`affinescript-canary.yml` is the compilation canary today).
+- **Client (ReScript → AffineScript):** 12 test files at `client/web/tests/`.
+  **Re-measured 2026-10-21: all 97 tests pass, 0 fail, under Bun** —
+  `cd client/web && bun install && bun run res:build && bun test tests/`.
+  The earlier note here ("5 EXISTING, stale imports, fail at import, advisory
+  mode") no longer reproduces and is retracted: the stale-import files were
+  rewritten against the real modules (`Signaling.res` / `WebRTC.res` /
+  `Room.res`), and the last five files that still spawned helper servers with
+  `new Deno.Command("deno", …)` now go through `spawnServer()` in
+  `tests/runner.js`. Nothing in the gating path is advisory any more.
+  - Coverage today: room names, relay rendezvous + CORS, signaling, WebRTC
+    offer/answer, AI bridge API + security + round-trip, E2EE (two files), and
+    the node:net upgrade probe.
+  - Wired into CI via `.github/workflows/web-client-tests.yml`: one gating Bun
+    job over the whole suite, one advisory Deno *compatibility* job. Closes #48
+    acceptance bullet 2.
+  - Migration to running against `.affine` output is gated by STATE.a2ml Phase 5
+    closure (`affinescript-canary.yml` is the compilation canary today, and 35
+    of 36 `.affine` files still fail it — see `DEBT.md` CODE-1c).
+- **No test runner is Deno-only any more.** Deno remains a supported runtime
+  (`signaling/runtime.js`), so the suite still runs there, but Bun is the
+  default and the one CI gates on.
 - **Desktop (Ephapax, 5 .eph files):** ZERO test files. Carry-forward.
 
 ### End-to-End

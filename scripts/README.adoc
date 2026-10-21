@@ -33,12 +33,25 @@ optionally cross-check that every `Module.fun(args)` call names a function that
 exists with that arity. It is a parser, not a compiler: it cannot resolve
 macros, `use`-generated functions, protocols or behaviour callbacks, and it does
 not type-check. Use it where `mix` is unavailable, never instead of `mix`.
-Install once with `deno install --config scripts/deno.json --frozen`, then
-`deno run --allow-read --allow-env scripts/check-elixir-syntax.mjs server/lib server/test`
-from the repository root. The Deno manifest keeps the parser dependencies at
-exact versions and `scripts/deno.lock` records their resolved graph and integrity.
-The tool only uses the bundled WASM grammar; native dependency build scripts
-are not needed.
+Bun is the default runner (the script uses only `node:fs`, `node:path` and
+`node:module`, so nothing about it is Deno-specific):
+
+[source,bash]
+----
+cd scripts && bun install        # once; bun.lock is committed
+bun run check:elixir             # == bun check-elixir-syntax.mjs ../server/lib ../server/test
+----
+
+From the repository root that is `bun run --cwd scripts check:elixir`. Measured
+here on 2026-10-21: `parsed 208 file(s), 0 with parse errors`.
+
+Deno is retained as a second supported route: `deno install --config
+scripts/deno.json --frozen` then `deno run --allow-read --allow-env
+scripts/check-elixir-syntax.mjs server/lib server/test`. `scripts/package.json`
+and `scripts/bun.lock` pin the same parser versions as `scripts/deno.json` and
+`scripts/deno.lock`. The tool only uses the bundled WASM grammar; native
+dependency build scripts are not needed (Bun blocks the one postinstall it
+finds, and the tool runs regardless).
 Rationale and measured results:
 `docs/reports/maintenance/maintenance-2026-10-21.md` (Appendix).
 

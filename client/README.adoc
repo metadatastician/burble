@@ -14,7 +14,7 @@ Mid-migration ReScript→AffineScript; client test coverage is tracked in
 issue #48 (Earn-the-Core). Note: only the standalone pages
 (`p2p-voice.html`, `p2p-voice-pake.html`, `quick-join.html`) run with no
 build; `index.html` loads compiled `*.res.mjs` output that is not
-committed — run `deno task build` first.
+committed — run `bun install && bun run build` first.
 `lib/`:: Embeddable `@burble/client` library (BurbleClient/Voice/Spatial/
 Signaling) — used by IDApTIK (in-game voice) and PanLL (workspace voice).
 Caveat: `BurbleVoice` does not yet create a real `RTCPeerConnection`

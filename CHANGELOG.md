@@ -10,6 +10,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed — Bun is the runner, not an alternative (2026-10-21)
+
+The whole web-client suite now runs under Bun: **97 tests across 12 files, 0
+failures**. It used to be a split — Bun ran the two E2EE files, Deno ran
+everything else — because four suites spawned helper servers with
+`new Deno.Command("deno", …)`.
+
+- **`signaling/runtime.js`** is the one place that knows which runtime it is on.
+  It exports `env()`, `serve()`, `isBun`, `isDeno`, and adapts
+  `Deno.upgradeWebSocket` to Bun's `server.upgrade` + `websocket` handler
+  object. `signaling/relay.js` and `client/web/burble-ai-bridge.js` no longer
+  call a `Deno.*` API; Deno is a supported second runtime rather than the only
+  one.
+- **`spawnServer()` in `tests/runner.js`** replaces the per-file `Deno.Command`
+  call sites (`Bun.spawn` under Bun, `Deno.Command` under Deno). The raw
+  WebSocket-upgrade probe was rewritten on `node:net`.
+- **`package.json` + `bun.lock`** in `client/web`, `client/lib` and `scripts`.
+  A manifest per ReScript package is mandatory for the Bun path: without one,
+  `bun x rescript` fails with `try_package_path: upward traversal did not find
+  '@rescript/core'`.
+- **`client/web/deno.json` tasks delegate to Bun** (`res:build` → `bun run
+  res:build`); the Deno-native steps survive as `res:build:deno` / `test:deno`,
+  which is what the advisory compatibility job runs.
+- **CI**: `web-client-tests.yml` has one gating Bun job that runs the full suite,
+  plus an advisory Deno compatibility job. Drift check added — `client/lib`
+  rebuilds its published artifacts and fails on `git diff`.
+
+That drift check found a real one: `client/lib/src/BurbleClient.res.mjs` had
+been **hand-edited** by the #33 security fix. It carried a `function
+secureIdSuffix()` definition and no export, where the compiler emits
+`let secureIdSuffix = (function () {…})` and exports it. Behaviour was
+identical, but the published artifact had stopped being compiler output — the
+exact thing `client/lib/README.adoc` tells contributors not to do. Regenerated,
+along with the long-missing `BurbleLOL.res.mjs`, so every published `.res` now
+has its compiled sibling in-tree.
+
+Also in this pass: `scripts/package.json` gives `check-elixir-syntax.mjs` a Bun
+route (`parsed 208 file(s), 0 with parse errors`); it never needed Deno.
+
 ### Added — the browser half of E2EE, and a frame format that works (2026-10-21)
 
 `client/web/e2ee.js` now covers the Encoded Transform layer and
