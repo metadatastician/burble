@@ -9,20 +9,16 @@
 // opaque SDP blobs.
 
 import assert from "node:assert";
-import { test } from "./runner.js";
+import { test, spawnServer } from "./runner.js";
 
 const PORT = 7601;
 const BASE = `http://127.0.0.1:${PORT}`;
 
 async function startRelay(env = {}) {
-  const cmd = new Deno.Command("deno", {
-    args: ["run", "--allow-net", "--allow-env", "../../../signaling/relay.js"],
+  const proc = await spawnServer("../../../signaling/relay.js", {
     cwd: import.meta.dirname,
     env: { RELAY_PORT: String(PORT), RELAY_HOST: "127.0.0.1", ...env },
-    stdout: "null",
-    stderr: "null",
   });
-  const proc = cmd.spawn();
   await new Promise((r) => setTimeout(r, 800));
   return proc;
 }

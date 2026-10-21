@@ -12,20 +12,16 @@
 //   3. cross-origin WS upgrades are rejected (drive-by page can't connect)
 
 import assert from "node:assert";
-import { test } from "./runner.js";
+import { test, spawnServer } from "./runner.js";
 
 const HTTP = 7501;
 const WS = HTTP + 1;
 
 async function startBridge(port, env = {}) {
-  const cmd = new Deno.Command("deno", {
-    args: ["run", "--allow-net", "--allow-env", "../burble-ai-bridge.js"],
+  const proc = await spawnServer("../burble-ai-bridge.js", {
     cwd: import.meta.dirname,
     env: { BURBLE_AI_BRIDGE_PORT: String(port), ...env },
-    stdout: "null",
-    stderr: "null",
   });
-  const proc = cmd.spawn();
   await new Promise((r) => setTimeout(r, 800)); // let both ports bind
   return proc;
 }
@@ -50,23 +46,51 @@ function tryOpen(url, timeoutMs = 1500) {
 
 // Raw HTTP/1.1 upgrade so we can set an Origin header the WebSocket client
 // won't let us set. Returns the numeric status code of the response line.
+//
+// Uses node:net rather than Deno.connect so this runs under Bun, Deno and Node
+// alike — it is the one place in the suite that needs a socket below the
+// WebSocket API, and a raw TCP write is the same bytes everywhere.
 async function rawUpgradeStatus(port, origin) {
-  const conn = await Deno.connect({ hostname: "127.0.0.1", port });
-  const req =
-    "GET / HTTP/1.1\r\n" +
-    `Host: 127.0.0.1:${port}\r\n` +
-    "Upgrade: websocket\r\n" +
-    "Connection: Upgrade\r\n" +
-    "Sec-WebSocket-Version: 13\r\n" +
-    "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n" +
-    (origin ? `Origin: ${origin}\r\n` : "") +
-    "\r\n";
-  await conn.write(new TextEncoder().encode(req));
-  const buf = new Uint8Array(1024);
-  const n = await conn.read(buf);
-  try { conn.close(); } catch (_) {}
-  const statusLine = new TextDecoder().decode(buf.subarray(0, n || 0)).split("\r\n")[0];
-  return parseInt(statusLine.split(" ")[1] || "0", 10);
+  const { connect } = await import("node:net");
+
+  return await new Promise((resolve, reject) => {
+    const socket = connect({ host: "127.0.0.1", port });
+    let received = "";
+    let settled = false;
+
+    const finish = (value) => {
+      if (settled) return;
+      settled = true;
+      try { socket.destroy(); } catch (_) {}
+      resolve(value);
+    };
+
+    socket.setEncoding("utf8");
+    socket.on("error", (err) => (settled ? undefined : (settled = true, reject(err))));
+    socket.on("data", (chunk) => {
+      received += chunk;
+      if (received.includes("\r\n")) {
+        const statusLine = received.split("\r\n")[0];
+        finish(parseInt(statusLine.split(" ")[1] || "0", 10));
+      }
+    });
+
+    const req =
+      "GET / HTTP/1.1\r\n" +
+      `Host: 127.0.0.1:${port}\r\n` +
+      "Upgrade: websocket\r\n" +
+      "Connection: Upgrade\r\n" +
+      "Sec-WebSocket-Version: 13\r\n" +
+      "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n" +
+      (origin ? `Origin: ${origin}\r\n` : "") +
+      "\r\n";
+
+    socket.write(req);
+
+    // A refused upgrade answers with headers only; do not hang if the server
+    // switches protocols instead of replying with a status line.
+    setTimeout(() => finish(0), 2000).unref?.();
+  });
 }
 
 test({

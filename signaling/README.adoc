@@ -12,8 +12,28 @@ the heavy lifting is in the OTP control plane and the media plane.
 
 `relay.js`:: Canonical signaling relay. (The former `Relay.res` was
 removed when signaling was consolidated — see `STATE.a2ml [migration]`.)
+Runs on Bun or Deno; every runtime-specific call goes through `runtime.js`.
+`runtime.js`:: The only file that knows which runtime it is on — `env()`,
+`serve()`, `isBun`, `isDeno`, and the Bun-WebSocket-handler ⇄ Deno-socket
+adaptation. Add to it rather than forking it.
 `worker.js`:: Cloudflare Worker deployment variant of the relay for
 edge-hosted signaling.
+`relay-deno-deploy.ts`:: **Removed 2026-04-02.** Gone; the TypeScript relay
+became `Relay.res`, which was itself removed on 2026-04-16. No TypeScript
+remains anywhere in the repository.
+
+== Running the relay
+
+[source,bash]
+----
+bun signaling/relay.js                 # default port, no permission flags
+RELAY_PORT=8081 bun signaling/relay.js # override
+deno run --allow-net --allow-env signaling/relay.js   # Deno still supported
+----
+
+Tests: `client/web/tests/relay_rendezvous_test.js` (5 tests, spawns the relay
+with `spawnServer()` and talks to it over `node:net` and `fetch`) runs in the
+gating Bun CI job.
 
 == Related
 

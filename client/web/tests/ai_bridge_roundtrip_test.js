@@ -15,7 +15,7 @@
 // aren't mistaken for live ones.
 
 import assert from "node:assert";
-import { test } from "./runner.js";
+import { test, spawnServer } from "./runner.js";
 
 // Use non-default ports so this suite can run even if the user has a normal
 // bridge on 6474.
@@ -25,14 +25,10 @@ const BRIDGE_B_HTTP = 7484;
 const BRIDGE_B_WS = BRIDGE_B_HTTP + 1;
 
 async function startBridge(port) {
-  const cmd = new Deno.Command("deno", {
-    args: ["run", "--allow-net", "--allow-env", "../burble-ai-bridge.js"],
+  const proc = await spawnServer("../burble-ai-bridge.js", {
     cwd: import.meta.dirname,
     env: { BURBLE_AI_BRIDGE_PORT: String(port) },
-    stdout: "null",
-    stderr: "null",
   });
-  const proc = cmd.spawn();
   // Give Deno.serve a moment to bind both ports.
   await new Promise((r) => setTimeout(r, 800));
   return proc;

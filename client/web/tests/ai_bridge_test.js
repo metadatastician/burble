@@ -6,21 +6,16 @@
 // error handling on /send when no peer is connected.
 
 import assert from "node:assert";
-import { test } from "./runner.js";
+import { test, spawnServer } from "./runner.js";
 
 const BASE_URL = "http://127.0.0.1:6474";
 let bridgeProcess = null;
 
 // Start the bridge before tests.
 async function startBridge() {
-  const cmd = new Deno.Command("deno", {
-    // --allow-env: the bridge reads BURBLE_AI_BRIDGE_PORT at module load.
-    args: ["run", "--allow-net", "--allow-env", "../burble-ai-bridge.js"],
+  bridgeProcess = await spawnServer("../burble-ai-bridge.js", {
     cwd: import.meta.dirname,
-    stdout: "null",
-    stderr: "null",
   });
-  bridgeProcess = cmd.spawn();
   // Give the server time to start.
   await new Promise((r) => setTimeout(r, 1000));
 }
