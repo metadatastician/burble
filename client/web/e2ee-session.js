@@ -38,7 +38,7 @@ export const STATUS = Object.freeze({
   FAILED: "failed"
 });
 
-/** The leader is the lowest peer id. Everyone computes this from the same set. */
+/** Return the lowest peer id using string sort order, or null for an empty set. */
 export function leaderOf(peerIds) {
   const ids = [...peerIds].sort();
   return ids.length === 0 ? null : ids[0];
@@ -58,6 +58,9 @@ export class E2EESession {
   #sealedSent = new Set();
 
   /**
+   * Create local key-exchange state; callers must forward channel broadcasts
+   * to `onKeySet` and `onSealedKey`. Invalid ids or a missing `push` throw `TypeError`.
+   *
    * @param {object} options
    * @param {string} options.roomId
    * @param {string} options.localId      this peer's id, as the server knows it
@@ -123,8 +126,10 @@ export class E2EESession {
   /**
    * Join the key exchange: publish a public key, then fetch the room's set.
    *
-   * Re-registering on every epoch is deliberate — an ephemeral key that outlives
-   * an epoch is a key the peer who left has already seen the room key under.
+   * Generates a fresh keypair on each call; epoch broadcasts alone do not
+   * regenerate or re-register it. Resolves to the current status and epoch.
+   * Crypto and channel errors set FAILED, are retained in `lastError`, and
+   * are rethrown.
    */
   async start() {
     this.#setStatus(STATUS.REGISTERING);
@@ -146,7 +151,10 @@ export class E2EESession {
     }
   }
 
-  /** Fetch the room's public keys and act on them. Safe to call any time. */
+  /**
+   * Fetch and process the room's public keys after `start()` has begun.
+   * Returns the resulting status and epoch; channel and processing errors propagate.
+   */
   async refreshKeySet() {
     const data = await this.#push("e2ee_key_set", {});
     return this.onKeySet({ epoch: data.epoch, public_keys: data.public_keys ?? {} });
@@ -157,6 +165,9 @@ export class E2EESession {
    *
    * If the epoch moved, every cached key goes: the frame cryptors, the room
    * key, and the record of which peers we already sealed to.
+   * The local keypair is retained. Same or older epochs do not rewind the
+   * epoch, but their public key set still replaces the cached set.
+   * Returns the resulting status and epoch; leader distribution errors propagate.
    */
   async onKeySet({ epoch, public_keys }) {
     const moved = this.#adoptEpoch(epoch);
@@ -193,8 +204,11 @@ export class E2EESession {
   /**
    * Handle an `e2ee_sealed_key` broadcast.
    *
-   * Blobs for other peers are ignored, not attempted: the payload is public,
-   * the key inside it is not, and a peer only learns anything by failing.
+   * Returns an ignored reason for other recipients, self/missing senders,
+   * stale epochs, or unresolved senders/epochs after at most one refresh.
+   * Refresh errors are caught. A known sender need not be the leader.
+   * Successful opening installs the room key and returns READY and the epoch;
+   * decoding or crypto errors return `{error: message}` and set AWAITING_KEY.
    */
   async onSealedKey({ from, to, epoch, blob }, { retried = false } = {}) {
     if (to && to !== this.#localId) return { ignored: "not-for-me" };
@@ -322,7 +336,11 @@ export class E2EESession {
     this.#setStatus(STATUS.READY, { epoch, leader: this.#localId });
   }
 
-  /** A cryptor for one peer connection. Throws if there is no room key yet. */
+  /**
+   * Return a cached cryptor, or create one using `remoteId` as the sender pin
+   * (null for SFU reception). `onError` is used only on creation.
+   * Throws if no room key is held; constructor validation errors propagate.
+   */
   cryptorFor(remoteId, { onError = null } = {}) {
     if (!this.hasRoomKey) throw new Error("no room key for this epoch yet");
 
@@ -342,18 +360,23 @@ export class E2EESession {
   }
 
   /**
-   * Encrypt this connection's media, both directions.
+   * Attach media transforms to this connection.
    *
    * Returns the attachment result. `ok: false` means the media on this
    * connection is NOT end-to-end encrypted and the caller must not describe it
    * as if it were.
+   * `role` selects current senders, receivers, or both. Missing room keys,
+   * argument validation, and synchronous attachment errors propagate.
    */
   attach(pc, remoteId, { role = "both", onError = null } = {}) {
     const cryptor = this.cryptorFor(remoteId, { onError });
     return E2EE.attachFrameCrypto(pc, { cryptor, role, onError });
   }
 
-  /** Drop every key. Call on leave, and on page hide. */
+  /**
+   * Clear local keys and caches and set IDLE; retain the epoch and last error.
+   * Call on leave or page hide.
+   */
   clear() {
     this.#keypair = null;
     this.#keySet.clear();

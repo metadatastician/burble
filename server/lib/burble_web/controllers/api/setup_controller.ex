@@ -111,6 +111,8 @@ defmodule BurbleWeb.API.SetupController do
 
   Returns separate lists for input and output devices.
   Each device includes: id, name, description, sample_rates, channels.
+  Returns 403 once setup is complete, 503 if PipeWire is unavailable, or
+  500 if device enumeration returns an error.
 
   Response format:
       {
@@ -165,6 +167,11 @@ defmodule BurbleWeb.API.SetupController do
   POST /api/v1/setup/test-microphone
 
   Run a quick self-test on the selected microphone.
+
+  Returns 403 once setup is complete. Accepts a non-negative device id as an
+  integer or decimal string. Missing/invalid ids or a non-input device return
+  400, a missing device returns 404, and other device lookup errors return 500.
+  Recording failures caught by the audio test return HTTP 200 with `success: false`.
 
   Request body:
       {"device_id": 42}
@@ -223,6 +230,11 @@ defmodule BurbleWeb.API.SetupController do
   POST /api/v1/setup/test-speakers
 
   Run a quick self-test on the selected speakers.
+
+  Returns 403 once setup is complete. Accepts a non-negative device id as an
+  integer or decimal string. Missing/invalid ids or a non-output device return
+  400, a missing device returns 404, and other device lookup errors return 500.
+  Playback failures caught by the audio test return HTTP 200 with `success: false`.
 
   Request body:
       {"device_id": 55}
@@ -288,8 +300,13 @@ defmodule BurbleWeb.API.SetupController do
         "server_name": "My Burble Server"
       }
 
-  Once setup is marked complete, setup endpoints return 403.
+  Once setup is marked complete, this action and the audio endpoints return
+  403; the setup status check remains available.
   The configuration is stored in VeriSimDB for persistence across restarts.
+  A successful response includes the saved configuration in `config`.
+  Invalid parameters return 400. Store error tuples and caught store exits
+  return 503; the audio configuration may already have been saved if writing
+  the completion flag fails.
 
   Response format:
       {
