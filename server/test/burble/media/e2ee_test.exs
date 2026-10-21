@@ -282,6 +282,16 @@ defmodule Burble.Media.E2EETest do
       assert {:ok, %{epoch: 2, peers: 1}} = E2EE.room_status(room_id)
     end
 
+    test "the last peer leaving drops the room record entirely", %{room_id: room_id} do
+      E2EE.register_peer_key(room_id, "a", keypair!())
+
+      assert {:ok, _epoch} = E2EE.remove_peer(room_id, "a")
+
+      # Not merely empty: gone, so the coordinator's map cannot grow once per
+      # room ever joined.
+      assert {:error, :no_room} = E2EE.room_status(room_id)
+    end
+
     test "unknown rooms are reported, not crashed on" do
       assert {:error, :no_room} = E2EE.room_status("no-such-room")
       assert {:error, :no_room} = E2EE.request_rotation("no-such-room")

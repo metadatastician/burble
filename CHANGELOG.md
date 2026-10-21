@@ -35,6 +35,10 @@ end-to-end encrypted today** — DTLS-SRTP only — and
   and `e2ee_status`. Payloads are public keys and opaque blobs only; sealed
   blobs are broadcast because a third peer can neither open nor replay them.
   Covered by `test/burble_web/channels/room_channel_e2ee_test.exs`.
+- **The coordinator leaked one room record per room ever joined.** Removing the
+  last peer now drops the room entirely (and emits `e2ee_room_destroy`, which
+  `KeyRotation` already handles) instead of leaving an empty shell behind for
+  the lifetime of the node.
 - **`Burble.Media.E2EE` was not in the supervision tree at all**, so every call
   would have failed and `setup/check` could never see it. It is now started
   before `Burble.Security.KeyRotation`.

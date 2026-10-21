@@ -264,16 +264,16 @@ defmodule BurbleWeb.Channels.RoomChannelE2EETest do
 
       leave(chan)
 
-      status =
-        await(fn ->
-          case E2EE.room_status(room_id) do
-            {:ok, %{peers: 0} = status} -> {:ok, status}
-            _ -> :retry
-          end
-        end)
+      # The last peer to leave takes the room record with it, so either the
+      # room is gone or it is empty — never still holding a key-bearing peer.
+      await(fn ->
+        case E2EE.room_status(room_id) do
+          {:error, :no_room} -> {:ok, :dropped}
+          {:ok, %{peers: 0}} -> {:ok, :empty}
+          _ -> :retry
+        end
+      end)
 
-      assert status.key_custody == :peers
-      assert status.epoch > 0
       assert is_binary(user_id)
     end
   end

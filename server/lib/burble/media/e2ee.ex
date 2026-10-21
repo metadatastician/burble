@@ -481,14 +481,26 @@ defmodule Burble.Media.E2EE do
       {:ok, room} ->
         peers = Map.delete(room.peers, peer_id)
         room = %{room | peers: peers} |> maybe_rotate(reason: :peer_left, force: true)
-        broadcast_lifecycle({:e2ee_room_init, %{room_id: room_id}})
 
-        Logger.info(
-          "[E2EE] Peer #{peer_id} removed from #{room_id} — epoch #{room.epoch}, " <>
-            "#{map_size(peers)} peer(s) remain"
-        )
+        if map_size(peers) == 0 do
+          # Last peer out. Drop the room record rather than leaving an empty
+          # shell behind: without this the map grows once per room ever joined,
+          # for the lifetime of the node. A client that re-joins re-registers
+          # through init_room/1 and starts at a fresh epoch.
+          broadcast_lifecycle({:e2ee_room_destroy, %{room_id: room_id}})
+          Logger.info("[E2EE] Room #{room_id} emptied — coordinator state dropped")
 
-        {:reply, {:ok, room.epoch}, put_in(state, [:rooms, room_id], room)}
+          {:reply, {:ok, room.epoch}, %{state | rooms: Map.delete(state.rooms, room_id)}}
+        else
+          broadcast_lifecycle({:e2ee_room_init, %{room_id: room_id}})
+
+          Logger.info(
+            "[E2EE] Peer #{peer_id} removed from #{room_id} — epoch #{room.epoch}, " <>
+              "#{map_size(peers)} peer(s) remain"
+          )
+
+          {:reply, {:ok, room.epoch}, put_in(state, [:rooms, room_id], room)}
+        end
     end
   end
 
