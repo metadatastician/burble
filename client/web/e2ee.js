@@ -56,7 +56,7 @@ const PKCS8_PREFIX = Uint8Array.from([
   0x30, 0x2e, 0x02, 0x01, 0x00, 0x30, 0x05, 0x06, 0x03, 0x2b, 0x65, 0x6e, 0x04, 0x22, 0x04, 0x20
 ]);
 
-/** Whether this browser implements the primitives the protocol needs. */
+/** Check for WebCrypto key generation; does not probe X25519 or transform support. */
 export function isSupported() {
   return (
     typeof crypto !== "undefined" &&
@@ -67,12 +67,14 @@ export function isSupported() {
 
 // ── Encoding helpers ────────────────────────────────────────────────────────
 
+/** Encode bytes as base64 text for JSON channel payloads. */
 export function toBase64(bytes) {
   let binary = "";
   for (const b of bytes) binary += String.fromCharCode(b);
   return btoa(binary);
 }
 
+/** Decode base64 to bytes. Propagates `atob`'s InvalidCharacterError for invalid text. */
 export function fromBase64(text) {
   const binary = atob(text);
   const out = new Uint8Array(binary.length);
@@ -80,10 +82,12 @@ export function fromBase64(text) {
   return out;
 }
 
+/** Encode bytes as lowercase hexadecimal. */
 export function toHex(bytes) {
   return Array.from(bytes, b => b.toString(16).padStart(2, "0")).join("");
 }
 
+/** Parse hexadecimal pairs into bytes; odd lengths throw RangeError, but digits are not validated. */
 export function fromHex(hex) {
   if (hex.length % 2 !== 0) throw new RangeError("hex string must have even length");
   const out = new Uint8Array(hex.length / 2);
@@ -107,11 +111,11 @@ const equal = (a, b) => a.length === b.length && a.every((v, i) => v === b[i]);
 // ── Keys ────────────────────────────────────────────────────────────────────
 
 /**
- * Generate an ephemeral X25519 keypair. One per room, per epoch.
+ * Generate an ephemeral X25519 keypair.
  *
  * @returns {Promise<{publicKey: Uint8Array, privateKey: CryptoKey}>}
- *   `publicKey` is the raw 32 bytes you publish; the private key never leaves
- *   this process and is not extractable.
+ *   `publicKey` is the raw 32 bytes you publish; `privateKey` is non-extractable.
+ * Rejects on WebCrypto errors or an unexpected public key length.
  */
 export async function generateKeypair() {
   const pair = await crypto.subtle.generateKey({ name: "X25519" }, false, ["deriveBits"]);
@@ -127,6 +131,8 @@ export async function generateKeypair() {
  *
  * `extractable` defaults to false; only tests should set it, since exporting a
  * private key is exactly what the protocol is designed to avoid.
+ * Rejects with RangeError for a length other than 32 bytes; WebCrypto import
+ * errors propagate.
  */
 export async function importPrivateKey(raw, { extractable = false } = {}) {
   if (raw.length !== KEY_BYTES) throw new RangeError("X25519 private key must be 32 bytes");
@@ -139,7 +145,7 @@ export async function importPrivateKey(raw, { extractable = false } = {}) {
   );
 }
 
-/** Export a private key as raw bytes. Only works for keys imported as extractable. */
+/** Export raw private key bytes; WebCrypto rejects non-extractable keys. */
 export async function exportPrivateKey(privateKey) {
   const pkcs8 = new Uint8Array(await crypto.subtle.exportKey("pkcs8", privateKey));
   return pkcs8.subarray(pkcs8.length - KEY_BYTES);
@@ -162,6 +168,8 @@ const importPublicKey = raw => {
  * to know who is "first"; the server knows neither private key.
  *
  * @returns {Promise<Uint8Array>} 32-byte key
+ * Rejects with RangeError for a public key length other than 32 bytes.
+ * WebCrypto import and derivation errors propagate, including low-order keys.
  */
 export async function pairwiseKey(myPrivateKey, theirPublicKey, roomId, epoch, myPeerId, theirPeerId) {
   const shared = await crypto.subtle.deriveBits(
@@ -198,6 +206,7 @@ export function randomGroupKey() {
  * Seal the room key for one peer under the pairwise key.
  *
  * @returns {Promise<Uint8Array>} 60-byte wire form: iv || tag || ciphertext
+ * Rejects with RangeError unless both keys are 32 bytes. WebCrypto errors propagate.
  */
 export async function sealGroupKey(groupKey, pairwise, roomId, epoch, fromId, toId) {
   if (groupKey.length !== KEY_BYTES) throw new RangeError("group key must be 32 bytes");
@@ -225,7 +234,8 @@ export async function sealGroupKey(groupKey, pairwise, roomId, epoch, fromId, to
  * Open a sealed room key addressed to this peer.
  *
  * Throws on a wrong key, wrong room, wrong epoch, swapped direction or a
- * tampered blob — the AAD check covers all four.
+ * tampered blob. Invalid wire or key lengths reject with RangeError;
+ * WebCrypto import and authentication errors propagate.
  *
  * @returns {Promise<Uint8Array>} 32-byte room key
  */
@@ -259,12 +269,17 @@ export async function openGroupKey(wire, pairwise, roomId, epoch, fromId, toId) 
  * Returns base64. It used to return the raw `Uint8Array`, which made the
  * docstring a lie and meant a real client would have handed a byte array to a
  * JSON encoder — found when `e2ee-session.js` started using it.
+ * Throws RangeError unless the wire value is exactly 60 bytes.
  */
 export const encodeSealed = wire => {
   if (wire.length !== SEALED_BYTES) throw new RangeError("sealed key must be 60 bytes");
   return toBase64(wire);
 };
 
+/**
+ * Decode base64 or accept an existing 60-byte wire value without copying it.
+ * Throws RangeError for other lengths and propagates invalid base64 errors.
+ */
 export const decodeSealed = text => {
   const bytes = typeof text === "string" ? fromBase64(text) : text;
   if (bytes.length !== SEALED_BYTES) throw new RangeError("sealed key must be 60 bytes");
@@ -284,6 +299,7 @@ export const decodeSealed = text => {
  * layer actually uses.
  *
  * @returns {Promise<Uint8Array>} 32 raw key bytes
+ * Rejects with RangeError unless the group key is 32 bytes; WebCrypto errors propagate.
  */
 export async function deriveFrameKey(groupKey, epoch, counter) {
   return deriveFrameBits(groupKey, epoch, `${counter}`);
@@ -301,7 +317,10 @@ async function deriveFrameBits(groupKey, epoch, infoSuffix) {
   return new Uint8Array(bits);
 }
 
-/** Import raw frame-key bytes as an AES-GCM key. One per frame. */
+/**
+ * Import a 32-byte frame key as a non-extractable AES-GCM CryptoKey promise.
+ * Throws RangeError for other lengths; WebCrypto import errors reject the promise.
+ */
 export function frameCipher(rawKey) {
   if (rawKey.length !== KEY_BYTES) throw new RangeError("frame key must be 32 bytes");
   return crypto.subtle.importKey("raw", rawKey, "AES-GCM", false, ["encrypt", "decrypt"]);
@@ -310,15 +329,15 @@ export function frameCipher(rawKey) {
 /**
  * Derive the per-frame key *for a named sender*.
  *
- * The group key alone authenticates the room, not the speaker: every member
- * holds it, so any member could forge frames that appear to come from any
- * other. Mixing the sender id into the derivation (and into the AAD) makes a
- * frame attributable — a peer can still forge its *own* frames, which it is
- * entitled to do, but not anyone else's.
+ * The sender id separates key material between speakers. Every holder of the
+ * group key can derive keys for any sender, so this does not authenticate a
+ * speaker against other room members.
  *
  * info = LABEL_FRAME || "|sender|" || senderId || "|" || counter
  *
  * @returns {Promise<Uint8Array>} 32 raw key bytes
+ * Rejects with TypeError for an empty or non-string sender id, RangeError for
+ * a group key length other than 32 bytes, or a propagated WebCrypto error.
  */
 export async function deriveSenderFrameKey(groupKey, epoch, senderId, counter) {
   if (typeof senderId !== "string" || senderId.length === 0) {
@@ -337,6 +356,7 @@ export function frameAad(roomId, epoch, senderId, counter) {
  * Encrypt one media frame. This is what an encoded transform would call.
  *
  * @returns {Promise<Uint8Array>} iv || tag || ciphertext
+ * Rejects with RangeError unless the frame key is 32 bytes; WebCrypto errors propagate.
  */
 export async function encryptFrame(frameKey, plaintext, roomId, epoch, senderId, counter) {
   const iv = crypto.getRandomValues(new Uint8Array(IV_BYTES));
@@ -355,7 +375,11 @@ export async function encryptFrame(frameKey, plaintext, roomId, epoch, senderId,
   return concat(iv, tag, ciphertext);
 }
 
-/** Decrypt one media frame. Throws if the AAD does not match. */
+/**
+ * Return plaintext bytes from iv || tag || ciphertext; does not track replays.
+ * Rejects with RangeError for wire values of 28 bytes or fewer or a key length
+ * other than 32 bytes. WebCrypto rejects a wrong key, mismatched AAD or tampering.
+ */
 export async function decryptFrame(frameKey, wire, roomId, epoch, senderId, counter) {
   if (wire.length <= IV_BYTES + TAG_BYTES) throw new RangeError("frame too short");
 
@@ -387,6 +411,7 @@ export class ReplayWindow {
   #size;
   #highest = -1;
 
+  /** Create a window spanning `size` counter values; throws RangeError unless positive and integral. */
   constructor(size = 256) {
     if (!Number.isInteger(size) || size < 1) throw new RangeError("window size must be a positive integer");
     this.#size = size;
@@ -399,6 +424,7 @@ export class ReplayWindow {
    * decrypt, but it must not burn the counter if the decrypt then fails —
    * otherwise a corrupted frame would take its counter down with it and a
    * genuine retransmission of the same frame would be dropped as a replay.
+   * Throws RangeError unless the counter is a non-negative integer.
    */
   wouldAccept(counter) {
     if (!Number.isInteger(counter) || counter < 0) throw new RangeError("counter must be a non-negative integer");
@@ -407,7 +433,10 @@ export class ReplayWindow {
     return true;
   }
 
-  /** True if `counter` is new; records it. False if it is a replay or too old. */
+  /**
+   * True if `counter` is new; records it. False if it is a replay or too old.
+   * Throws RangeError for invalid counters.
+   */
   accept(counter) {
     if (!this.wouldAccept(counter)) return false;
 
@@ -421,10 +450,12 @@ export class ReplayWindow {
     return true;
   }
 
+  /** Highest accepted counter, or -1 before any counter has been accepted. */
   get highest() {
     return this.#highest;
   }
 
+  /** Number of recorded counters still in the window, rather than its capacity. */
   get size() {
     return this.#seen.size;
   }
@@ -453,7 +484,11 @@ export class KeyEpoch {
     return this.#epoch;
   }
 
-  /** Adopt an epoch from the server; drops all key material if it advanced. */
+  /**
+   * Adopt a newer epoch and drop the room key and cached frame keys.
+   * Returns true on advance, false for equal/older epochs; retains the keypair.
+   * Throws RangeError unless the epoch is a non-negative integer.
+   */
   advanceTo(epoch) {
     if (!Number.isInteger(epoch) || epoch < 0) throw new RangeError("epoch must be a non-negative integer");
     if (epoch === this.#epoch) return false;
@@ -466,6 +501,10 @@ export class KeyEpoch {
     return true;
   }
 
+  /**
+   * Generate a fresh keypair, drop room/frame keys and return the public key.
+   * Leaves the epoch unchanged; key generation errors reject the promise.
+   */
   async rotate() {
     this.#keypair = await generateKeypair();
     this.#roomKey = null;
@@ -473,6 +512,7 @@ export class KeyEpoch {
     return this.#keypair.publicKey;
   }
 
+  /** Hold the room key by reference and clear cached frame keys; throws RangeError unless 32 bytes. */
   setRoomKey(key) {
     if (key.length !== KEY_BYTES) throw new RangeError("room key must be 32 bytes");
     this.#roomKey = key;
@@ -483,12 +523,13 @@ export class KeyEpoch {
     return this.#roomKey !== null;
   }
 
+  /** Derive raw frame key bytes; rejects without a room key or if `deriveSenderFrameKey` fails. */
   async frameKey(senderId, counter) {
     if (!this.#roomKey) throw new Error("no room key for this epoch");
     return deriveSenderFrameKey(this.#roomKey, this.#epoch, senderId, counter);
   }
 
-  /** Drop everything. Call on leave. */
+  /** Drop key material on leave; retains the epoch number. */
   clear() {
     this.#keypair = null;
     this.#roomKey = null;
@@ -525,8 +566,10 @@ const UINT32_MAX = 0xffffffff;
  * The sender id travels with the frame because Burble's media plane is an SFU:
  * one receive path carries every speaker, so a receiver that assumed "the one
  * remote peer" would have to guess whose key to derive. Carrying it also makes
- * the AAD check do the attribution: a peer can rewrite the id, but then the
- * frame will not decrypt.
+ * the sender available for key derivation and AAD verification.
+ *
+ * Epoch and counter are big-endian uint32 values; null omits the sender id.
+ * Throws RangeError for invalid uint32 values or a sender exceeding 255 UTF-8 bytes.
  */
 export function encodeFrameHeader(epoch, counter, senderId = null) {
   if (!Number.isInteger(epoch) || epoch < 0 || epoch > UINT32_MAX) {
@@ -551,7 +594,11 @@ export function encodeFrameHeader(epoch, counter, senderId = null) {
   return header;
 }
 
-/** Parse a frame header. Throws rather than guessing on anything unrecognised. */
+/**
+ * Return version, senderId (null if absent), epoch, counter and a view of the body.
+ * Throws RangeError for a non-Uint8Array or truncated header, and Error for an
+ * unsupported version. Does not authenticate the header or validate the body.
+ */
 export function decodeFrameHeader(bytes) {
   if (!(bytes instanceof Uint8Array) || bytes.length < FRAME_HEADER_BYTES) {
     throw new RangeError("frame is shorter than its header");
@@ -582,6 +629,7 @@ export function decodeFrameHeader(bytes) {
  * Encrypt one frame, header included.
  *
  * @returns {Promise<Uint8Array>} header || iv || tag || ciphertext
+ * Key derivation, encryption and header validation errors reject the promise.
  */
 export async function sealFrame(groupKey, plaintext, roomId, epoch, senderId, counter) {
   const key = await deriveSenderFrameKey(groupKey, epoch, senderId, counter);
@@ -592,6 +640,8 @@ export async function sealFrame(groupKey, plaintext, roomId, epoch, senderId, co
 /**
  * Encrypt a frame with a key the caller already derived (the `FrameCryptor`
  * path, which caches nothing but avoids derivations the caller tracks itself).
+ * Returns header || iv || tag || ciphertext.
+ * Encryption and header validation errors reject the promise.
  */
 export async function sealFrameWithKey(frameKey, plaintext, roomId, epoch, senderId, counter) {
   const body = await encryptFrame(frameKey, plaintext, roomId, epoch, senderId, counter);
@@ -614,6 +664,12 @@ export class FrameCryptor {
   #remoteId;
   #onError;
 
+  /**
+   * Create a cryptor with its own send counter and replay windows.
+   * `remoteId` pins incoming frames to one peer; null accepts multiple SFU senders.
+   * `windowSize` is the span of counter values retained per sender.
+   * Throws TypeError for a missing epoch tracker or invalid room/local/remote ids.
+   */
   constructor({ epochs, roomId, localId, remoteId, onError = null, windowSize = 256 }) {
     if (!epochs || typeof epochs.frameKey !== "function") throw new TypeError("FrameCryptor needs a KeyEpoch");
     if (typeof roomId !== "string" || roomId.length === 0) throw new TypeError("roomId is required");
@@ -638,13 +694,17 @@ export class FrameCryptor {
     return this.#counter;
   }
 
-  /** Drop every replay window — call when the epoch moves. */
+  /** Reset the send counter to zero and drop replay windows; call when the epoch moves. */
   reset() {
     this.#counter = 0;
     this.#windows.clear();
   }
 
-  /** Seal one outgoing frame. Counter starts at 0 for each epoch. */
+  /**
+   * Return an outgoing wire frame, consuming a counter even if encryption fails.
+   * Counters start at zero on creation/reset; epoch changes do not reset them automatically.
+   * Rejects on counter exhaustion, missing/invalid keys or encryption/header errors.
+   */
   async seal(plaintext) {
     if (this.#counter > UINT32_MAX) throw new RangeError("frame counter exhausted for this epoch");
     const epoch = this.#epochs.epoch;
@@ -658,11 +718,14 @@ export class FrameCryptor {
    *
    * The speaker is taken from the frame header, and `expectedSender` (when
    * given) pins it: a mesh peer connection belongs to one peer and passes its
-   * id, while an SFU receive path passes nothing and trusts the header, which
-   * the AAD then verifies against the key it was sealed under.
+   * id, while an SFU receive path uses null to accept any sender in the header.
+   * The AAD binds that id to the ciphertext; any room-key holder can derive
+   * the corresponding key.
    *
    * Rejects: wrong epoch, replay or too-old counter, wrong sender, tampered
    * ciphertext.
+   * Returns plaintext bytes and records the counter only after decryption succeeds.
+   * Header parsing, replay-window validation and key/crypto errors propagate.
    */
   async open(wire, expectedSender = this.#remoteId) {
     const { senderId, epoch, counter, body } = decodeFrameHeader(wire);
@@ -718,7 +781,10 @@ export function describeTransformSupport() {
   };
 }
 
-/** A transform that seals outgoing frames in place. Drops a frame it cannot seal. */
+/**
+ * Seal outgoing frames in place; drop failures and pass them to optional `onError`.
+ * A throwing error callback errors the stream.
+ */
 export function senderTransform(cryptor, { onError = null } = {}) {
   return new TransformStream({
     async transform(frame, controller) {
@@ -734,7 +800,10 @@ export function senderTransform(cryptor, { onError = null } = {}) {
   });
 }
 
-/** A transform that opens incoming frames in place. Drops a frame it cannot open. */
+/**
+ * Open incoming frames in place; drop failures and pass them to optional `onError`.
+ * A throwing error callback errors the stream.
+ */
 export function receiverTransform(cryptor, { onError = null } = {}) {
   return new TransformStream({
     async transform(frame, controller) {
@@ -749,8 +818,13 @@ export function receiverTransform(cryptor, { onError = null } = {}) {
 }
 
 /**
- * Attach encryption to every sender and decryption to every receiver on a
- * peer connection.
+ * Attach transforms to the connection's current endpoints selected by `role`
+ * ("sender", "receiver" or "both", the default). Later endpoints need attachment.
+ *
+ * Reports missing encoded streams without closing the connection. Synchronous
+ * setup errors propagate; later pipeline errors go to optional `onError`.
+ * Throws TypeError for an invalid connection or cryptor. Success reports setup,
+ * not continued encryption or successful frame processing.
  *
  * @returns {{ok: boolean, results: Array<{direction: string, ok: boolean, reason?: string}>}}
  *          `ok: false` means media is NOT protected; the caller must treat that

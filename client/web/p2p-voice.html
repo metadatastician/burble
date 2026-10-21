@@ -161,10 +161,12 @@
     // Relay room names are matched server-side by /^\/room\/([a-zA-Z0-9_-]+)\//,
     // so anything else (spaces, slashes, uppercase, emoji) silently 404s on the
     // relay and looks like "room not found". Normalise instead of failing.
+    /** Trim/lowercase a room name and replace whitespace runs with hyphens; does not validate it. */
     function normalizeRoomName(raw) {
       return String(raw || "").trim().toLowerCase().replace(/\s+/g, "-");
     }
 
+    /** Accept room names of 1–64 lowercase ASCII letters, digits, underscores or hyphens. */
     function isValidRoomName(name) {
       return /^[a-z0-9_-]{1,64}$/.test(name);
     }
@@ -438,6 +440,12 @@
 
     // ── Auto-connect via relay ────────────────────────────────────────
 
+    /**
+     * Exchange SDP through the configured relay; role "create" posts an offer,
+     * otherwise joins. Missing settings or a failed health check use manual exchange.
+     * Polls at most 20 times for an answer or 30 for an offer. Poll failures are
+     * retried; initial WebRTC setup and PUT network errors reject the promise.
+     */
     async function autoConnect(role) {
       const relay = document.getElementById('relay-url').value.trim().replace(/\/$/, '');
       const room = normalizeRoomName(document.getElementById('room-name').value);
@@ -767,6 +775,10 @@
     // file://). Opening this page over plain http on a LAN address — the exact
     // "send it to the other person over the network" case — throws instead of
     // copying, and the old code left an unhandled rejection with no feedback.
+    /**
+     * Copy a textarea's value and display doneMessage on success. Clipboard
+     * failures try legacy copying, then prompt for manual copying if needed.
+     */
     async function copyFrom(textareaId, doneMessage) {
       const area = document.getElementById(textareaId);
       const text = area.value;

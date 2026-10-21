@@ -102,6 +102,11 @@
       document.getElementById('room').value = generateRoomName();
     }
 
+    /**
+     * Request a guest token and microphone access, then open the presence socket.
+     * Setup failures update the status. Resolves after installing socket handlers;
+     * connection and channel replies arrive later.
+     */
     async function joinRoom() {
       const server = document.getElementById('server').value.replace(/\/$/, '');
       const name = document.getElementById('name').value || 'Guest';
