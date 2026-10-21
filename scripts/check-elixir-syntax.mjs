@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env -S deno run --frozen --allow-read
 // SPDX-License-Identifier: MPL-2.0
 //
 // check-elixir-syntax.mjs — parse the Elixir tree with a real grammar.
@@ -9,16 +9,16 @@
 // not catch a malformed `case`, a stray `end`, or a call to a function that no
 // longer exists. This does.
 //
-//   node scripts/check-elixir-syntax.mjs server/lib server/test
-//   node scripts/check-elixir-syntax.mjs --calls server/lib server/test
-//   node scripts/check-elixir-syntax.mjs --calls --strict server/lib server/test
+//   cd scripts && deno task check:elixir
+//   deno task check:elixir --calls
+//   deno task check:elixir --calls --strict
 //
 // Exit codes: 0 clean, 1 parse errors, 2 unresolved calls under --strict.
 // The call check is advisory by default because `use`-generated functions are
 // invisible to a parser (Phoenix.Endpoint/Presence, Guardian, ...).
 //
-// Setup (once, no committed package files needed):
-//   npm install --prefix scripts web-tree-sitter tree-sitter-elixir
+// Setup (once, from scripts/):
+//   deno install --frozen
 //
 // Limits, stated plainly: this is a PARSER, not a compiler. It cannot resolve
 // macros, `use`-generated functions, protocols, or behaviour callbacks, and it
@@ -37,7 +37,7 @@ try {
 } catch {
   console.error(
     'web-tree-sitter is not installed. Run:\n' +
-      '  npm install --prefix scripts web-tree-sitter tree-sitter-elixir'
+      '  cd scripts && deno install --frozen'
   );
   process.exit(3);
 }
@@ -48,7 +48,7 @@ const wasm = (() => {
     path.join('node_modules', 'tree-sitter-elixir', 'tree-sitter-elixir.wasm')
   ];
   for (const c of candidates) if (fs.existsSync(c)) return c;
-  console.error('tree-sitter-elixir.wasm not found. Run the npm install above.');
+  console.error('tree-sitter-elixir.wasm not found. Run the deno install above.');
   process.exit(3);
 })();
 
