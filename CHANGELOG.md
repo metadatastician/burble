@@ -34,6 +34,13 @@ everything else — because four suites spawned helper servers with
   Deno, and why #247's squash carried that migration into `main`. All ten now
   say Bun, and `deno.json` files are described for what they are: template
   compliance, with every task delegating to Bun.
+- **The Bun lane was red for a reason nobody could see.** GitHub's
+  `ubuntu-latest` image sets `HTTP_PROXY` (Ubuntu 26 since 2026-10-19) and Bun's
+  `fetch` honours it, so every request the tests made to a relay or bridge they
+  had just started on `127.0.0.1` went to the proxy and came back `200` with an
+  empty body. `tests/runner.js` now pins loopback into `NO_PROXY` before the
+  first request, and reports the proxy variables in failure messages. Deno's
+  fetch ignores them, which is why only the Bun lane showed it.
 - **`package.json` + `bun.lock`** in `client/web`, `client/lib` and `scripts`.
   A manifest per ReScript package is mandatory for the Bun path: without one,
   `bun x rescript` fails with `try_package_path: upward traversal did not find
