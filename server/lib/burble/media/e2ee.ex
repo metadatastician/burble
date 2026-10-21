@@ -312,32 +312,12 @@ defmodule Burble.Media.E2EE do
           String.t(),
           non_neg_integer(),
           String.t(),
-          String.t(),
-          term(),
-          binary()
+          String.t()
         ) :: {:ok, <<_::256>>} | {:error, term()}
-  def pairwise_key(
-        my_private,
-        peer_public,
-        room_id,
-        epoch,
-        my_peer_id,
-        peer_id,
-        peer_signing_public,
-        peer_key_signature
-      ) do
+  def pairwise_key(my_private, peer_public, room_id, epoch, my_peer_id, peer_id) do
     with :ok <- valid_key(my_private, :invalid_private_key),
          :ok <- valid_public_key(peer_public),
          :ok <- valid_ids(my_peer_id, peer_id),
-         :ok <-
-           verify_peer_key_binding(
-             peer_signing_public,
-             peer_key_signature,
-             room_id,
-             epoch,
-             peer_id,
-             peer_public
-           ),
          {:ok, shared} <- agree(my_private, peer_public) do
       salt = :crypto.hash(:sha256, ["pairwise|", room_id, "|", Integer.to_string(epoch)])
 
@@ -347,33 +327,6 @@ defmodule Burble.Media.E2EE do
 
       {:ok, hkdf(shared, salt, info)}
     end
-  end
-
-  defp verify_peer_key_binding(peer_signing_public, signature, room_id, epoch, peer_id, peer_public)
-       when is_binary(signature) do
-    payload = key_binding_payload(room_id, epoch, peer_id, peer_public)
-
-    case :public_key.verify(payload, :sha256, signature, peer_signing_public) do
-      true -> :ok
-      false -> {:error, :invalid_peer_key_binding}
-    end
-  rescue
-    _ -> {:error, :invalid_peer_key_binding}
-  end
-
-  defp verify_peer_key_binding(_, _, _, _, _, _), do: {:error, :invalid_peer_key_binding}
-
-  defp key_binding_payload(room_id, epoch, peer_id, peer_public) do
-    [
-      "burble-e2ee-peer-key-binding|v1|",
-      room_id,
-      "|",
-      Integer.to_string(epoch),
-      "|",
-      peer_id,
-      "|",
-      Base.encode16(:crypto.hash(:sha256, peer_public), case: :lower)
-    ]
   end
 
   @doc """
