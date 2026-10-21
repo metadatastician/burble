@@ -33,7 +33,19 @@ function stubFetch(url, init) {
   });
 }
 
-globalThis.fetch = stubFetch;
+// Bun shares globals across test files. Install the stub only while a relay
+// unit test runs, so the spawned-server suites keep using the real fetch.
+function relayTest(name, fn) {
+  test(name, async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = stubFetch;
+    try {
+      await fn();
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+}
 
 const Signaling = await import("../src/Signaling.res.mjs");
 
@@ -41,7 +53,7 @@ const Signaling = await import("../src/Signaling.res.mjs");
 // PUT offer / answer
 // ---------------------------------------------------------------------------
 
-test("Relay.putOffer issues PUT to /room/<id>/offer with JSON body", () => {
+relayTest("Relay.putOffer issues PUT to /room/<id>/offer with JSON body", () => {
   fetchCalls.length = 0;
   const sdp = { type: "offer", sdp: "v=0\r\nhandshake\r\n" };
   Signaling.Relay.putOffer("https://relay.example.com", "apple-banana-cat", sdp);
@@ -53,7 +65,7 @@ test("Relay.putOffer issues PUT to /room/<id>/offer with JSON body", () => {
   assert.strictEqual(init.body, JSON.stringify(sdp), "body must be SDP serialised to JSON");
 });
 
-test("Relay.putAnswer issues PUT to /room/<id>/answer", () => {
+relayTest("Relay.putAnswer issues PUT to /room/<id>/answer", () => {
   fetchCalls.length = 0;
   const sdp = { type: "answer", sdp: "v=0\r\nhandshake-reply\r\n" };
   Signaling.Relay.putAnswer("https://relay.example.com", "river-sun-tree", sdp);
@@ -69,7 +81,7 @@ test("Relay.putAnswer issues PUT to /room/<id>/answer", () => {
 // GET offer / answer
 // ---------------------------------------------------------------------------
 
-test("Relay.getOffer issues GET and parses JSON response", async () => {
+relayTest("Relay.getOffer issues GET and parses JSON response", async () => {
   fetchCalls.length = 0;
   const remoteOffer = { type: "offer", sdp: "v=0\r\nremote\r\n" };
   fetchResponses.clear();
@@ -87,7 +99,7 @@ test("Relay.getOffer issues GET and parses JSON response", async () => {
   assert.ok(init.method === undefined || init.method === "GET", "default method is GET");
 });
 
-test("Relay.getAnswer parses JSON response", async () => {
+relayTest("Relay.getAnswer parses JSON response", async () => {
   fetchCalls.length = 0;
   const remoteAnswer = { type: "answer", sdp: "v=0\r\nremote-reply\r\n" };
   fetchResponses.clear();
@@ -104,7 +116,7 @@ test("Relay.getAnswer parses JSON response", async () => {
 // End-to-end room-join sequence (caller perspective)
 // ---------------------------------------------------------------------------
 
-test("Relay e2e: caller PUTs offer, polls answer, gets remote SDP back", async () => {
+relayTest("Relay e2e: caller PUTs offer, polls answer, gets remote SDP back", async () => {
   fetchCalls.length = 0;
   fetchResponses.clear();
 
@@ -128,7 +140,7 @@ test("Relay e2e: caller PUTs offer, polls answer, gets remote SDP back", async (
   assert.ok(fetchCalls[1].url.endsWith("/answer"));
 });
 
-test("Relay e2e: callee GETs offer, PUTs answer", async () => {
+relayTest("Relay e2e: callee GETs offer, PUTs answer", async () => {
   fetchCalls.length = 0;
   fetchResponses.clear();
 
