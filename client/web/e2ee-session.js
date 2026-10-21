@@ -297,7 +297,13 @@ export class E2EESession {
     return moved;
   }
 
-  /** Leader only: make a room key and hand it to every other peer. */
+  /**
+   * Leader only: seal the room key to peers not yet served in this epoch.
+   * Retries reuse the same key and skip peers whose publish already succeeded.
+   * After all publishes succeed, install the key locally and set READY.
+   * Rejects if `start()` has not generated a keypair; crypto and channel errors
+   * propagate, retaining the key and completed publishes for a retry.
+   */
   async #distributeRoomKey() {
     if (!this.#keypair) throw new Error("start() must run before a key can be distributed");
 

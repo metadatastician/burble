@@ -311,6 +311,11 @@
 
       // Expose global API for AI agents
       window.burble = {
+        /**
+         * Send strings unchanged and JSON-serialize other values to the AI channel.
+         * Return true after sending, or false if the channel is not open, buffered
+         * data exceeds 1 MiB, or the send throws. JSON serialization errors propagate.
+         */
         send: (msg) => {
           if (!aiChannel || aiChannel.readyState !== 'open') {
             console.error('[Burble AI] Channel not open');
@@ -447,6 +452,14 @@
 
     // ── Auto-connect via relay ────────────────────────────────────────
 
+    /**
+     * Use the page's relay and room inputs to create (`role === 'create') or join.
+     * Fall back to manual signaling for missing inputs or a failed health check.
+     * Joining polls for an offer against a 45-second deadline; creation polls for
+     * an answer at most 20 times. Update the connection and UI, reporting relay
+     * refusals and exhausted polling in the UI. Health and polling errors are
+     * caught; other relay request and WebRTC errors reject the returned promise.
+     */
     async function autoConnect(role) {
       const relay = document.getElementById('relay-url').value.trim().replace(/\/$/, '');
       const room = normalizeRoomName(document.getElementById('room-name').value);

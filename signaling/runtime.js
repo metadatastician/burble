@@ -36,7 +36,11 @@ if (!isBun && !isDeno) {
   throw new Error("burble: no supported runtime — expected Bun or Deno");
 }
 
-/** Environment variable, with a default. */
+/**
+ * Read an environment variable, returning `fallback` when it is unset or empty.
+ * Without a fallback, an unset or empty value returns `undefined`.
+ * Runtime environment lookup errors propagate to the caller.
+ */
 export function env(name, fallback = undefined) {
   const value = isBun ? globalThis.process?.env?.[name] : globalThis.Deno.env.get(name);
   return value === "" ? fallback : value ?? fallback;
@@ -47,16 +51,27 @@ const CONNECTING = 0;
 const OPEN = 1;
 const CLOSED = 3;
 
-/** A socket that behaves like Deno's `upgradeWebSocket` result, over Bun's ws. */
+/**
+ * Create a Deno-style socket facade and attach it as `holder.socket`.
+ * The holder supplies the Bun socket as `ws` and its numeric readyState as `state`.
+ */
 function socketFacade(holder) {
   const socket = {
     get readyState() {
       return holder.state;
     },
+    /**
+     * Send through the Bun socket only while open; otherwise discard the data.
+     * Returns `undefined`; errors from the underlying send propagate.
+     */
     send(data) {
       if (holder.state !== OPEN) return;
       holder.ws?.send(data);
     },
+    /**
+     * Mark the facade closed immediately and request closure with the given code
+     * and reason. Errors from the underlying close are ignored.
+     */
     close(code = 1000, reason = "") {
       holder.state = CLOSED;
       try {
@@ -76,10 +91,16 @@ function socketFacade(holder) {
 }
 
 /**
- * Start an HTTP server.
+ * Start an HTTP server and return the native Bun or Deno server.
+ * Runtime startup errors propagate to the caller.
+ *
+ * The handler may return a response directly or through a promise. To accept a
+ * WebSocket, call `ctx.upgrade(req)`, attach callbacks to its `socket`, and return
+ * its `response`: a Response on Deno, or `undefined` on Bun. After a successful
+ * Bun upgrade, any response returned by the handler is ignored.
  *
  * @param {{port: number, hostname?: string}} options
- * @param {(req: Request, ctx: {upgrade: (req: Request) => {socket: object, response: undefined}}) => Response | Promise<Response>} handler
+ * @param {(req: Request, ctx: {upgrade: (req: Request) => {socket: object, response: Response | undefined}}) => Response | undefined | Promise<Response | undefined>} handler
  */
 export function serve(options, handler) {
   if (isDeno) {
@@ -104,6 +125,8 @@ export function serve(options, handler) {
          * Returns the same `{ socket, response }` shape as Deno so the caller
          * can `return response` unconditionally — on Bun that is `undefined`,
          * which is what Bun expects after a successful upgrade.
+         *
+         * Throws if Bun refuses the upgrade; errors from Bun's upgrade propagate.
          */
         upgrade(request) {
           const holder = { ws: null, state: CONNECTING, socket: null };
@@ -137,6 +160,7 @@ export function serve(options, handler) {
         holder.state = OPEN;
         holder.socket?.onopen?.();
       },
+      /** Forward a text message as `{ data }`, decoding binary messages as UTF-8. */
       message(ws, message) {
         const holder = ws.data;
         const data = typeof message === "string" ? message : new TextDecoder().decode(message);
