@@ -12,6 +12,31 @@
 
 const useDeno = typeof globalThis.Deno?.test === "function";
 
+// The suites talk to servers they just started on 127.0.0.1. Bun's `fetch`
+// honours HTTP_PROXY / HTTPS_PROXY, so on a machine (or CI image) that sets one,
+// every request to a local port goes to the proxy instead — and a proxy answers
+// 200 with an empty body, which reads as "the relay forgot how to say 413" and
+// "the bridge's /health returned nothing". Deno's fetch ignores those variables,
+// which is why this only ever showed up on the Bun path.
+//
+// Localhost is never proxied, by definition: pin it in NO_PROXY before any test
+// issues a request. `no_proxy` is the lowercase spelling some tools read.
+for (const name of ["NO_PROXY", "no_proxy"]) {
+  const current = globalThis.process?.env?.[name] ?? "";
+  const entries = new Set(current.split(",").map((v) => v.trim()).filter(Boolean));
+  for (const host of ["127.0.0.1", "localhost", "::1"]) entries.add(host);
+  if (globalThis.process?.env) globalThis.process.env[name] = [...entries].join(",");
+}
+
+/** Proxy variables, for failure messages: their presence is a diagnosis. */
+export function proxyEnv() {
+  const env = globalThis.process?.env ?? {};
+  return ["HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy", "NO_PROXY", "no_proxy"]
+    .filter((name) => env[name] !== undefined)
+    .map((name) => `${name}=${env[name]}`)
+    .join(" ") || "(none set)";
+}
+
 // Deno also accepts `test({ name, fn })`. Bun does not, so the object form is
 // unpacked here rather than rewritten in every file that uses it.
 const bunTest = useDeno ? null : (await import("bun:test")).test;
@@ -63,6 +88,7 @@ export async function spawnServer(script, { cwd, env = {} } = {}) {
     const tail = (text) => text.trim().split("\n").slice(-12).join("\n") || "(no output)";
     return [
       `script: ${script}`,
+      `proxy env: ${proxyEnv()}`,
       `exit: ${output.exitCode === null ? "still running" : output.exitCode}`,
       `stdout:\n${tail(output.stdout)}`,
       `stderr:\n${tail(output.stderr)}`
