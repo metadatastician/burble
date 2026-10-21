@@ -37,13 +37,13 @@ other, so they are derived rather than carried forward. `HIGH` is split as
 |---|---|---|
 | Build | 1 | 0 / 1 |
 | Supply chain | 4 | 1 / 2 |
-| CI/CD | 8 | 2 / 3 |
+| CI/CD | 9 | 2 / 3 |
 | Licence | 4 | 4 / 0 |
 | Documentation | 6 | 3 / 0 |
 | Code | 9 | 5 / 0 |
 | Proof | 4 | 1 / 1 |
 | Test | 3 | 1 / 0 |
-| **Total** | **39** | **17 / 7** |
+| **Total** | **40** | **17 / 7** |
 
 ---
 
@@ -431,6 +431,33 @@ its inputs said. The refinement belongs upstream, in the rules:
 **Next move:** file the two rule refinements against `panic-attack` and one
 against `hypatia`; keep the grid purple until then, because it is telling the
 truth about its inputs.
+
+### C-10 — the grid badges cost more than they bought · LOW · OPEN
+
+Both grid lanes could publish `badges/k9.json` and `badges/hypatia-grid.json`
+to a `governance-badges` branch on `main`, so a README could carry a live
+shields endpoint. The jobs were removed on 2026-10-21, an hour after they were
+written, because of what they cost:
+
+- a job with `contents: write` inside a workflow that runs on `pull_request`
+  scores 0 on the estate's token-permissions check. The check is reported per
+  pull request, so every PR would carry a red — which is exactly what happened:
+  after every lane went green, `Scorecard` was the only failure on #250, twice,
+  once for each new file;
+- splitting the job into a push-only workflow is the standard fix, but it only
+  moves the permission, it does not remove it: publishing to a branch in the
+  same repository needs either a write token or a GitHub App, and the App is the
+  only version that does not hand a general-purpose token to a job.
+
+What it bought: nothing the PR comment does not already carry. The grid renders
+its own shields line from the verdict (`![K9 L0–L2 green](…)`), so a reader sees
+the state where the state is. A repository README badge is a second copy of one
+number, in a different place, with a branch and a token behind it.
+
+**If it is wanted:** publish from a push-only workflow using a GitHub App
+installation token scoped to contents, never `github.token`, and accept the
+permanent token-permissions red on that one file — or keep the badge inside the
+comment, which is what happens now.
 
 ---
 

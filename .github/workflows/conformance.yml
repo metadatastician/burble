@@ -16,8 +16,15 @@
 # conformance family: one row per category, a count of results rather than lines of
 # log, an embedded baseline so the next revision can say what moved, and an artifact
 # holding the evidence. `k9-verdict` posts it as one comment per pull request,
-# regenerated in place under its marker; `badges` publishes the shields endpoint
-# schema to the `governance-badges` branch on main.
+# regenerated in place under its marker.
+#
+# There is no badge job. Publishing `badges/k9.json` to a `governance-badges`
+# branch needed `contents: write`, and a write-scoped job in a file that runs on
+# pull requests scores 0 on the estate's token-permissions check — it turned the
+# only green-able check on this pull request red, for a picture. The grid
+# comment already carries its own shields badge line, derived from the verdict,
+# so the endpoint bought nothing. See DEBT C-10 for what a badge branch would
+# need (a push-only workflow and a token that is not the workflow's own).
 #
 # The old per-ecosystem validators in dogfood-gate.yml (`Validate A2ML manifests`,
 # `Validate K9 contracts`) are NOT the same gate: they are the ecosystem actions,
@@ -111,54 +118,3 @@ jobs:
           else
             gh api -X POST "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" --input "$RUNNER_TEMP/k9-comment.json" >/dev/null
           fi
-
-  badges:
-    name: Publish the K9 badge
-    needs: k9
-    if: always() && github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.k9.result != 'skipped'
-    runs-on: ubuntu-24.04
-    timeout-minutes: 5
-    permissions:
-      contents: write
-    steps:
-      - name: Download the grid
-        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
-        continue-on-error: true
-        with:
-          name: k9-grid
-          path: ${{ runner.temp }}/k9-grid
-
-      - name: Publish badges/k9.json to the governance-badges branch
-        env:
-          GH_TOKEN: ${{ github.token }}
-          BADGE: ${{ runner.temp }}/k9-grid/badge.json
-          BRANCH: governance-badges
-          DEST: badges/k9.json
-        run: |
-          set -euo pipefail
-          if [ ! -s "$BADGE" ]; then
-            echo "::warning::the k9-grid artifact holds no badge.json; nothing to publish"
-            exit 0
-          fi
-          jq -e 'type == "object" and has("schemaVersion")' "$BADGE" >/dev/null
-          content="$(base64 -w0 "$BADGE")"
-          message="badges: K9 grid at ${GITHUB_SHA:0:12}"
-          if gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/$BRANCH" >/dev/null 2>&1; then
-            sha="$(gh api "repos/$GITHUB_REPOSITORY/contents/$DEST?ref=$BRANCH" --jq .sha 2>/dev/null || true)"
-            jq -n --arg c "$content" --arg s "$sha" --arg b "$BRANCH" --arg m "$message" \
-              '{message: $m, content: $c, branch: $b} + (if $s != "" then {sha: $s} else {} end)' > "$RUNNER_TEMP/put.json"
-            gh api -X PUT "repos/$GITHUB_REPOSITORY/contents/$DEST" --input "$RUNNER_TEMP/put.json" >/dev/null
-          else
-            # First publication: an orphan branch holding only the badge, made
-            # through the contents API so the commit is GitHub-signed and no
-            # checkout is written to.
-            jq -n --arg c "$content" '{content: $c, encoding: "base64"}' > "$RUNNER_TEMP/blob.json"
-            blob="$(gh api -X POST "repos/$GITHUB_REPOSITORY/git/blobs" --input "$RUNNER_TEMP/blob.json" --jq .sha)"
-            jq -n --arg b "$blob" --arg p "$DEST" '{tree: [{path: $p, mode: "100644", type: "blob", sha: $b}]}' > "$RUNNER_TEMP/tree.json"
-            tree="$(gh api -X POST "repos/$GITHUB_REPOSITORY/git/trees" --input "$RUNNER_TEMP/tree.json" --jq .sha)"
-            jq -n --arg t "$tree" --arg m "$message" '{message: $m, tree: $t, parents: []}' > "$RUNNER_TEMP/commit.json"
-            commit="$(gh api -X POST "repos/$GITHUB_REPOSITORY/git/commits" --input "$RUNNER_TEMP/commit.json" --jq .sha)"
-            jq -n --arg s "$commit" --arg r "refs/heads/$BRANCH" '{ref: $r, sha: $s}' > "$RUNNER_TEMP/ref.json"
-            gh api -X POST "repos/$GITHUB_REPOSITORY/git/refs" --input "$RUNNER_TEMP/ref.json" >/dev/null
-          fi
-          echo "published $DEST on $BRANCH"

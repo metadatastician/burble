@@ -30,6 +30,20 @@ self-test 37/37, live corpus 3 pass / 8 fail. Second run, after the corpus fix
 below: 4/4, green, with the "since previous revision" baseline now embedded for
 the next comparison.
 
+### Removed — the grid badges, an hour after they were written (2026-10-21)
+
+`conformance.yml` and `hypatia-scan.yml` each grew a job that published the
+grid's `badge.json` to a `governance-badges` branch, so a README could carry a
+live shields endpoint. Both jobs needed `contents: write`, and a write-scoped
+job in a workflow that runs on `pull_request` scores 0 on the estate's
+token-permissions check — reported per pull request, so every PR would carry a
+red for a picture. With every other lane green, `Scorecard` was the only
+failure left on this one, twice, once per new file.
+
+The grid comment renders its own shields line from the verdict, so the endpoint
+duplicated a number that is already where the number is. Removed; DEBT C-10
+records what a badge branch would actually require.
+
 ### Fixed — the K9 lane was right, and seven of its eight findings were the corpus's shape (2026-10-21)
 
 The first real run of the K9 lane reported eight failures in three groups; only
