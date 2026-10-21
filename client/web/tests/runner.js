@@ -2,10 +2,10 @@
 //
 // runner.js — one `test` binding for every runner we support.
 //
-// The estate runs Bun first; Deno is still used by the web-client CI job and by
-// anybody who already has it. Both expose the same shape for what these tests
-// need — `test(name, async fn)` — so the difference belongs in one place rather
-// than in twelve files.
+// Bun is the runner: it is what CI uses and what the docs tell you to use. Both
+// Bun and Deno expose the same shape for what these tests need —
+// `test(name, async fn)` — so the difference belongs in one place rather than in
+// twelve files. The Deno branch costs four lines and is not exercised by CI.
 //
 // `Deno` is read off globalThis rather than imported, because importing `Deno`
 // anywhere is what makes a file unrunnable outside Deno.

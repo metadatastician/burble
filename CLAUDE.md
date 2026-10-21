@@ -14,7 +14,7 @@ git clone https://github.com/hyperpolymath/burble
 cd burble
 
 # 1. Start the AI bridge (leaves it running in the background)
-bun client/web/burble-ai-bridge.js &   # Deno still works: deno run --allow-net --allow-env client/web/burble-ai-bridge.js &
+bun client/web/burble-ai-bridge.js &
 
 # 2. Open the voice client in your browser
 xdg-open client/web/p2p-voice.html

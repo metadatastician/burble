@@ -21,8 +21,7 @@ everything else — because four suites spawned helper servers with
   It exports `env()`, `serve()`, `isBun`, `isDeno`, and adapts
   `Deno.upgradeWebSocket` to Bun's `server.upgrade` + `websocket` handler
   object. `signaling/relay.js` and `client/web/burble-ai-bridge.js` no longer
-  call a `Deno.*` API; Deno is a supported second runtime rather than the only
-  one.
+  call a `Deno.*` API, and no documented command invokes Deno.
 - **`spawnServer()` in `tests/runner.js`** replaces the per-file `Deno.Command`
   call sites (`Bun.spawn` under Bun, `Deno.Command` under Deno). The raw
   WebSocket-upgrade probe was rewritten on `node:net`.
@@ -31,11 +30,11 @@ everything else — because four suites spawned helper servers with
   `bun x rescript` fails with `try_package_path: upward traversal did not find
   '@rescript/core'`.
 - **`client/web/deno.json` tasks delegate to Bun** (`res:build` → `bun run
-  res:build`); the Deno-native steps survive as `res:build:deno` / `test:deno`,
-  which is what the advisory compatibility job runs.
-- **CI**: `web-client-tests.yml` has one gating Bun job that runs the full suite,
-  plus an advisory Deno compatibility job. Drift check added — `client/lib`
-  rebuilds its published artifacts and fails on `git diff`.
+  res:build`); there is no Deno-native task left to pick by mistake.
+- **CI**: `web-client-tests.yml` is a single gating Bun job. The Deno job is
+  gone, along with `denoland/setup-deno` — one runner, nothing advisory. Drift
+  check added: `client/lib` rebuilds its published artifacts and fails on
+  `git diff`.
 
 That drift check found a real one: `client/lib/src/BurbleClient.res.mjs` had
 been **hand-edited** by the #33 security fix. It carried a `function

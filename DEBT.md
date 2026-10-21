@@ -125,8 +125,8 @@ and each of the three JS/TS packages has a committed `bun.lock`
 (`client/web`, `client/lib`, `scripts`), so the default install is reproducible.
 The Deno route is still unpinned for `admin/`, `client/lib/` and `client/web/`
 (only `scripts/deno.lock` exists, and `client/lib/deno.lock` is deliberately
-gitignored). That is the remaining half; it matters only for the Deno
-compatibility path.
+gitignored). That is the remaining half, and it now matters only if someone runs
+Deno by hand: nothing in CI does, and no documented command does.
 
 **Next move:** `deno cache --lock=deno.lock --lock-write` in each, commit — or
 record that Deno installs are unsupported as reproducible and say so in the
@@ -207,8 +207,8 @@ cd client/web && bun install && bun run res:build && bun test tests/
  97 pass, 0 fail — 12 files
 ```
 
-The Deno job survives as an explicitly advisory *compatibility* check, which is
-a different claim than "we do not know whether these pass".
+There is no Deno job left in that workflow at all — one runner, nothing
+advisory, nothing to keep in sync.
 
 ### C-5 — Dialyzer advisory lane 74 days past its stated re-arm · MEDIUM
 

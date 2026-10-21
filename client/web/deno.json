@@ -16,11 +16,9 @@
   },
   "tasks": {
     "res:build": "bun run res:build",
-    "res:build:deno": "deno run --node-modules-dir=auto --allow-read --allow-write --allow-env --allow-run npm:rescript@12.2.0",
     "res:dev": "bun run res:dev",
     "dev": "bun run dev",
     "build": "bun run build",
-    "test": "bun run test",
-    "test:deno": "deno test --no-check --node-modules-dir=auto --allow-read --allow-env --allow-run=deno --allow-net=127.0.0.1,localhost tests/"
+    "test": "bun run test"
   }
 }

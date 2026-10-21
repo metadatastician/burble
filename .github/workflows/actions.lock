@@ -96,7 +96,6 @@ workflows:
         - 'erlef/setup-beam@v1.24.1'
     '.github/workflows/web-client-tests.yml':
         - 'actions/checkout@v7.0.1'
-        - 'denoland/setup-deno@v2.0.5'
         - 'oven-sh/setup-bun@v2.2.0'
     '.github/workflows/workflow-safety.yml':
         - 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1'
@@ -170,11 +169,6 @@ dependencies:
         repo_id: 496012378
         uses:
             - 'actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f'
-    'denoland/setup-deno@v2.0.5':
-        ref: 'v2.0.5'
-        commit: 'sha1-22d081ff2d3a40755e97629de92e3bcbfa7cf2ed'
-        owner_id: 42048915
-        repo_id: 356423100
     'docker/build-push-action@v7.4.0':
         ref: 'v7.4.0'
         commit: 'sha1-c3c9e263c25d99ce0380d002d59b67737d91b0dc'

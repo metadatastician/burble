@@ -45,13 +45,11 @@ bun run check:elixir             # == bun check-elixir-syntax.mjs ../server/lib 
 From the repository root that is `bun run --cwd scripts check:elixir`. Measured
 here on 2026-10-21: `parsed 208 file(s), 0 with parse errors`.
 
-Deno is retained as a second supported route: `deno install --config
-scripts/deno.json --frozen` then `deno run --allow-read --allow-env
-scripts/check-elixir-syntax.mjs server/lib server/test`. `scripts/package.json`
-and `scripts/bun.lock` pin the same parser versions as `scripts/deno.json` and
-`scripts/deno.lock`. The tool only uses the bundled WASM grammar; native
-dependency build scripts are not needed (Bun blocks the one postinstall it
-finds, and the tool runs regardless).
+`scripts/package.json` and `scripts/bun.lock` pin both parser versions exactly.
+`scripts/deno.json` and `scripts/deno.lock` are kept because the repository
+template expects the manifest; they are not the documented way to run this. The
+tool only uses the bundled WASM grammar, so native dependency build scripts are
+not needed (Bun blocks the one postinstall it finds, and the tool runs anyway).
 Rationale and measured results:
 `docs/reports/maintenance/maintenance-2026-10-21.md` (Appendix).
 

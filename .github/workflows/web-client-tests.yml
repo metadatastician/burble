@@ -3,22 +3,21 @@
 # This workflow is managed by gh actions-lock.
 # Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
 #
-# web-client-tests.yml — web-client test suite (Bun first, Deno retained)
+# web-client-tests.yml — web-client test suite (Bun)
 #
-# Bun is the estate's default runner as of 2026-10. The gating job below runs
-# the *whole* suite at client/web/tests/ — 12 files, 97 tests — including the
-# four suites that spawn helper servers (relay rendezvous, AI bridge API,
-# bridge security, bridge round-trip). Those used to be Deno-only because they
-# called `new Deno.Command("deno", …)`; they now go through `spawnServer()` in
-# tests/runner.js, which uses `Bun.spawn` under Bun and `Deno.Command` under
-# Deno. The servers themselves (signaling/relay.js,
-# client/web/burble-ai-bridge.js) go through signaling/runtime.js for the same
-# reason: one code path, both runtimes.
+# Bun is the estate's default runner as of 2026-10. This is the only runner
+# here: one job, the whole suite at client/web/tests/ — 12 files, 97 tests —
+# including the four suites that spawn helper servers (relay rendezvous, AI
+# bridge API, bridge security, bridge round-trip). Those used to be Deno-only
+# because they called `new Deno.Command("deno", …)`; they now go through
+# `spawnServer()` in tests/runner.js, which uses `Bun.spawn`. The servers
+# themselves (signaling/relay.js, client/web/burble-ai-bridge.js) go through
+# signaling/runtime.js, which uses Bun.serve.
 #
-# The Deno job is kept, deliberately, as a compatibility check: runtime.js is
-# only correct if it works on both runtimes, and Deno Deploy is still a
-# supported home for the relay. It is advisory because a Deno failure means
-# "compatibility regressed", not "the product is broken".
+# There is deliberately no Deno job. Deno used to run ten of these twelve files
+# in a `continue-on-error` job, which is how the suite could be "green" while
+# five files failed at import. One runner, nothing advisory, no second path to
+# keep in sync.
 #
 # Tests exercise the compiled ReScript output (*.res.mjs) for now;
 # AffineScript-output parity is tracked by affinescript-canary.yml
@@ -50,8 +49,6 @@ permissions:
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
-env:
-  DENO_VERSION: 'v2.x'
 jobs:
   bun-tests:
     name: Bun test — client/web (gating)
@@ -102,30 +99,3 @@ jobs:
           echo "parallel \`.affine\` source tree is exercised separately by" >> "$GITHUB_STEP_SUMMARY"
           echo "\`affinescript-canary.yml\`; this workflow graduates to gating the" >> "$GITHUB_STEP_SUMMARY"
           echo ".affine build once STATE.a2ml Phase 5 closes." >> "$GITHUB_STEP_SUMMARY"
-  # Compatibility, not precedence: Bun is the default everywhere, but the relay
-  # and the bridge still have to run on Deno (Deno Deploy, and anyone who has
-  # not migrated). Advisory, so a Deno-only regression is reported rather than
-  # blocking work on the Bun-first path.
-  deno-compat:
-    name: Deno compatibility — client/web (advisory)
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    continue-on-error: true
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v7.0.1
-      - name: Setup Deno
-        uses: denoland/setup-deno@v2.0.5
-        with:
-          deno-version: ${{ env.DENO_VERSION }}
-      # `res:build:deno` is the Deno-native compile step; the default
-      # `res:build` task delegates to Bun (Bun-first estate).
-      - name: Build ReScript (compiles .res to .res.mjs for tests)
-        working-directory: client/web
-        run: deno task res:build:deno
-      # Run the Deno-native entry point directly rather than `deno task test`:
-      # the task delegates to Bun (Bun-first estate), and this job's whole point
-      # is to prove the *Deno* path still works.
-      - name: Run web-client tests on Deno
-        working-directory: client/web
-        run: deno task test:deno

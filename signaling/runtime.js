@@ -1,11 +1,17 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
 //
-// runtime.js — run the same server file on Bun or Deno.
+// runtime.js — the runtime-specific calls behind relay.js and burble-ai-bridge.js.
 //
-// The estate runs Bun first. These two long-lived processes (the signalling
+// Bun is the runtime here: it is what CI runs, what the docs tell you to run,
+// and what the tests spawn. These two long-lived processes (the signalling
 // relay and the AI bridge) were written against Deno's API and could not start
-// under Bun at all, which made "bun test" unable to cover them: nothing to spawn.
+// under Bun at all, which is what made "bun test" unable to cover them: there
+// was no process to spawn.
+//
+// The Deno branch below is kept because these files were written for it and the
+// adaptation is a dozen lines, but it is not exercised by CI. Treat Bun as the
+// supported runtime and Deno as untested.
 //
 // The surface difference is small and worth hiding in one place:
 //

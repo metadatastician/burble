@@ -37,7 +37,7 @@ CRG C artefact checklist:
 - **Opus contract tests (added 2026-04-16):** 6 tests in `opus_contract_test.exs` — opus_transcode returns :not_implemented on all 3 backends; audio_encode round-trips raw PCM; bitrate parameter is provably ignored.
 - panic-attack scan: Ready via `just assail`.
 
-### P2P AI bridge tests (Deno)
+### P2P AI bridge tests (Bun)
 - **Round-trip tests (added 2026-04-16):** in `client/web/tests/ai_bridge_roundtrip_test.js`
   - A → B message round-trip, B → A reverse, heartbeat keep-alive
   - **100-message burst ordering:** all 100 arrive in seq order, no drops
@@ -67,15 +67,14 @@ CRG C artefact checklist:
   - Coverage today: room names, relay rendezvous + CORS, signaling, WebRTC
     offer/answer, AI bridge API + security + round-trip, E2EE (two files), and
     the node:net upgrade probe.
-  - Wired into CI via `.github/workflows/web-client-tests.yml`: one gating Bun
-    job over the whole suite, one advisory Deno *compatibility* job. Closes #48
-    acceptance bullet 2.
+  - Wired into CI via `.github/workflows/web-client-tests.yml`: a single gating
+    Bun job over the whole suite — no advisory lane, no second runner. Closes
+    #48 acceptance bullet 2.
   - Migration to running against `.affine` output is gated by STATE.a2ml Phase 5
     closure (`affinescript-canary.yml` is the compilation canary today, and 35
     of 36 `.affine` files still fail it — see `DEBT.md` CODE-1c).
-- **No test runner is Deno-only any more.** Deno remains a supported runtime
-  (`signaling/runtime.js`), so the suite still runs there, but Bun is the
-  default and the one CI gates on.
+- **No test runner is Deno-only any more.** Bun is the runner: it gates CI, it is
+  what the docs teach, and it is what the helper servers spawn under.
 - **Desktop (Ephapax, 5 .eph files):** ZERO test files. Carry-forward.
 
 ### End-to-End

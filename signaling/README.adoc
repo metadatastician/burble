@@ -12,7 +12,7 @@ the heavy lifting is in the OTP control plane and the media plane.
 
 `relay.js`:: Canonical signaling relay. (The former `Relay.res` was
 removed when signaling was consolidated — see `STATE.a2ml [migration]`.)
-Runs on Bun or Deno; every runtime-specific call goes through `runtime.js`.
+Runs on Bun; every runtime-specific call goes through `runtime.js`.
 `runtime.js`:: The only file that knows which runtime it is on — `env()`,
 `serve()`, `isBun`, `isDeno`, and the Bun-WebSocket-handler ⇄ Deno-socket
 adaptation. Add to it rather than forking it.
@@ -26,9 +26,9 @@ remains anywhere in the repository.
 
 [source,bash]
 ----
-bun signaling/relay.js                 # default port, no permission flags
+bun signaling/relay.js                 # default port (6476), no permission flags
 RELAY_PORT=8081 bun signaling/relay.js # override
-deno run --allow-net --allow-env signaling/relay.js   # Deno still supported
+RELAY_HOST=127.0.0.1 bun signaling/relay.js
 ----
 
 Tests: `client/web/tests/relay_rendezvous_test.js` (5 tests, spawns the relay

@@ -20,9 +20,6 @@ If you also want Claude Code (or another AI tool) to talk over the same channel,
 bun client/web/burble-ai-bridge.js
 ```
 
-(Deno is still supported: `deno run --allow-net --allow-env client/web/burble-ai-bridge.js`.
-Both go through `signaling/runtime.js`.)
-
 …then the page picks it up automatically (look for the green "bridge online" dot in the **AI Channel** card).
 
 ## I want to build and run the server locally
