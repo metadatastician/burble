@@ -39,7 +39,7 @@ if (!isBun && !isDeno) {
 /** Environment variable, with a default. */
 export function env(name, fallback = undefined) {
   const value = isBun ? globalThis.process?.env?.[name] : globalThis.Deno.env.get(name);
-  return value ?? fallback;
+  return value === "" ? fallback : value ?? fallback;
 }
 
 // WHATWG readyState values, so callers can keep using the same comparisons.
