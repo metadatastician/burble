@@ -36,10 +36,10 @@ Severity is about **consequence if left alone**, not effort.
 | CI/CD | 5 | 2 |
 | Licence | 4 | 3 |
 | Documentation | 6 | 3 |
-| Code | 5 | 3 |
+| Code | 6 | 4 |
 | Proof | 4 | 2 |
 | Test | 3 | 1 |
-| **Total** | **32** | **16 open + 6 resolved** |
+| **Total** | **33** | **17 open + 6 resolved** |
 
 ---
 
@@ -457,6 +457,44 @@ they shell out to `npx rescript`, which works.
 (current: the README points at CODE-1d), or write the entry points. Do not
 convert the manifest to Bun until they exist — a `package.json` whose scripts
 point at missing files would just move the problem.
+
+### CODE-1e — nothing enforces that only the epoch leader seals the room key · HIGH · OPEN 2026-10-21
+
+The design says one peer per epoch seals the group key: `e2ee.ex:16` — "One
+peer per epoch (the "key leader" — lowest peer id, deterministic)" — and
+`seal_group_key` / `seal_for_peer` are documented "**Peer-side** (leader only)".
+The server does not check it:
+
+```
+git show origin/main:server/lib/burble/media/e2ee.ex | sed -n 260,261p
+#   The caller must authenticate `from`; this function checks membership but
+#   does not enforce leadership or validate the blob's cryptographic contents.
+```
+
+`publish_sealed/5` therefore accepts a blob from any member, and the receiving
+side is no laxer: `E2EESession.onSealedKey` (`client/web/e2ee-session.js:213`)
+accepts a blob from any peer present in the key set and calls `setRoomKey`.
+Because only one blob per recipient per epoch is stored (later ones get
+`already_published`), a non-leader that publishes first wins the race and the
+victim encrypts under a key the attacker chose.
+
+This is **not** a documentation contradiction — the docstring is accurate about
+what is enforced. It is a missing control.
+
+**Found by** an automated review on #248, whose proposed patch was wrong in
+three ways and is not the fix: it mapped the failed check into the `else` clause
+so a non-leader's valid blob reports `:invalid_sealed_blob` instead of
+`:not_leader`; it made `room_channel_e2ee_test.exs:155` and `:220`
+intermittent, because `Auth.create_guest_session/1` assigns random ids
+(`auth.ex:63`) and those tests publish from Alice; and it ignored failover, which
+`e2ee.ex:40` records as not implemented mid-epoch.
+
+**A correct fix has to do all of:** compute the leader deterministically from the
+current membership and return a distinct `:not_leader` error (not a blob error);
+reject non-leader blobs on the client too, so the server is not the only
+defence; make the tests name the leader explicitly instead of assuming Alice is
+it; and decide what happens when the leader leaves mid-epoch, since a
+leader-only rule with no failover can strand a room without a key.
 
 ### CODE-1a — the client's E2EE module was not encryption · RESOLVED 2026-10-21
 
