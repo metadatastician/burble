@@ -265,6 +265,13 @@ repository's history. What was ruled out, in order:
   standards-calling scheduled lanes green at 04:02 and 04:00 today, so external
   reusable calls work elsewhere in the estate.
 
+There is also a discriminator inside this repository. `dogfood-gate.yml` is
+green and calls two **actions** in another repository
+(`hyperpolymath/deed-ecosystem/validate-action`, `hyperpolymath/k9-ecosystem/
+validate-action`); the six red workflows call **reusable workflows** in another
+repository. Cross-repo actions resolve; cross-repo reusable workflows do not.
+That is the split Actions keeps in two different allowlists.
+
 What is left is repository-level Actions policy in **this** repository: the
 "Allow select actions and reusable workflows" setting keeps a *separate*
 allowlist for reusable workflows, and a reusable workflow that is not on it is
