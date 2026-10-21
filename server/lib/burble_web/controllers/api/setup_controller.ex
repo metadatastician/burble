@@ -114,6 +114,9 @@ defmodule BurbleWeb.API.SetupController do
   Returns 403 once setup is complete, 503 if PipeWire is unavailable, or
   500 if device enumeration returns an error.
 
+  Returns 403 once setup is complete, 503 if PipeWire is unavailable, or 500
+  if device enumeration returns an error.
+
   Response format:
       {
         "inputs": [

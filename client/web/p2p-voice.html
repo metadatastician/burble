@@ -438,6 +438,12 @@
 
     // ── Auto-connect via relay ────────────────────────────────────────
 
+    /**
+     * Exchange SDP through the configured relay; role "create" posts an offer,
+     * otherwise joins. Missing settings or a failed health check use manual exchange.
+     * Polls at most 20 times for an answer or 30 for an offer. Poll failures are
+     * retried; initial WebRTC setup and PUT network errors reject the promise.
+     */
     async function autoConnect(role) {
       const relay = document.getElementById('relay-url').value.trim().replace(/\/$/, '');
       const room = normalizeRoomName(document.getElementById('room-name').value);
