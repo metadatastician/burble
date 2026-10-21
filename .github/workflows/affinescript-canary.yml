@@ -106,7 +106,6 @@ jobs:
           while IFS= read -r f; do
             total=$((total+1))
             if ! affinescript check "$f" >"$tmp" 2>&1; then
-              echo "::warning file=$f::affinescript check failed"
               echo "--- $f ---"
               cat "$tmp"
               # GitHub caps annotations at ten per check run, so the annotation
@@ -127,6 +126,11 @@ jobs:
             echo "| AffineScript ref | \`${AFFINESCRIPT_REF}\` |"
           } >> "$GITHUB_STEP_SUMMARY"
           if [ "$failed" -gt 0 ]; then
+            # One annotation with the whole result. Per-file ::warning lines are
+            # capped at ten per check run, which is why this job could fail
+            # without anyone being able to say how badly.
+            names=$(sed -e 's/^- `//' -e 's/`.*//' "$list" | tr '\n' ' ')
+            echo "::error title=affine canary::${failed} of ${total} .affine files are not AffineScript: ${names:0:1200}"
             {
               echo ""
               echo "Canary advisory: $failed of $total file(s) failed compilation. This does not block the merge."
