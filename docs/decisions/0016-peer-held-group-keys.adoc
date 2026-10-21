@@ -107,7 +107,22 @@ peers, and its AAD names room, epoch, sender and recipient, so a third peer can
 neither open it, redirect it, nor replay it into another epoch. Documented in
 `docs/PROTOCOL.md`.
 
-### 5. Names must not overclaim
+### 5. The protocol is pinned by cross-language vectors
+
+Two implementations must agree byte-for-byte, and the second one is not written
+yet. `client/web/tests/fixtures/e2ee-vectors.json` therefore pins the wire
+protocol: the Elixir functions generate it (`scripts/gen-e2ee-vectors.exs`) and
+`scripts/verify-e2ee-vectors.mjs` re-derives every value with **WebCrypto** —
+X25519 agreement, HKDF-SHA256, AES-256-GCM and the AAD — failing on any
+disagreement. Keys come from the RFC 7748 §6.1 test private keys, so the
+vectors are reproducible from a published document as well as from our code.
+
+One portability constraint surfaced immediately: WebCrypto will not import a
+raw 32-byte X25519 **private** key. The browser must wrap it in PKCS#8 (OID
+1.3.101.110, the key as an inner OCTET STRING). That is recorded here because it
+is the kind of detail that otherwise costs a day when the client half starts.
+
+### 6. Names must not overclaim
 
 - `:e2ee_key` → `:pipeline_key` in the engine and coprocessor pipeline, and the
   engine **refuses** a pipeline key in an `:e2ee`/`:maximum` room (logged).

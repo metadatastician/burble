@@ -655,57 +655,62 @@ for Burble, is in
 
 ---
 
-## Appendix — how the Elixir was checked without a compiler (round 2)
+## Appendix — verification actually performed (round 2)
 
-There is no Erlang/Elixir toolchain in the environment this work was done in, so
-"reviewed line by line" was upgraded to something reproducible. Three checks
-were run over `server/lib` and `server/test`; none of them is a substitute for
-`mix compile`, and the fourth item lists what they cannot see.
+Earlier drafts of this report said the Elixir could not be compiled here. That
+was true of the *first* pass and is no longer true: a toolchain was built from
+source and the E2EE work was compiled and executed. What follows is measured,
+with the commands.
 
-1. **Real grammar, not bracket counting.** Every `.ex`/`.exs` file was parsed
-   with `tree-sitter-elixir` 0.3.5 through `web-tree-sitter` 0.27 (WASM, no
-   native build). The check is committed as `scripts/check-elixir-syntax.mjs`
-   so it can be repeated:
+### Toolchain
 
-   ```bash
-   npm install --prefix scripts
-   node scripts/check-elixir-syntax.mjs server/lib server/test
-   # -> parsed 208 file(s), 0 with parse errors
-   ```
+GitHub release assets are unreachable from this environment (they redirect to
+`objects.githubusercontent.com`), but repository tarballs are not, so the
+toolchain was built from source — matching `.github/workflows/elixir-ci.yml`
+(OTP 27 / Elixir 1.17):
 
-   The same script, given a deliberately broken file, reports the `ERROR`
-   nodes — so the zero is a measurement, not a silent failure.
+1. OpenSSL 3.0.15 (`codeload.github.com/openssl/openssl`, `./Configure`,
+   `make install_sw`) — `libcrypto` for `:crypto`.
+2. Erlang/OTP 27.2 (`codeload.github.com/erlang/otp`, whose tag tarball ships a
+   pre-generated `configure`): `./configure --without-javac --without-termcap
+   --enable-builtin-zlib --with-ssl=...`, `make`, `make install`.
+3. Elixir 1.17.3 (`codeload.github.com/elixir-lang/elixir`), `make install`.
 
-2. **Alias-aware cross-module arity check.** For every `Module.fun(args)` in
-   the tree, the script resolves `Module` through the file's `alias`
-   declarations and checks that `fun/arity` is defined in a project module
-   (accounting for default arguments and pipes). This is the exact class of bug
-   that broke this round: `KeyRotation` calling `E2EE.ratchet_key/1` after that
-   function was removed.
+`crypto:supports/0` confirms `x25519` and `aes_256_gcm` are present.
 
-   ```bash
-   node scripts/check-elixir-syntax.mjs --calls server/lib server/test
-   # -> parsed 208 file(s), 0 with parse errors
-   # -> 219 project module(s); 25 unresolved cross-module call(s)
-   ```
+### Results
 
-   All 25 were adjudicated by hand and are artefacts, not defects:
-   macro-generated functions (`use Phoenix.Presence`, `use Phoenix.Endpoint`,
-   `use Guardian`), reflective calls (`__info__/1`, `behaviour_info/1`) and
-   `@spec` type references (`PipeWire.device_info()`). No unresolved call
-   remains in the E2EE, engine, pipeline, privacy, key-rotation or channel
-   modules.
+| Check | Command | Result |
+|---|---|---|
+| Module compiles | `elixirc lib/burble/media/e2ee.ex -o /tmp/ebin` | **compiles**; one expected warning (`Phoenix.PubSub` not installed — a dependency, not a defect) |
+| Unit suite runs | `elixir -pa /tmp/ebin -e 'ExUnit.start(); {:ok, _} = Burble.Media.E2EE.start_link()' -r test/burble/media/e2ee_test.exs` | **24 tests, 0 failures** |
+| Crypto kernel | same, with `backend.ex` + `elixir_backend.ex` compiled | **20 tests, 1 failure** — the failure is `Jason` missing (dependency), not code |
+| Formatting | `mix format --check-formatted` | 99 files unformatted, **all pre-existing**; every file touched in this round passes |
+| Cross-language vectors | `node scripts/verify-e2ee-vectors.mjs` | **6/6 agree** with WebCrypto |
 
-3. **Formatting proxies** (not `mix format`): no tabs, no trailing whitespace,
-   files end with a newline, and new code stays within the default 98-column
-   budget. Six pre-existing lines exceed 98 columns (box-drawing art, long
-   `@spec`/string literals); none were introduced here.
+The unit run earned its keep immediately: it caught a compile error in
+`test/burble/media/e2ee_test.exs` (`undefined variable "alice_pub"`) that no
+amount of parsing or reading had found, and that would have failed CI on the
+first push. That is the case for installing the toolchain rather than reasoning
+about it.
 
-4. **What is still unverified.** Compilation, warnings-as-errors, the ExUnit
-   suites, `mix format --check-formatted`, and every runtime behaviour of the
-   new channel events. The E2EE tests and the channel tests are written but
-   have never been executed. CI must run:
+The vectors also produced a portability finding that matters for the client
+work: WebCrypto will not import a raw X25519 **private** key; it must be
+wrapped in PKCS#8. Recorded in ADR-0016 §5.
 
-   ```bash
-   cd server && mix compile --warnings-as-errors && mix format --check-formatted && mix test
-   ```
+### Still unverified
+
+`mix deps.get` cannot reach `builds.hex.pm`, so **anything that needs a
+dependency was not compiled or run**: Phoenix (channels, endpoint, controllers),
+Ecto, Jason, and therefore `server/test/burble_web/channels/room_channel_e2ee_test.exs`
+and the full suite. The channel wiring was reviewed and parsed, not executed.
+CI remains the gate:
+
+```bash
+cd server && mix deps.get && mix compile --warnings-as-errors \
+  && mix format --check-formatted && mix test
+```
+
+Note that `mix format --check-formatted` already fails on 99 pre-existing files,
+so that step is currently advisory in practice; this round deliberately did not
+reformat unrelated files (the diff stays reviewable).

@@ -132,6 +132,11 @@ two peers involved, and its AAD names the room, epoch, sender and recipient, so
 no other peer can open, redirect or replay it. Any membership change bumps the
 epoch and drops outstanding blobs.
 
+**Test vectors.** `client/web/tests/fixtures/e2ee-vectors.json` pins the
+byte-level protocol (pairwise derivation, sealing, AAD, frame keys);
+`scripts/verify-e2ee-vectors.mjs` re-derives it with WebCrypto. Regenerate with
+`scripts/gen-e2ee-vectors.exs` only for a deliberate wire break.
+
 **Status: part-way.** Nothing here encrypts media yet — the browser frame layer
 (WebCrypto + Encoded Transform) is unwritten, so calls remain protected by
 DTLS-SRTP per hop. See `README.adoc` §*Encryption: what is true today*.

@@ -102,10 +102,10 @@ defmodule BurbleWeb.Channels.RoomChannelE2EETest do
 
       ref = register(chan, public_key)
 
-      assert_reply ref, :ok, %{epoch: 0, peers: 1}
+      assert_reply(ref, :ok, %{epoch: 0, peers: 1})
 
-      assert_broadcast "e2ee_key_set", %{epoch: 0, peers: 1}
-      assert_broadcast "e2ee_key_set", %{public_keys: keys}
+      assert_broadcast("e2ee_key_set", %{epoch: 0, peers: 1})
+      assert_broadcast("e2ee_key_set", %{public_keys: keys})
 
       # The broadcast carries the public key, base64-encoded — and nothing else.
       assert Map.values(keys) |> Enum.map(&Base.decode64!/1) == [public_key]
@@ -117,13 +117,13 @@ defmodule BurbleWeb.Channels.RoomChannelE2EETest do
       {chan, _user_id} = join_room(new_room_id(), "Bob")
 
       ref = push(chan, "e2ee_register_key", %{"public_key" => Base.encode64(<<0, 1, 2>>)})
-      assert_reply ref, :error, %{reason: "invalid_public_key"}
+      assert_reply(ref, :error, %{reason: "invalid_public_key"})
 
       ref = push(chan, "e2ee_register_key", %{"public_key" => "not base64!!"})
-      assert_reply ref, :error, %{reason: "invalid_public_key"}
+      assert_reply(ref, :error, %{reason: "invalid_public_key"})
 
       ref = push(chan, "e2ee_register_key", %{})
-      assert_reply ref, :error, %{reason: "invalid_public_key"}
+      assert_reply(ref, :error, %{reason: "invalid_public_key"})
 
       leave(chan)
     end
@@ -134,10 +134,10 @@ defmodule BurbleWeb.Channels.RoomChannelE2EETest do
       public_key = new_public_key()
 
       ref = register(chan, public_key)
-      assert_reply ref, :ok, %{}
+      assert_reply(ref, :ok, %{})
 
       ref = push(chan, "e2ee_key_set", %{})
-      assert_reply ref, :ok, %{epoch: 0, public_keys: keys}
+      assert_reply(ref, :ok, %{epoch: 0, public_keys: keys})
 
       assert [public_key] == keys |> Map.values() |> Enum.map(&Base.decode64!/1)
 
@@ -155,8 +155,8 @@ defmodule BurbleWeb.Channels.RoomChannelE2EETest do
       {alice, _alice_id} = join_room(room_id, "Alice")
       {bob, bob_id} = join_room(room_id, "Bob")
 
-      assert_reply register(alice, new_public_key()), :ok, %{}
-      assert_reply register(bob, new_public_key()), :ok, %{}
+      assert_reply(register(alice, new_public_key()), :ok, %{})
+      assert_reply(register(bob, new_public_key()), :ok, %{})
 
       blob = :crypto.strong_rand_bytes(60)
 
@@ -167,18 +167,18 @@ defmodule BurbleWeb.Channels.RoomChannelE2EETest do
           "blob" => Base.encode64(blob)
         })
 
-      assert_reply ref, :ok, %{epoch: 0}
+      assert_reply(ref, :ok, %{epoch: 0})
 
       # The relay is a broadcast, but the payload is ciphertext bound to the
       # recipient by its AAD; every other peer receives bytes it cannot open.
-      assert_broadcast "e2ee_sealed_key", %{to: ^bob_id, epoch: 0}
+      assert_broadcast("e2ee_sealed_key", %{to: ^bob_id, epoch: 0})
 
-      assert_reply push(bob, "e2ee_fetch_sealed", %{}), :ok, %{epoch: 0, blob: encoded}
+      assert_reply(push(bob, "e2ee_fetch_sealed", %{}), :ok, %{epoch: 0, blob: encoded})
 
       assert Base.decode64!(encoded) == blob
 
       # Alice has nothing waiting for her.
-      assert_reply push(alice, "e2ee_fetch_sealed", %{}), :error, %{reason: "not_found"}
+      assert_reply(push(alice, "e2ee_fetch_sealed", %{}), :error, %{reason: "not_found"})
 
       leave(alice)
       leave(bob)
@@ -186,7 +186,7 @@ defmodule BurbleWeb.Channels.RoomChannelE2EETest do
 
     test "a malformed blob is refused" do
       {chan, _user_id} = join_room(new_room_id(), "Dave")
-      assert_reply register(chan, new_public_key()), :ok, %{}
+      assert_reply(register(chan, new_public_key()), :ok, %{})
 
       ref =
         push(chan, "e2ee_publish_sealed", %{
@@ -195,7 +195,7 @@ defmodule BurbleWeb.Channels.RoomChannelE2EETest do
           "blob" => Base.encode64(:binary.copy(<<0>>, 600))
         })
 
-      assert_reply ref, :error, %{reason: "invalid_sealed_blob"}
+      assert_reply(ref, :error, %{reason: "invalid_sealed_blob"})
 
       ref =
         push(chan, "e2ee_publish_sealed", %{
@@ -204,7 +204,7 @@ defmodule BurbleWeb.Channels.RoomChannelE2EETest do
           "blob" => Base.encode64(<<1, 2, 3>>)
         })
 
-      assert_reply ref, :error, %{reason: "invalid_epoch"}
+      assert_reply(ref, :error, %{reason: "invalid_epoch"})
 
       leave(chan)
     end
@@ -220,8 +220,8 @@ defmodule BurbleWeb.Channels.RoomChannelE2EETest do
       {alice, _alice_id} = join_room(room_id, "Alice")
       {bob, bob_id} = join_room(room_id, "Bob")
 
-      assert_reply register(alice, new_public_key()), :ok, %{epoch: 0}
-      assert_reply register(bob, new_public_key()), :ok, %{epoch: 0}
+      assert_reply(register(alice, new_public_key()), :ok, %{epoch: 0})
+      assert_reply(register(bob, new_public_key()), :ok, %{epoch: 0})
 
       ref =
         push(alice, "e2ee_publish_sealed", %{
@@ -230,13 +230,13 @@ defmodule BurbleWeb.Channels.RoomChannelE2EETest do
           "blob" => Base.encode64(:crypto.strong_rand_bytes(60))
         })
 
-      assert_reply ref, :ok, %{epoch: 0}
+      assert_reply(ref, :ok, %{epoch: 0})
 
       # Carol joins and registers: the epoch moves and Bob's blob is gone.
       {carol, _carol_id} = join_room(room_id, "Carol")
-      assert_reply register(carol, new_public_key()), :ok, %{epoch: 1}
+      assert_reply(register(carol, new_public_key()), :ok, %{epoch: 1})
 
-      assert_reply push(bob, "e2ee_fetch_sealed", %{}), :error, %{reason: "not_found"}
+      assert_reply(push(bob, "e2ee_fetch_sealed", %{}), :error, %{reason: "not_found"})
 
       leave(alice)
       leave(bob)
@@ -246,13 +246,13 @@ defmodule BurbleWeb.Channels.RoomChannelE2EETest do
     test "e2ee_status reports that the server holds no key" do
       room_id = new_room_id()
       {chan, _user_id} = join_room(room_id, "Erin")
-      assert_reply register(chan, new_public_key()), :ok, %{}
+      assert_reply(register(chan, new_public_key()), :ok, %{})
 
-      assert_reply push(chan, "e2ee_status", %{}), :ok, %{
+      assert_reply(push(chan, "e2ee_status", %{}), :ok, %{
         epoch: 0,
         peers: 1,
         key_custody: "peers"
-      }
+      })
 
       leave(chan)
     end
@@ -260,7 +260,7 @@ defmodule BurbleWeb.Channels.RoomChannelE2EETest do
     test "leaving the room removes the peer and rotates the epoch" do
       room_id = new_room_id()
       {chan, user_id} = join_room(room_id, "Frank")
-      assert_reply register(chan, new_public_key()), :ok, %{}
+      assert_reply(register(chan, new_public_key()), :ok, %{})
 
       leave(chan)
 

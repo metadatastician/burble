@@ -38,4 +38,11 @@ Install once with `npm install --prefix scripts`, then
 Rationale and measured results:
 `docs/reports/maintenance/maintenance-2026-10-21.md` (Appendix).
 
+`gen-e2ee-vectors.exs`:: Regenerate `client/web/tests/fixtures/e2ee-vectors.json`
+from the shipped `Burble.Media.E2EE` functions (needs Elixir). Regenerate only
+when the protocol changes — a changed value is a wire break.
+`verify-e2ee-vectors.mjs`:: Re-derive those vectors with WebCrypto (X25519,
+HKDF-SHA256, AES-256-GCM) — the primitives the browser half must use — and fail
+on disagreement. No dependencies; runs on plain Node.
+
 `burble-launcher.sh.deprecated-2026-04-10`:: Retained, deprecated.

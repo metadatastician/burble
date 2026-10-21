@@ -107,7 +107,7 @@ defmodule Burble.Media.E2EE do
   @type key_set :: %{
           room_id: String.t(),
           epoch: non_neg_integer(),
-          peers: %{peer_id :: String.t() => public_key :: binary()}
+          peers: %{(peer_id :: String.t()) => public_key :: binary()}
         }
 
   @typedoc "Server-side room state — public keys and opaque blobs only."

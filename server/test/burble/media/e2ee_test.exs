@@ -31,7 +31,7 @@ defmodule Burble.Media.E2EETest do
 
   describe "pairwise_key/6" do
     test "both sides derive the same key, and the server is not involved" do
-      {_alice_pub, alice_priv} = E2EE.generate_keypair()
+      {alice_pub, alice_priv} = E2EE.generate_keypair()
       {bob_pub, bob_priv} = E2EE.generate_keypair()
 
       assert {:ok, from_alice} =
@@ -156,8 +156,9 @@ defmodule Burble.Media.E2EETest do
 
   describe "encode_sealed/1 + decode_sealed/1" do
     test "wire form is iv || tag || ciphertext and round-trips" do
-      sealed = {:crypto.strong_rand_bytes(32), :crypto.strong_rand_bytes(12),
-                :crypto.strong_rand_bytes(16)}
+      sealed =
+        {:crypto.strong_rand_bytes(32), :crypto.strong_rand_bytes(12),
+         :crypto.strong_rand_bytes(16)}
 
       wire = E2EE.encode_sealed(sealed)
       assert byte_size(wire) == 60
