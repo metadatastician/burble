@@ -248,7 +248,7 @@ defmodule BurbleWeb.GameChannel do
             relay_broadcast(updated, "command", Map.delete(payload, "seq"))
           end)
 
-        relay_reply(result, updated)
+        relay_reply(result, if(result == :ok, do: updated, else: socket))
 
       {:stale, updated} ->
         relay_reply({:error, :stale_or_duplicate}, updated)
