@@ -32,7 +32,9 @@ defmodule BurbleWeb.Channels.GameChannelTest do
     socket(BurbleWeb.UserSocket, nil, %{
       user_id: "test-user-#{System.unique_integer([:positive])}",
       display_name: "TestSeat",
-      is_guest: true
+      is_guest: true,
+      # Actual transport-origin and scoped admission checks are tested separately.
+      legacy_game_local: true
     })
   end
 
@@ -60,10 +62,10 @@ defmodule BurbleWeb.Channels.GameChannelTest do
   describe "join" do
     test "accepts each role and announces it to the peer" do
       {reply, _infil} = join!("j1", "infiltrator")
-      assert reply == %{role: "infiltrator", game: "idaptik"}
+      assert reply == %{role: "infiltrator", game: "idaptik", protocol: "legacy-json-v1"}
 
       {reply, _hacker} = join!("j1", "hacker")
-      assert reply == %{role: "hacker", game: "idaptik"}
+      assert reply == %{role: "hacker", game: "idaptik", protocol: "legacy-json-v1"}
       assert_broadcast "peer_joined", %{"role" => "hacker"}
     end
 

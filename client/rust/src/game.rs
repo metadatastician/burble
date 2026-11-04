@@ -23,7 +23,10 @@ pub struct JoinConfig {
     pub auth: Auth,
 }
 
-/// Whether Burble delivered a command to the other seat.
+/// Whether the legacy relay accepted a command for broadcast.
+///
+/// `Relayed` is not evidence of durable commit, peer receipt or application.
+/// This client speaks `legacy-json-v1`; it does not negotiate the 0.8 fabric.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RelayOutcome {
     Relayed,

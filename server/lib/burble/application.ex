@@ -51,6 +51,9 @@ defmodule Burble.Application do
       # PubSub for real-time events (room join/leave, voice state changes)
       {Phoenix.PubSub, name: Burble.PubSub},
 
+      # Ephemeral, generic seat authority; no game rules or database dependency.
+      Burble.Sessions.Admission,
+
       # Presence tracking (who's in which room, voice state)
       Burble.Presence,
 

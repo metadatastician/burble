@@ -48,6 +48,13 @@ config :logger, :console,
 
 config :phoenix, :json_library, Jason
 
+# The unauthenticated game relay is a distinct local development protocol.
+# Production has no environment flag that silently opts into that lane.
+config :burble, :game_session_mode, :scoped
+
+# Phoenix filters channel join params as well as HTTP request parameters.
+config :phoenix, :filter_parameters, ["password", "token", "ticket", "rejoin_token"]
+
 # Signalling wire format (spline ADR-0005 criterion (a)).
 #
 # :bebop — SDP bodies ride as base64-wrapped Bebop `SdpPayload` binaries,

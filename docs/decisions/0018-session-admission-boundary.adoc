@@ -1,0 +1,149 @@
+// SPDX-License-Identifier: MPL-2.0
+// SPDX-FileCopyrightText: 2026 Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
+= ADR 0018: scoped session admission and explicit protocol limits
+
+Date: 2026-11-04
+
+== Status and scope
+
+Implementation proposal for https://github.com/metadatastician/burble/issues/254[Burble #254]
+and https://github.com/catachresis-colloquium/IDApTIK/issues/211[IDApTIK #211].
+Admission is one event chain in the owner's Observe → Identify → Support →
+Validate → Decide → Learn approach. This change does not establish that the
+consumer's next event has been unblocked. ADR-0007 governs all readiness claims.
+
+The previous game channel checked whether a role existed in a game profile.
+It did not bind that role to an authenticated participant, exclude a second
+claimant, or fence an older connection. A socket token alone did not supply
+those guarantees. HTTP availability and a relay accepting a message did not
+establish them either.
+
+== Protocol declaration
+
+[cols="1,2,2,2",options="header"]
+|===
+|Protocol |Admission |Encoding and size |Evidence and recovery
+|`legacy-json-v1`
+|Explicit development/test mode; actual transport peer must be loopback.
+|Existing JSON game payload; `/voice` retains its 16,384-byte frame limit.
+|`relayed` means accepted for broadcast. No authenticated seat or durable recovery.
+|`admission-v1`
+|Signed access/guest identity plus a distinct participant/session/epoch/role ticket.
+|JSON only; maximum encoded game payload 8,192 bytes within the existing frame limit.
+|Only `accepted`; per-seat sequence high-water survives a channel rejoin, not an authority restart.
+|0.8 session fabric
+|Not implemented by this change.
+|Binary formats and 0.8 negotiation are refused; there is no silent downgrade.
+|Durable journal, restart replay, delivered/applied receipts and consumer conformance remain open.
+|===
+
+The existing Rust `GameClient` is a legacy JSON consumer. Its `Relayed` result
+is not a peer-delivery receipt. IDApTIK must keep its local-only containment
+until a separately validated hosted profile and consumer are available.
+
+== Admission boundary
+
+`Burble.Sessions.Admission` is a bounded, in-memory, single-node authority.
+It knows opaque audience, participant and role identifiers; it contains no
+game roles, commands, ticks, deterministic-engine state or GSA data. The
+existing game-channel adapter supplies its registered profile as the audience.
+
+The trusted host provisions a roster with `Admission.create/4`. Provisioning,
+epoch rotation and close are local BEAM operations; there is no new public
+management or invitation-issuance endpoint. The host must authenticate the
+participant independently before assigning that participant a role. Do not
+log, publish or put the returned bearer tickets in discovery metadata.
+
+A join in scoped mode requires all of:
+
+* The verified socket's stable principal and unexpired access or signed guest
+  token. The unsigned `guest=true` path and refresh tokens confer no admission
+  identity. A signed guest identity still needs its separately provisioned ticket.
+* `protocol: "admission-v1"`, JSON encoding, the exact current epoch and one
+  credential: either `ticket` or `rejoin_token`.
+* An exact match for session, audience, participant and role in the authority.
+
+The first claim consumes a 256-bit random ticket atomically. A second claimant
+cannot use that ticket, even with the same identity. The successful join returns
+a separate random rejoin token. A rejoin requires the same principal and role,
+rotates that token, and invalidates the older connection before admitting the
+replacement. Disconnect alone does not make the reserved role available to a
+different participant. A host can revoke the whole epoch or close the session.
+
+Every publish and receive effect checks identity expiry, epoch, lease and the
+calling channel PID inside the same authority operation that performs the
+effect. This avoids a check-then-publish race. Outgoing channel interception
+checks the current lease again. Internal scoped PubSub messages also carry
+their epoch, so queued messages or another authority instance's topic cannot
+be mistaken for traffic from the current epoch. This is not a distributed
+consensus or federation protocol; the BEAM node and its administrators are trusted.
+
+Session allocation is capped at 256 sessions and 16 exclusive roles per
+session. A principal may occupy one role in a roster. Session lifetime is at
+most one hour and uses a monotonic deadline; identity-token expiry retains
+the token's wall-clock semantics. Expired sessions are removed both on use
+and by a periodic sweep. Missing or crashed authority fails closed.
+
+Scoped commands require a nonnegative JSON-safe integer `seq`. The authority
+retains each role's high-water mark across rejoin and rejects duplicates or
+older sequence numbers. This counter is an ephemeral relay sequence. It is
+not a game tick, journal offset, durable receipt or application checkpoint.
+
+== Compatibility and deployment limits
+
+Production configuration defaults to scoped admission. Development/test
+configuration retains `local_legacy`; that path checks Phoenix `peer_data`
+from the actual transport and never trusts forwarding headers, URL hostnames
+or join parameters as evidence of loopback. Do not proxy or tunnel the local
+development listener to a remote network. Changing modes fences existing
+channels on their next operation.
+
+This patch does not provide a database-free production hosting profile.
+The existing full production application still has its Store and other
+services. Switching `MIX_ENV` is not a secure hosted-session installation
+procedure. GSA, Gossamer and optional research proofs are not admission
+dependencies and are not prerequisites for local play.
+
+An authority restart loses its sessions. Old tickets, rejoin credentials and
+epochs are refused; provisioning the same session ID creates a fresh random
+epoch. No durable resume is manufactured. A lost initial join ACK or lost
+rotated rejoin credential currently requires trusted host reprovisioning.
+The 0.8 journal/retry work must resolve that recovery contract before claiming
+failed-ACK/restart recovery. There is no application queue budget or peer
+application acknowledgement in this admission slice; the payload and roster
+bounds must not be described as those guarantees.
+
+== Claim-to-evidence map
+
+[cols="2,3",options="header"]
+|===
+|Claim |Executable evidence
+|Generic scope, malformed input, allocation bound, caller-PID binding, expiry
+|`server/test/burble/sessions/admission_test.exs`
+|Authenticated principal, exact ticket scope, concurrent double-seat denial,
+owner rejoin, stale epoch/writer refusal, restart refusal, replay high-water,
+payload bound, protocol refusal, real transport-origin input, log redaction
+|`server/test/burble_web/channels/session_admission_test.exs`
+|Legacy game payload/routing compatibility
+|`server/test/burble_web/channels/game_channel_test.exs`
+|Real WebSocket two-client exchange, double-seat race, unauthorized/version
+refusals, lost command ACK followed by live-authority rejoin/dedup, old-writer
+fencing, 16-KiB frame refusal, old epoch and restart refusal
+|`cargo run --locked --manifest-path client/rust/Cargo.toml --example admission_conformance`,
+which owns the private `server/test/support/admission_host.exs` fixture
+|Advisory-affected Hex dependencies and future drift
+|Pinned Hex 2.6.0 `mix hex.audit` and `mix deps.get --check-locked` in Elixir CI
+|===
+
+The channel tests run actual Phoenix channel processes and socket authentication.
+The separate Rust conformance executable uses independent WebSocket clients
+and a real loopback listener; its private test controller exposes no management
+route and never publishes tickets to logs. It requires Unix private file
+permissions. Neither test family establishes a remote/TLS production deployment.
+The merge commit must run both gates in CI. The existing AWOL multipath-chaos
+skip is not made into a pass by this change. Full hosted two-client/chaos and
+0.8 binary/journal conformance remain separate acceptance evidence.
+
+No compile-only Idris2 result, research proof, HTTP response, transport send,
+scan with incomplete coverage or absence of a reported alert upgrades these
+claims to runtime proof or consumer readiness.

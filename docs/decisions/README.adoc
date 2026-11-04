@@ -79,4 +79,8 @@ New ADRs copy `0000-template.adoc` and take the next number.
 | link:0017-upstream-pin-lock-cleanliness.adoc[0017]
 | Reusable-workflow pins are checked against the callee's lockfile
 | Accepted
+
+| link:0018-session-admission-boundary.adoc[0018]
+| Scoped session admission and explicit protocol limits
+| Implementation proposal; 0.8 and hosted consumer gates remain open
 |===
