@@ -30,29 +30,93 @@ defmodule Burble.Sessions.Admission do
 
   def start_link(opts \\ []), do: GenServer.start_link(__MODULE__, opts, name: __MODULE__)
 
-  @doc "Provision a finite-lived session. Returned bearer credentials are secrets."
+  @doc """
+  Provision a finite-lived session and return its epoch and per-role tickets.
+
+  `seats` maps roles to distinct participant IDs and must contain 1 to 16
+  entries. Session, audience, role, and participant IDs must be 1 to 128 bytes
+  of ASCII letters, digits, underscores, periods, or hyphens. `:ttl_seconds`
+  defaults to 1,800 and must be an integer from 1 to 3,600. The returned
+  `expires_at` is a Unix timestamp in seconds; bearer tickets are secrets.
+
+  Returns `{:error, :invalid_session}` for an invalid ID, roster, or lifetime,
+  `{:error, :session_exists}` for an active duplicate ID, or
+  `{:error, :session_capacity}` when 256 sessions are active. If the authority
+  call exits or times out, it returns `{:error, :authority_unavailable}`.
+  """
   def create(session_id, audience, seats, opts \\ []) do
     call({:create, session_id, audience, seats, Keyword.get(opts, :ttl_seconds, 1_800)})
   end
 
-  @doc "Revoke all old tickets/connections and provision a new random epoch."
+  @doc """
+  Revoke the session's tickets and connections and provision a new epoch.
+
+  The new provision retains the roster, audience, and lifetime, restarts the
+  lifetime, and increments the roster revision. Returns `{:ok, provision}` or
+  `{:error, :unknown_session}` if the session is absent or expired. An
+  unavailable or timed-out authority returns `{:error, :authority_unavailable}`.
+  """
   def rotate(session_id), do: call({:rotate, session_id})
 
+  @doc """
+  Revoke a session and fence its connected seats.
+
+  Returns `:ok` even if the session is absent, or
+  `{:error, :authority_unavailable}` if the authority call exits or times out.
+  """
   def close(session_id), do: call({:close, session_id})
 
-  @doc "Atomically claim a ticket or replace the current lease with a rejoin token."
+  @doc """
+  Claim a seat with a ticket or replace its lease with a rejoin token.
+
+  `identity` contains `:subject` and `:expires_at`, a future Unix timestamp in
+  seconds. The subject, session, audience, role, and epoch must match the
+  provision. Use `{:ticket, ticket}` for the first claim or `{:rejoin, token}`
+  thereafter. A successful claim returns `{:ok, lease, receipt}`, binds the
+  lease to the calling process, and issues a new secret rejoin token in the
+  receipt. Rejoining fences the previous connection and rotates that token.
+
+  Refusals return `{:error, reason}`: `:unauthenticated`, `:unknown_session`,
+  `:stale_epoch`, `:scope_mismatch`, `:invalid_ticket`, `:ticket_consumed`, or
+  `:invalid_rejoin`. An authority call that exits or times out returns
+  `{:error, :authority_unavailable}`.
+  """
   def claim(identity, session_id, audience, role, epoch, credential) do
     call({:claim, identity, session_id, audience, role, epoch, credential})
   end
 
-  @doc "Run a bounded effect only while the calling channel owns this lease."
+  @doc """
+  Run an effect while the calling process owns a current lease.
+
+  The effect runs in the authority and must return `:ok` or `{:error, reason}`;
+  its result is returned to the caller. Lease checks can return
+  `{:error, :unknown_session}`, `{:error, :stale_epoch}`, or
+  `{:error, :stale_lease}`. If the authority call exits or times out, including
+  when an effect crashes the authority, the result is
+  `{:error, :authority_unavailable}`. A timeout does not cancel an effect.
+  """
   def with_current(lease, effect) when is_function(effect, 0),
     do: call({:effect, lease, :unsequenced, effect})
 
-  @doc "Run a relay effect once for a strictly increasing, per-seat sequence."
+  @doc """
+  Run an effect under a current lease, optionally checking a per-seat sequence.
+
+  Integer sequences must be strictly increasing and in `0..9_007_199_254_740_991`;
+  `:unsequenced` skips the sequence check. A sequence is recorded only when
+  the effect returns `:ok` and survives rejoin while the authority is live.
+  Invalid or repeated sequences return `{:error, :invalid_sequence}` or
+  `{:error, :stale_or_duplicate}`. Effect results and lease or authority
+  failures follow `with_current/2`.
+  """
   def relay(lease, seq, effect) when is_function(effect, 0),
     do: call({:effect, lease, seq, effect})
 
+  @doc """
+  Disconnect the calling process's current lease while retaining rejoin access.
+
+  Returns `:ok`, or `{:error, reason}` for an unknown session, stale epoch or
+  lease, or an unavailable authority.
+  """
   def leave(lease), do: call({:leave, lease})
 
   # An unavailable authority cannot degrade to the unauthenticated relay.
