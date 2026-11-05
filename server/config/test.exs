@@ -2,6 +2,8 @@
 
 import Config
 
+config :burble, :game_session_mode, :local_legacy
+
 # VeriSimDB for tests — use a separate port or test instance if available.
 config :burble, Burble.Store,
   url: "http://localhost:8081",

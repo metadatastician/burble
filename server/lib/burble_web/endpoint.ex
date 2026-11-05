@@ -15,7 +15,7 @@ defmodule BurbleWeb.Endpoint do
   socket("/live", Phoenix.LiveView.Socket, websocket: [connect_info: [session: @session_options]])
 
   socket("/voice", BurbleWeb.UserSocket,
-    websocket: [timeout: 300_000, max_frame_size: 16_384],
+    websocket: [timeout: 300_000, max_frame_size: 16_384, connect_info: [:peer_data]],
     longpoll: false
   )
 

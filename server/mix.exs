@@ -170,11 +170,9 @@ defmodule Burble.MixProject do
       # Authentication
       {:bcrypt_elixir, "~> 3.2"},
       {:guardian, "~> 2.3"},
-      # Pinned to 1.11.9 (last release before jose started using OTP 26's
-      # dynamic() type in src/json/jose_json.erl). Loosen to "~> 1.11"
-      # once this host moves to OTP 26+. Guardian's transitive constraint
-      # is "~> 1.11.9" so this is the floor of that range.
-      {:jose, "~> 1.11.9 and < 1.11.11", override: true},
+      # OTP 27 is the tested baseline. The former pre-OTP-26 upper bound
+      # prevented JOSE security fixes from reaching the locked graph.
+      {:jose, "~> 1.11.13"},
 
       # Persistent store — VeriSimDB client SDK.
       # For Hex: {:verisim_client, "~> 0.1"}

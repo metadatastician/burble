@@ -67,7 +67,11 @@ jobs:
             ${{ runner.os }}-mix-msquic-v2.3.8-
             ${{ runner.os }}-mix-
       - name: Install dependencies
-        run: mix deps.get
+        run: |
+          mix local.hex 2.6.0 --force
+          mix deps.get --check-locked
+      - name: Audit the locked Hex dependency graph
+        run: mix hex.audit
       - name: Test Zig kernels (SNIF guest sources)
         working-directory: ${{ github.workspace }}
         # Application-owned in-VM NIFs are forbidden. These sources remain Zig,
@@ -87,6 +91,9 @@ jobs:
       - name: Run Rust client tests
         working-directory: ${{ github.workspace }}
         run: cargo test --manifest-path client/rust/Cargo.toml
+      - name: Real two-client WebSocket admission conformance
+        working-directory: ${{ github.workspace }}
+        run: cargo run --locked --manifest-path client/rust/Cargo.toml --example admission_conformance
       - name: Bebop codegen gate (generator must run; drift reported)
         working-directory: ${{ github.workspace }}
         # Check A (ARMED): the generator must parse every .bop schema and
@@ -138,7 +145,7 @@ jobs:
             ${{ runner.os }}-mix-msquic-v2.3.8-
             ${{ runner.os }}-mix-
       - name: Install dependencies
-        run: mix deps.get
+        run: mix deps.get --check-locked
       - name: Compile
         run: mix compile
       - name: Create PLT directory

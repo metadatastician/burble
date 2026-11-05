@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: MPL-2.0
 # Dependabot configuration for RSR-compliant repositories
-# Covers common ecosystems - remove unused ones for your project
+# Monitor the actual manifest locations; a root entry misses these projects.
 
 version: 2
 updates:
@@ -17,7 +17,9 @@ updates:
 
   # Rust/Cargo
   - package-ecosystem: "cargo"
-    directory: "/"
+    directories:
+      - "/client/rust"
+      - "/tools/selur-compose"
     schedule:
       interval: "weekly"
     # `open-pull-requests-limit: 0` suppresses routine version-update PRs
@@ -29,27 +31,16 @@ updates:
 
   # Elixir/Mix
   - package-ecosystem: "mix"
-    directory: "/"
+    directory: "/server"
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 3
 
-  # Node.js/npm
-  - package-ecosystem: "npm"
-    directory: "/"
-    schedule:
-      interval: "weekly"
-    open-pull-requests-limit: 3
-
-  # Python/pip
-  - package-ecosystem: "pip"
-    directory: "/"
-    schedule:
-      interval: "weekly"
-    open-pull-requests-limit: 3
-
-  # Nix flakes
-  - package-ecosystem: "nix"
-    directory: "/"
+  # Bun text lockfiles (no npm lockfile or root package manifest).
+  - package-ecosystem: "bun"
+    directories:
+      - "/client/lib"
+      - "/client/web"
+      - "/scripts"
     schedule:
       interval: "weekly"

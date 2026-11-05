@@ -2,6 +2,8 @@
 
 import Config
 
+config :burble, :game_session_mode, :local_legacy
+
 # VeriSimDB for development — Burble's dedicated instance on port 6078.
 # Port allocation: 6077=OPSM, 6078=Burble, 8090/8091=GSA, 8093=Stapeln,
 # 8094=007, 8095=Project-M, 8096=work instance.

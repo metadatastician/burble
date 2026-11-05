@@ -15,7 +15,8 @@ defmodule BurbleWeb.UserSocket do
   channel("game:*", BurbleWeb.GameChannel)
 
   @impl true
-  def connect(%{"token" => token}, socket, _connect_info) do
+  def connect(%{"token" => token}, socket, connect_info)
+      when is_binary(token) and byte_size(token) <= 4096 do
     case Guardian.decode_and_verify(token) do
       {:ok, claims} ->
         case Guardian.resource_from_claims(claims) do
@@ -26,6 +27,8 @@ defmodule BurbleWeb.UserSocket do
               |> assign(:display_name, user.display_name || user[:display_name] || "User")
               |> assign(:is_guest, Map.get(user, :is_guest, false))
               |> assign(:voice_auth, voice_auth(token))
+              |> assign(:session_identity, session_identity(claims, user.id || user[:id]))
+              |> assign(:legacy_game_local, local_peer?(connect_info))
 
             {:ok, socket}
 
@@ -46,7 +49,7 @@ defmodule BurbleWeb.UserSocket do
   # rather than rejecting — a bad name should not stop someone joining.
   @max_display_name 64
 
-  def connect(%{"guest" => "true", "display_name" => name}, socket, _connect_info) do
+  def connect(%{"guest" => "true", "display_name" => name}, socket, connect_info) do
     name = sanitise_display_name(name)
     {:ok, guest} = Burble.Auth.create_guest_session(name)
 
@@ -55,11 +58,32 @@ defmodule BurbleWeb.UserSocket do
       |> assign(:user_id, guest.id)
       |> assign(:display_name, guest.display_name)
       |> assign(:is_guest, true)
+      |> assign(:legacy_game_local, local_peer?(connect_info))
 
     {:ok, socket}
   end
 
   def connect(_params, _socket, _connect_info), do: :error
+
+  # A signed access/guest identity can consume a separately provisioned seat
+  # ticket. Refresh tokens and the unsigned guest connect path cannot. The
+  # admission authority repeats expiry and scope checks for every effect.
+  defp session_identity(
+         %{"sub" => subject, "typ" => type, "exp" => expiry, "aud" => "burble"},
+         subject
+       )
+       when type in ["access", "guest"] and is_binary(subject) and is_integer(expiry) do
+    if expiry > System.system_time(:second), do: %{subject: subject, expires_at: expiry}
+  end
+
+  defp session_identity(_, _), do: nil
+
+  # Only the transport's peer_data is trusted. Forwarded headers, URL hostnames
+  # and client-supplied join parameters cannot turn a remote peer into a local one.
+  defp local_peer?(%{peer_data: %{address: address}}),
+    do: address in [{127, 0, 0, 1}, {0, 0, 0, 0, 0, 0, 0, 1}]
+
+  defp local_peer?(_), do: false
 
   # Existing socket behavior is unchanged; the new scoped adapter only admits
   # existing access/guest identities with current voice permissions. Refresh

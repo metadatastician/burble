@@ -28,6 +28,12 @@
       :existing-declarations "Manual-Only; the AGPL-3.0 files recorded in DEBT LIC-1 are not relicensed by an agent.")
     (claims
       :rule "A claim about the E2EE boundary is DTLS-SRTP-only unless the peer-held group key path is on the call path; ADR-0016 says it is not.")
+    (session-admission
+      :source "server/lib/burble/sessions/admission.ex"
+      :contract "docs/decisions/0018-session-admission-boundary.adoc"
+      :protocols "legacy-json-v1 is local development only; admission-v1 is ephemeral scoped admission with accepted-only evidence. Neither is the 0.8 durable/binary fabric."
+      :validation "server/test/burble/sessions/admission_test.exs, server/test/burble_web/channels/session_admission_test.exs and the admission_conformance Rust executable must pass on the merge commit. The real loopback WebSocket probe is not a remote/TLS deployment or 0.8 conformance result."
+      :remaining "Database-free secure hosting, failed-ACK/restart recovery, bounded application queues, durable/delivered/applied receipts and the 0.8 consumer remain unproven and are not released by this admission change.")
     (fleet
       :enrolment ".gitbot-fleet/enrolment.json"
       :report-backs ".gitbot-fleet/report-backs/")))
