@@ -19,7 +19,7 @@
     "res:dev": "rescript -w"
   },
   "dependencies": {
-    "phoenix": "1.7.11"
+    "phoenix": "1.8.16"
   },
   "devDependencies": {
     "@rescript/core": "1.6.1",

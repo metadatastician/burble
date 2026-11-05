@@ -20,6 +20,6 @@
     "vite": "6.2.0"
   },
   "dependencies": {
-    "phoenix": "1.7.11"
+    "phoenix": "1.8.16"
   }
 }

@@ -5,7 +5,7 @@
     "": {
       "name": "@burble/client",
       "dependencies": {
-        "phoenix": "1.7.11",
+        "phoenix": "1.8.16",
       },
       "devDependencies": {
         "@rescript/core": "1.6.1",
@@ -29,7 +29,7 @@
 
     "@rescript/win32-x64": ["@rescript/win32-x64@12.3.1", "", { "os": "win32", "cpu": "x64" }, "sha512-1ffFbw9IJnJmGTNshWzRcG6wQ7GkzOeWxLLrarvxI38p2aYPQKTbVovUraXpw1Jfg2bbWkm8hPMMrFIezI/pkA=="],
 
-    "phoenix": ["phoenix@1.7.11", "", {}, "sha512-aeikMR/Qh6gAygY45d5p/B7srqH60h0GbCIauEAStAtRUq4hvlkzDTyDj1NJidJEV9IKFhZe7f9L+zosUJdF/g=="],
+    "phoenix": ["phoenix@1.8.16", "", {}, "sha512-bNNJkYBnES2MHo8XjBg6ROK7iU7FeYfkANpTnYzh2ecOipI+8ZF1wiiWdvqv2YfV4MVb9yFJBE2BPF+RXgXXuw=="],
 
     "rescript": ["rescript@12.3.1", "", { "dependencies": { "@rescript/runtime": "12.3.1" }, "optionalDependencies": { "@rescript/darwin-arm64": "12.3.1", "@rescript/darwin-x64": "12.3.1", "@rescript/linux-arm64": "12.3.1", "@rescript/linux-x64": "12.3.1", "@rescript/win32-x64": "12.3.1" }, "bin": { "bsc": "cli/bsc.js", "rescript": "cli/rescript.js", "bstracing": "cli/bstracing.js", "rescript-tools": "cli/rescript-tools.js", "rescript-legacy": "cli/rescript-legacy.js" } }, "sha512-Q4y0SQ7EUShiX1ymEG5iOCGzbVSOh7CCLEnQUkq19FX2i64eQ2uEGeMCKFl0AsL7TcK5pS+66QTSP6jf6LSgaA=="],
   }
