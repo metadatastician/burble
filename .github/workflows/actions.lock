@@ -34,7 +34,7 @@ workflows:
         - 'actions/checkout@v7.0.1'
         - 'erlef/setup-beam@v1.24.1'
         - 'mlugg/setup-zig@v2.2.1'
-        - 'taiki-e/install-action@68a389c788b2cd04016ce8c80ee23b80d2ab3d68'
+        - 'taiki-e/install-action@682ce6c3c696a4cd5168a05f98e51aa02b877941'
     '.github/workflows/governance.yml':
         - 'hyperpolymath/standards@01c9b0c9f2646ebea0b30a9588462642ac94aee9'
     '.github/workflows/hypatia-scan.yml':
@@ -259,8 +259,8 @@ dependencies:
         commit: 'sha1-efb35369e0ad2afab669f228072c1b0d510eae64'
         owner_id: 2242
         repo_id: 204253808
-    'taiki-e/install-action@68a389c788b2cd04016ce8c80ee23b80d2ab3d68':
-        ref: 'v2.88.1'
-        commit: 'sha1-68a389c788b2cd04016ce8c80ee23b80d2ab3d68'
+    'taiki-e/install-action@682ce6c3c696a4cd5168a05f98e51aa02b877941':
+        ref: 'v2.89.1'
+        commit: 'sha1-682ce6c3c696a4cd5168a05f98e51aa02b877941'
         owner_id: 43724913
         repo_id: 442947557
