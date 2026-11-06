@@ -62,8 +62,17 @@ fi
 LC_ROOT="$(cd "$WF_DIR/../.." 2>/dev/null && pwd)" || LC_ROOT=.
 # local_action_paths FILE: the path after `./` of every local `uses:` in FILE.
 local_action_paths() {
-  awk -v q="'" '{
+  awk -v q="'" 'BEGIN { block = -1 } {
+    # A uses: inside a literal/folded scalar is sample text, not a YAML field.
+    indent = match($0, /[^ ]/) - 1
+    if (indent < 0) next
+    if (block >= 0) { if (indent > block) next; block = -1 }
     line = $0; sub(/[[:space:]]+#.*$/, "", line)
+    if (line ~ /:[[:space:]]*[|>][1-9+-]*[[:space:]]*$/ || line ~ /^[[:space:]]*-[[:space:]]*[|>][1-9+-]*[[:space:]]*$/) {
+      block = indent
+      if (line ~ /:[[:space:]]*[|>]/ && match(line, /^[ ]*-[ ]+/)) block = RLENGTH
+      next
+    }
     if (!match(line, /^[[:space:]]*-?[[:space:]]*uses:[[:space:]]*/)) next
     raw = substr(line, RLENGTH + 1)
     sub("[\"" q "],[[:space:]]*$", "", raw)
@@ -83,14 +92,14 @@ reach_files() {
       rel="${rel%/}"
       case "$rel" in
         *.yml|*.yaml)
-          [ -f "$LC_ROOT/$rel" ] || { echo "check-lock-sync: missing local workflow: $rel" >&2; return 1; }
+          [ -f "$LC_ROOT/$rel" ] || { echo "actions-lock: missing local workflow: $rel" >&2; return 1; }
           continue ;;
       esac
       found=false
       for a in "$LC_ROOT/$rel/action.yml" "$LC_ROOT/$rel/action.yaml"; do
         if [ -f "$a" ]; then queue+=("$a"); found=true; break; fi
       done
-      "$found" || { echo "check-lock-sync: missing local action metadata: $rel" >&2; return 1; }
+      "$found" || { echo "actions-lock: missing local action metadata: $rel" >&2; return 1; }
     done < <(local_action_paths "$f")
   done
 }
@@ -209,7 +218,10 @@ FILENAME == lockfile {
     s = substr($0, 6)
     i = index(s, "\047")
     cur = substr(s, 1, i - 1)
-    seen_path[cur] = 1
+    seen_path[cur]++
+    value = substr($0, RLENGTH + 1)
+    if (value ~ /^[[:space:]]*\[\][[:space:]]*(#.*)?$/) empty_path[cur] = 1
+    else if (value !~ /^[[:space:]]*(#.*)?$/) bad_workflow[cur] = 1
     next
   }
   if (cur != "" && match($0, /^        - \047/)) {
@@ -217,12 +229,14 @@ FILENAME == lockfile {
     i = index(s, "\047")
     if (i > 0 && substr(s, i + 1) ~ /^[[:space:]]*$/) {
       r = norm(substr(s, 1, i - 1))
+      if (r == "" || empty_path[cur]) bad_workflow[cur] = 1
       lock[cur, r] = 1
       if (r != "") want[r] = 1
       lockcount[cur]++
-    }
+    } else bad_workflow[cur] = 1
     next
   }
+  if (cur != "" && $0 !~ /^[[:space:]]*(#.*)?$/) bad_workflow[cur] = 1
   next
 }
 
@@ -259,6 +273,13 @@ FNR == 1 { nown = split(substr(owners[FILENAME], 2), own, SUBSEP) }
 END {
   finish_record()
   bad = 0
+  for (key in seen_path) {
+    if (seen_path[key] != 1 || (!empty_path[key] && lockcount[key] == 0)) bad_workflow[key] = 1
+  }
+  for (key in bad_workflow) {
+    printf "FAIL %s\n     malformed workflow lock value; expected [] or a reference list\n", key
+    bad = 1
+  }
   for (w = 1; w <= nw; w++) {
     wf = WFS[w]
     key = wf

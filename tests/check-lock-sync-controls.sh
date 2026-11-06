@@ -127,6 +127,24 @@ jobs:
     uses: ./.github/workflows/missing.yml
 YAML
 expect 1 'missing local reusable workflow is fatal'
+for scalar in '|' '>-'; do
+  cat > "$wf/probe.yml" <<YAML
+jobs:
+  test:
+    steps:
+      - run: $scalar
+          echo 'sample generated YAML'
+          uses: ./.github/actions/example-only
+YAML
+  expect 0 "sample local use in block scalar is ignored: $scalar"
+  printf '      - uses: ./.github/actions/actually-missing\n' >> "$wf/probe.yml"
+  expect 1 "real local use after block scalar is enforced: $scalar"
+done
+printf 'jobs: {}\n' > "$wf/probe.yml"
+for value in null '' false '[null]'; do
+  printf "workflows:\n    '.github/workflows/probe.yml': %s\ndependencies: {}\n" "$value" > "$wf/actions.lock"
+  expect 1 "malformed workflow value is refused: $value"
+done
 action_workflow
 for field in ref commit owner_id repo_id; do
   good_lock
