@@ -63,6 +63,8 @@ jobs:
           test -x scripts/check-lock-sync.sh \
             || { echo "::error::scripts/check-lock-sync.sh missing or not executable"; exit 1; }
           ./scripts/check-lock-sync.sh
+      - name: Verify lock checker positive and negative controls
+        run: bash tests/check-lock-sync-controls.sh
 
       # `tests/ci/foundation_ci_fixes_test.sh` had failed five of its assertions
       # for as long as anyone can remember, because it pinned revision hashes
