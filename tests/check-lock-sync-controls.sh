@@ -238,4 +238,15 @@ jobs:
 YAML
   expect 0 "sample external use in block scalar is ignored: $scalar"
 done
+action_workflow
+good_lock
+edit_file "s/^    'example\/action@v1':/    'example\/action\/subdir@v1':/" "$wf/actions.lock"
+expect 1 'dependency record keys cannot include action subpaths'
+good_lock
+edit_file 's/uses: example\/action@v1/uses: example\/action\/subdir@v1/' "$wf/probe.yml"
+expect 0 'action uses may include a subpath with a repository-owned record'
+action_workflow
+good_lock
+edit_file "s/^    'example\/action@v1':/    'example\/act!on@v1':/" "$wf/actions.lock"
+expect 1 'dependency record repository names use coordinate syntax'
 printf 'passed %s controls\n' "$passed"

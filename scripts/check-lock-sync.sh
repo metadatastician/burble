@@ -139,13 +139,14 @@ REF_ROWS="$TMP/uses.tsv"
 lock_yaml_json "$LOCK" > "$TMP/lock.json" || exit 1
 jq -e '
   def reference: type == "string" and test("^[^/@[:space:]]+/[^@[:space:]]+@[^[:space:]]+$");
+  def coordinate: type == "string" and test("^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+@[^[:space:]]+$");
   def positive_id: type == "number" and . > 0 and floor == .;
   type == "object" and (.workflows | type == "object") and (.dependencies | type == "object") and
   all(.workflows | to_entries[];
     (.key | test("^\\.github/workflows/[^/]+\\.ya?ml$")) and
     (.value | type == "array" and all(.[]; reference))) and
   all(.dependencies | to_entries[];
-    (.key | reference) and
+    (.key | coordinate) and
     (.value | type == "object" and
       (.ref | type == "string" and length > 0) and
       (.commit | type == "string" and test("^sha1-[0-9a-fA-F]{40}$")) and
