@@ -282,12 +282,12 @@ expect 1 'unknown root properties are refused'
 good_lock
 printf '        unexpected: true\n' >> "$wf/actions.lock"
 expect 1 'unknown action properties are refused'
-for host in github.com acme.ghe.com; do
+for host in github.com; do
   good_lock
   printf "        hostname: '%s'\n" "$host" >> "$wf/actions.lock"
   expect 0 "canonical v0.0.3 hostname is accepted: $host"
 done
-for host in HTTPS://github.com/ Github.com -acme.ghe.com acme-.ghe.com ' github.com ' "$(printf '%064d' 0).ghe.com"; do
+for host in acme.ghe.com HTTPS://github.com/ Github.com -acme.ghe.com acme-.ghe.com ' github.com ' "$(printf '%064d' 0).ghe.com"; do
   good_lock
   printf "        hostname: '%s'\n" "$host" >> "$wf/actions.lock"
   expect 1 "noncanonical hostname is refused: $host"
@@ -395,4 +395,28 @@ dependencies:
         repo_id: 2
 LOCK
 expect 0 'valid apostrophes in ref names remain supported'
+action_workflow; good_lock
+cat >> "$wf/actions.lock" <<'LOCK'
+    'example/orphan@v1':
+        ref: 'v1'
+        commit: 'sha1-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'
+        owner_id: 1
+        repo_id: 3
+LOCK
+expect 1 'unused dependency records are refused'
+good_lock
+cat >> "$wf/actions.lock" <<'LOCK'
+    'example/orphan@v1':
+        ref: 'v1'
+        commit: 'sha1-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'
+        owner_id: 1
+        repo_id: 3
+        uses: ['example/child@v1']
+    'example/child@v1':
+        ref: 'v1'
+        commit: 'sha1-cccccccccccccccccccccccccccccccccccccccc'
+        owner_id: 1
+        repo_id: 4
+LOCK
+expect 1 'a disconnected acyclic dependency tree is refused at its root'
 printf 'passed %s controls\n' "$passed"

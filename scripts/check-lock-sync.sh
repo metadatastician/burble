@@ -153,7 +153,9 @@ jq -e '
     else .ref == $pin and (.ref | recordable_ref) end;
   def positive_id: type == "number" and . > 0 and floor == .;
   def only_keys($allowed): (keys - $allowed | length) == 0;
-  def hostname: type == "string" and test("^(github\\.com|[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\\.ghe\\.com)$");
+  # These estate locks run on github.com; foreign GHE records cannot execute
+  # here even when their hostname has the right schema-level spelling.
+  def hostname: type == "string" and . == "github.com";
   .version as $schema |
   type == "object" and only_keys(["version", "workflows", "dependencies"]) and
   ($schema == "v0.0.2" or $schema == "v0.0.3") and
@@ -370,6 +372,12 @@ END {
   for (r in want) {
     if (!(r in haverec)) {
       printf "FAIL actions.lock\n     dangling dependency edge: %s\n", r
+      bad = 1
+    }
+  }
+  for (r in haverec) {
+    if (!(r in want)) {
+      printf "FAIL actions.lock\n     unused dependency record: %s\n", r
       bad = 1
     }
   }
