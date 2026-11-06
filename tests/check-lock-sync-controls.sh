@@ -249,4 +249,15 @@ action_workflow
 good_lock
 edit_file "s/^    'example\/action@v1':/    'example\/act!on@v1':/" "$wf/actions.lock"
 expect 1 'dependency record repository names use coordinate syntax'
+good_lock
+printf 'jobs:\n  test:\n    steps:\n      - uses: ./\n' > "$wf/probe.yml"
+printf 'runs:\n  using: composite\n  steps:\n    - uses: example/action@v1\n' > "$fixture/repo/action.yml"
+expect 0 'root local composite contributes its remote references'
+sed '/^dependencies:/,$d' "$wf/actions.lock" > "$fixture/cut"
+mv "$fixture/cut" "$wf/actions.lock"
+printf 'dependencies: {}\n' >> "$wf/actions.lock"
+expect 1 'root composite cannot hide a missing remote dependency record'
+rm "$fixture/repo/action.yml"
+printf "workflows:\n    '.github/workflows/probe.yml': []\ndependencies: {}\n" > "$wf/actions.lock"
+expect 1 'root local action without metadata is refused'
 printf 'passed %s controls\n' "$passed"

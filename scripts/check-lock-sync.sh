@@ -93,7 +93,7 @@ lock_uses() {
     end'
 }
 local_action_paths() {
-  lock_uses "$1" | awk -F'\t' 'substr($2, 1, 2) == "./" { print substr($2, 3) }'
+  lock_uses "$1" | awk -F'\t' 'substr($2, 1, 2) == "./" { print $2 == "./" ? "." : substr($2, 3) }'
 }
 reach_files() {
   local -A seen=()
