@@ -73,7 +73,7 @@ local_action_paths() {
 }
 reach_files() {
   local -A seen=()
-  local queue=("$1") f rel a
+  local queue=("$1") f rel a found
   while [ "${#queue[@]}" -gt 0 ]; do
     f="${queue[0]}"; queue=("${queue[@]:1}")
     [ -n "${seen[$f]:-}" ] && continue
@@ -81,10 +81,16 @@ reach_files() {
     printf '%s\n' "$f"
     while IFS= read -r rel; do
       rel="${rel%/}"
-      case "$rel" in *.yml|*.yaml) continue ;; esac
+      case "$rel" in
+        *.yml|*.yaml)
+          [ -f "$LC_ROOT/$rel" ] || { echo "check-lock-sync: missing local workflow: $rel" >&2; return 1; }
+          continue ;;
+      esac
+      found=false
       for a in "$LC_ROOT/$rel/action.yml" "$LC_ROOT/$rel/action.yaml"; do
-        if [ -f "$a" ]; then queue+=("$a"); break; fi
+        if [ -f "$a" ]; then queue+=("$a"); found=true; break; fi
       done
+      "$found" || { echo "check-lock-sync: missing local action metadata: $rel" >&2; return 1; }
     done < <(local_action_paths "$f")
   done
 }
@@ -93,7 +99,8 @@ reach_files() {
 # reach map: "file<TAB>workflow" — each file whose uses: count for that workflow.
 MAP="$(mktemp)"; trap 'rm -f "$MAP"' EXIT
 for wf in "${WORKFLOWS[@]}"; do
-  while IFS= read -r f; do printf '%s\t%s\n' "$f" "$wf"; done < <(reach_files "$wf")
+  reached=$(reach_files "$wf") || exit 1
+  while IFS= read -r f; do printf '%s\t%s\n' "$f" "$wf"; done <<< "$reached"
 done > "$MAP"
 mapfile -t SCAN < <(cut -f1 "$MAP" | LC_ALL=C sort -u)
 
@@ -127,8 +134,7 @@ BEGIN {
 }
 # owner/repo[/subpath...]@ref  ->  owner/repo@ref   ("" if not an external ref)
 function norm(r,   at, path, ref, n, parts) {
-  at = 0
-  for (n = length(r); n > 0; n--) { if (substr(r, n, 1) == "@") { at = n; break } }
+  at = index(r, "@")
   if (at == 0) return ""
   path = substr(r, 1, at - 1); ref = substr(r, at + 1)
   if (path == "" || ref == "") return ""
@@ -138,16 +144,53 @@ function norm(r,   at, path, ref, n, parts) {
   return tolower(parts[1] "/" parts[2]) "@" ref
 }
 
+# Validate required scalar fields in the block-record format the generator emits.
+# Pin/ref correspondence is additionally checked by check-lock-pin-contract.sh.
+function quoted_value(s,   q) {
+  q = substr(s, 1, 1)
+  if ((q != "\047" && q != "\"") || length(s) < 2 || substr(s, length(s), 1) != q) return ""
+  return substr(s, 2, length(s) - 2)
+}
+function finish_record(   valid, f) {
+  if (record_name == "") return
+  valid = mapping_ok && dep != "" && record_seen[dep] == 1
+  for (f in required_field) if (field_count[f] != 1 || !field_ok[f]) valid = 0
+  if (valid) haverec[dep] = 1
+  else {
+    if (dep != "") delete haverec[dep]
+    bad_record[record_name] = 1
+  }
+  record_name = ""; dep = ""
+}
+BEGIN {
+  required_field["ref"] = 1; required_field["commit"] = 1
+  required_field["owner_id"] = 1; required_field["repo_id"] = 1
+}
+
 # ---------- pass 1: the lockfile ----------
 FILENAME == lockfile {
-  if ($0 ~ /^workflows:[[:space:]]*$/) { inwf = 1; indep = 0; next }
-  if ($0 ~ /^dependencies:[[:space:]]*$/) { inwf = 0; indep = 1; next }
-  if ($0 ~ /^[a-z_]+:/) { inwf = 0; indep = 0; next }
+  if ($0 ~ /^workflows:[[:space:]]*$/) { finish_record(); inwf = 1; indep = 0; next }
+  if ($0 ~ /^dependencies:[[:space:]]*$/) { finish_record(); inwf = 0; indep = 1; next }
+  if ($0 ~ /^[a-z_]+:/) { finish_record(); inwf = 0; indep = 0; next }
   if (indep) {
     if (match($0, /^    \047[^\047]+\047:/)) {
+      finish_record()
+      mapping_ok = substr($0, RLENGTH + 1) ~ /^[[:space:]]*(#.*)?$/
       s = substr($0, 6); i = index(s, "\047")
-      dep = norm(substr(s, 1, i - 1))
-      if (dep != "") haverec[dep] = 1
+      record_name = substr(s, 1, i - 1)
+      dep = norm(record_name)
+      record_seen[dep]++
+      delete field_count; delete field_ok
+    } else if (record_name != "" && match($0, /^        (ref|commit|owner_id|repo_id):/)) {
+      f = substr($0, 9, RLENGTH - 9)
+      value = substr($0, RLENGTH + 1)
+      sub(/^[[:space:]]*/, "", value); sub(/[[:space:]]*$/, "", value)
+      field_count[f]++
+      if (f == "ref") field_ok[f] = quoted_value(value) != ""
+      else if (f == "commit") {
+        value = quoted_value(value)
+        field_ok[f] = length(value) == 45 && substr(value, 1, 5) == "sha1-" && substr(value, 6) ~ /^[0-9a-fA-F]+$/
+      } else field_ok[f] = value ~ /^[1-9][0-9]*$/
     } else if (match($0, /^            - \047/)) {
       s = substr($0, RLENGTH + 1); i = index(s, "\047")
       if (i > 0) {
@@ -214,6 +257,7 @@ FNR == 1 { nown = split(substr(owners[FILENAME], 2), own, SUBSEP) }
 }
 
 END {
+  finish_record()
   bad = 0
   for (w = 1; w <= nw; w++) {
     wf = WFS[w]
@@ -304,6 +348,10 @@ END {
       printf "FAIL actions.lock\n     dangling dependency edge: %s\n", r
       bad = 1
     }
+  }
+  for (r in bad_record) {
+    printf "FAIL actions.lock\n     malformed dependency record: %s (require ref, sha1 commit, and positive integer owner_id/repo_id exactly once)\n", r
+    bad = 1
   }
   if (jnote != "") print "NOTE: job-level reusable refs absent from the lockfile (not fatal; see standards#968):" jnote
 

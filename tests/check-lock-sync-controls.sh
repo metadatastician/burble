@@ -113,4 +113,42 @@ sed '/^dependencies:/,$d' "$wf/actions.lock" > "$fixture/cut"
 mv "$fixture/cut" "$wf/actions.lock"
 printf 'dependencies: {}\n' >> "$wf/actions.lock"
 expect 1 'local composite cannot hide a missing dependency record'
+cat > "$wf/actions.lock" <<'LOCK'
+version: 'v0.0.3'
+workflows:
+    '.github/workflows/probe.yml': []
+dependencies: {}
+LOCK
+rm "$fixture/repo/.github/actions/local/action.yml"
+expect 1 'missing local action metadata is fatal'
+cat > "$wf/probe.yml" <<'YAML'
+jobs:
+  child:
+    uses: ./.github/workflows/missing.yml
+YAML
+expect 1 'missing local reusable workflow is fatal'
+action_workflow
+for field in ref commit owner_id repo_id; do
+  good_lock
+  sed -i "/^        $field:/d" "$wf/actions.lock"
+  expect 1 "missing required record field: $field"
+done
+good_lock
+sed -i "s/^    'example\/action@v1':$/    'example\/action@v1': null/; /^        \(ref\|commit\|owner_id\|repo_id\):/d" "$wf/actions.lock"
+expect 1 'null dependency record'
+good_lock
+sed -i "s/^        commit:.*/        commit: 'sha1-short'/" "$wf/actions.lock"
+expect 1 'malformed commit digest'
+good_lock
+sed -i "s/^        owner_id:.*/        owner_id: '1'/" "$wf/actions.lock"
+expect 1 'quoted owner id is not an integer'
+good_lock
+sed -i "/^        ref:/a\\        ref: 'v1'" "$wf/actions.lock"
+expect 1 'duplicate required record field'
+good_lock
+sed -i 's/example\/action@v1/example\/action@Release@2026/g' "$wf/probe.yml" "$wf/actions.lock"
+sed -i "s/ref: 'v1'/ref: 'Release@2026'/" "$wf/actions.lock"
+expect 0 'embedded at-sign preserves the complete ref'
+sed -i "s/^    'example\/action@Release@2026':/    'example\/action@release@2026':/" "$wf/actions.lock"
+expect 1 'embedded at-sign does not hide a ref-case mismatch'
 printf 'passed %s controls\n' "$passed"
