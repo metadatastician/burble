@@ -326,8 +326,11 @@ expect 1 'SHA coordinates must match the recorded commit'
 edit_file "s/sha1-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/sha1-$pin/" "$wf/actions.lock"
 expect 0 'SHA coordinate may record a matching commit and symbolic tag'
 edit_file "s/ref: 'v1'/ref: '$pin'/" "$wf/actions.lock"
+expect 1 'an ordinary leaf action cannot repeat its pin as ref'
 printf '        uses: []\n' >> "$wf/actions.lock"
-expect 0 'reviewed caller-side SHA-ref representation remains supported'
+expect 1 'a composite uses list alone cannot authorize a raw-SHA ref'
+printf '  child:\n    uses: EXAMPLE/ACTION/.github/workflows/child.yml@%s\n' "$pin" >> "$wf/probe.yml"
+expect 0 'proven job-level caller-side SHA-ref representation remains supported'
 edit_file "s/ref: '$pin'/ref: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'/" "$wf/actions.lock"
 expect 1 'a SHA record cannot name an unrelated SHA as its ref'
 action_workflow; good_lock

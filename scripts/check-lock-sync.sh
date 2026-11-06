@@ -139,7 +139,18 @@ mapfile -t SCAN < <(cut -f1 "$MAP" | LC_ALL=C sort -u)
 LOCK_ROWS="$TMP/lock.tsv"
 REF_ROWS="$TMP/uses.tsv"
 lock_yaml_json "$LOCK" > "$TMP/lock.json" || exit 1
-jq -e '
+# An exact-SHA ref exemption belongs only to a key actually called as a
+# job-level reusable workflow. A leaf or composite uses list is not proof.
+: > "$TMP/callers.txt"
+for wf in "${WORKFLOWS[@]}"; do
+  lock_uses "$wf" | jq -Rr '
+    split("\t") | select(.[0] == "job") | .[1] |
+    capture("^(?<owner>[A-Za-z0-9._-]+)/(?<repo>[A-Za-z0-9._-]+)/\\.github/workflows/[^/]+\\.ya?ml@(?<ref>.+)$")? |
+    (.owner + "/" + .repo + "@" + .ref | ascii_downcase)
+  ' >> "$TMP/callers.txt"
+done
+jq -Rsc 'split("\n") | map(select(length > 0)) | unique' "$TMP/callers.txt" > "$TMP/callers.json"
+jq -e --slurpfile callers "$TMP/callers.json" '
   def coordinate: type == "string" and test("^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+@[^:]+$");
   def full_sha: test("^([0-9a-fA-F]{40}|[0-9a-fA-F]{64})$");
   def recordable_ref:
@@ -151,7 +162,8 @@ jq -e '
     ($key | index("@")) as $at | $key[$at + 1:] as $pin |
     if ($pin | full_sha) then
       (.commit | ascii_downcase) == ("sha1-" + ($pin | ascii_downcase)) and
-      ((.ref | recordable_ref) or .ref == $pin)
+      ((.ref | recordable_ref) or
+       (.ref == $pin and ($callers[0] | index($key | ascii_downcase)) != null))
     else .ref == $pin and (.ref | recordable_ref) end;
   def positive_id: type == "number" and . > 0 and floor == .;
   def only_keys($allowed): (keys - $allowed | length) == 0;
