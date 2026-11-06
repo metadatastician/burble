@@ -247,7 +247,13 @@ edit_file 's/uses: example\/action@v1/uses: example\/action\/subdir@v1/' "$wf/pr
 expect 0 'action uses may include a subpath with a repository-owned record'
 action_workflow
 good_lock
-edit_file "s/^    'example\/action@v1':/    'example\/act!on@v1':/" "$wf/actions.lock"
+cat >> "$wf/actions.lock" <<'LOCK'
+    'example/act!on@v1':
+        ref: 'v1'
+        commit: 'sha1-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+        owner_id: 1
+        repo_id: 2
+LOCK
 expect 1 'dependency record repository names use coordinate syntax'
 good_lock
 printf 'jobs:\n  test:\n    steps:\n      - uses: ./\n' > "$wf/probe.yml"
@@ -270,4 +276,36 @@ expect 1 'unsupported lock schema version is refused'
 good_lock
 edit_file "s/v0.0.3/v0.0.2/" "$wf/actions.lock"
 expect 0 'the reviewed v0.0.2 schema remains supported'
+good_lock
+printf 'unexpected: true\n' >> "$wf/actions.lock"
+expect 1 'unknown root properties are refused'
+good_lock
+printf '        unexpected: true\n' >> "$wf/actions.lock"
+expect 1 'unknown action properties are refused'
+for host in github.com acme.ghe.com; do
+  good_lock
+  printf "        hostname: '%s'\n" "$host" >> "$wf/actions.lock"
+  expect 0 "canonical v0.0.3 hostname is accepted: $host"
+done
+for host in HTTPS://github.com/ Github.com -acme.ghe.com acme-.ghe.com ' github.com ' "$(printf '%064d' 0).ghe.com"; do
+  good_lock
+  printf "        hostname: '%s'\n" "$host" >> "$wf/actions.lock"
+  expect 1 "noncanonical hostname is refused: $host"
+done
+good_lock
+edit_file 's/v0.0.3/v0.0.2/' "$wf/actions.lock"
+printf "        hostname: 'github.com'\n" >> "$wf/actions.lock"
+expect 1 'v0.0.2 does not admit the v0.0.3 hostname field'
+good_lock
+cat >> "$wf/actions.lock" <<'LOCK'
+    'example/helper@v:2':
+        ref: 'v:2'
+        commit: 'sha1-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'
+        owner_id: 1
+        repo_id: 3
+LOCK
+expect 1 'colon in an unused canonical dependency pin is refused'
+printf 'version: v0.0.3\nworkflows:\n    '\''.github/workflows/probe.yml'\'': []\ndependencies: {}\n' > "$wf/actions.lock"
+printf 'jobs:\n  test:\n    steps:\n      - uses: docker://alpine@sha256:%s\n' "$(printf 'a%.0s' {1..64})" > "$wf/probe.yml"
+expect 0 'digest-pinned OCI actions do not require GitHub repository records'
 printf 'passed %s controls\n' "$passed"

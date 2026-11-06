@@ -138,10 +138,14 @@ LOCK_ROWS="$TMP/lock.tsv"
 REF_ROWS="$TMP/uses.tsv"
 lock_yaml_json "$LOCK" > "$TMP/lock.json" || exit 1
 jq -e '
-  def reference: type == "string" and test("^[^/@[:space:]]+/[^@[:space:]]+@[^[:space:]]+$");
-  def coordinate: type == "string" and test("^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+@[^[:space:]]+$");
+  def reference: type == "string" and test("^[^/@:[:space:]]+/[^/@:[:space:]]+@[^:[:space:]]+$");
+  def coordinate: type == "string" and test("^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+@[^:[:space:]]+$");
   def positive_id: type == "number" and . > 0 and floor == .;
-  type == "object" and (.version == "v0.0.2" or .version == "v0.0.3") and
+  def only_keys($allowed): (keys - $allowed | length) == 0;
+  def hostname: type == "string" and test("^(github\\.com|[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\\.ghe\\.com)$");
+  .version as $schema |
+  type == "object" and only_keys(["version", "workflows", "dependencies"]) and
+  ($schema == "v0.0.2" or $schema == "v0.0.3") and
   (.workflows | type == "object") and (.dependencies | type == "object") and
   all(.workflows | to_entries[];
     (.key | test("^\\.github/workflows/[^/]+\\.ya?ml$")) and
@@ -149,11 +153,13 @@ jq -e '
   all(.dependencies | to_entries[];
     (.key | coordinate) and
     (.value | type == "object" and
+      only_keys(["ref", "commit", "owner_id", "repo_id", "uses"] + (if $schema == "v0.0.3" then ["hostname"] else [] end)) and
       (.ref | type == "string" and length > 0) and
       (.commit | type == "string" and test("^sha1-[0-9a-fA-F]{40}$")) and
       (.owner_id | positive_id) and (.repo_id | positive_id) and
+      (if has("hostname") then .hostname | hostname else true end) and
       (if has("uses") then .uses | type == "array" and all(.[]; reference) else true end)))
-' "$TMP/lock.json" >/dev/null || { echo 'actions-lock: malformed workflow/dependency records' >&2; exit 1; }
+' "$TMP/lock.json" >/dev/null || { echo 'actions-lock: unsupported schema or malformed workflow/dependency records' >&2; exit 1; }
 jq -r '
   (.workflows | to_entries[] | . as $wf |
     (["W", $wf.key, ($wf.value | length == 0)] | @tsv),
@@ -203,6 +209,7 @@ function norm(r,   at, path, ref, n, parts) {
   if (at == 0) return ""
   path = substr(r, 1, at - 1); ref = substr(r, at + 1)
   if (path == "" || ref == "") return ""
+  if (path ~ /^docker:\/\//) return "" # OCI image pins are not GitHub action records.
   if (substr(path, 1, 2) == "./" || substr(path, 1, 2) == "$/") return ""   # local action
   if (split(path, parts, "/") < 2) return ""
   # GitHub owner/repository names are case-insensitive; refs are not.
