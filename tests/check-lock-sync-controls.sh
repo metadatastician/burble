@@ -419,4 +419,15 @@ cat >> "$wf/actions.lock" <<'LOCK'
         repo_id: 4
 LOCK
 expect 1 'a disconnected acyclic dependency tree is refused at its root'
+mkdir -p "$fixture/repo/.github/actions"
+printf 'jobs: {}\n' > "$fixture/repo/.github/actions/plain.yml"
+printf 'jobs: {test: {steps: [{uses: ./.github/actions/plain.yml}]}}\n' > "$wf/probe.yml"
+printf 'version: v0.0.3\nworkflows: {.github/workflows/probe.yml: []}\ndependencies: {}\n' > "$wf/actions.lock"
+expect 1 'a regular YAML file cannot stand in for step action metadata'
+printf 'jobs: {}\n' > "$wf/callee.yml"
+printf 'jobs: {child: {uses: ./.github/workflows/callee.yml}}\n' > "$wf/probe.yml"
+printf 'version: v0.0.3\nworkflows: {.github/workflows/probe.yml: [], .github/workflows/callee.yml: []}\ndependencies: {}\n' > "$wf/actions.lock"
+expect 0 'an existing local reusable workflow is accepted at job level'
+printf 'jobs: {test: {steps: [{uses: ./.github/workflows/callee.yml}]}}\n' > "$wf/probe.yml"
+expect 1 'the same local workflow file is refused as a step action'
 printf 'passed %s controls\n' "$passed"

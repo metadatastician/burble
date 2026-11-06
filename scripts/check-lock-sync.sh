@@ -93,30 +93,32 @@ lock_uses() {
     end'
 }
 local_action_paths() {
-  lock_uses "$1" | awk -F'\t' 'substr($2, 1, 2) == "./" { print $2 == "./" ? "." : substr($2, 3) }'
+  lock_uses "$1" | awk -F'\t' 'substr($2, 1, 2) == "./" { print $1 "\t" ($2 == "./" ? "." : substr($2, 3)) }'
 }
 reach_files() {
   local -A seen=()
-  local queue=("$1") f rel a found paths
+  local queue=("$1") f kind rel a found paths
   while [ "${#queue[@]}" -gt 0 ]; do
     f="${queue[0]}"; queue=("${queue[@]:1}")
     [ -n "${seen[$f]:-}" ] && continue
     seen[$f]=1
     printf '%s\n' "$f"
     paths=$(local_action_paths "$f") || return 1
-    while IFS= read -r rel; do
+    while IFS=$'\t' read -r kind rel; do
       [ -n "$rel" ] || continue
       rel="${rel%/}"
+      if [ "$kind" = job ]; then
+        case "$rel" in
+          *.yml|*.yaml)
+            [ -f "$LC_ROOT/$rel" ] && continue ;;
+        esac
+        echo "actions-lock: missing local reusable workflow: $rel" >&2; return 1
+      fi
       found=false
       for a in "$LC_ROOT/$rel/action.yml" "$LC_ROOT/$rel/action.yaml"; do
         if [ -f "$a" ]; then queue+=("$a"); found=true; break; fi
       done
       "$found" && continue
-      case "$rel" in
-        *.yml|*.yaml)
-          [ -f "$LC_ROOT/$rel" ] || { echo "actions-lock: missing local workflow or action metadata: $rel" >&2; return 1; }
-          continue ;;
-      esac
       echo "actions-lock: missing local action metadata: $rel" >&2; return 1
     done <<< "$paths"
   done
