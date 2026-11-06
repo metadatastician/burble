@@ -308,7 +308,8 @@ To stop the stack:
 just down
 ----
 
-NOTE: This checkout has no `.gitmodules` file. The server obtains the
+NOTE: `.gitmodules` declares `tools/affinescript`; VeriSimDB is not a submodule.
+The server obtains the
 VeriSimDB Elixir SDK through the Git dependency in `server/mix.exs`, pinned
 to the same revision as `server/mix.lock`. `mix deps.get` fetches the SDK;
 it does not start a database service. The container service is a separate
