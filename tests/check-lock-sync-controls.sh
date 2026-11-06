@@ -308,4 +308,91 @@ expect 1 'colon in an unused canonical dependency pin is refused'
 printf 'version: v0.0.3\nworkflows:\n    '\''.github/workflows/probe.yml'\'': []\ndependencies: {}\n' > "$wf/actions.lock"
 printf 'jobs:\n  test:\n    steps:\n      - uses: docker://alpine@sha256:%s\n' "$(printf 'a%.0s' {1..64})" > "$wf/probe.yml"
 expect 0 'digest-pinned OCI actions do not require GitHub repository records'
+action_workflow
+good_lock
+edit_file "s/ref: 'v1'/ref: 'v2'/" "$wf/actions.lock"
+expect 1 'a symbolic record ref must match its coordinate'
+for bad in 'main~1' 'v1^' 'refs/tags/v1' 'v1-gabcd' 'bad.lock' 'v1@{1}'; do
+  action_workflow; good_lock
+  edit_file "s#example/action@v1#example/action@$bad#g; s#ref: 'v1'#ref: '$bad'#" "$wf/actions.lock"
+  edit_file "s#example/action@v1#example/action@$bad#g" "$wf/probe.yml"
+  expect 1 "unrecordable ref name is refused: $bad"
+done
+action_workflow; good_lock
+pin=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+edit_file "s/example\/action@v1/example\/action@$pin/g" "$wf/actions.lock"
+edit_file "s/example\/action@v1/example\/action@$pin/g" "$wf/probe.yml"
+expect 1 'SHA coordinates must match the recorded commit'
+edit_file "s/sha1-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/sha1-$pin/" "$wf/actions.lock"
+expect 0 'SHA coordinate may record a matching commit and symbolic tag'
+edit_file "s/ref: 'v1'/ref: '$pin'/" "$wf/actions.lock"
+printf '        uses: []\n' >> "$wf/actions.lock"
+expect 0 'reviewed caller-side SHA-ref representation remains supported'
+edit_file "s/ref: '$pin'/ref: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'/" "$wf/actions.lock"
+expect 1 'a SHA record cannot name an unrelated SHA as its ref'
+action_workflow; good_lock
+printf "        uses: ['example/action@v1']\n" >> "$wf/actions.lock"
+expect 1 'self dependency cycle is refused'
+good_lock
+cat >> "$wf/actions.lock" <<'LOCK'
+        uses: ['example/helper@v2']
+    'example/helper@v2':
+        ref: 'v2'
+        commit: 'sha1-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'
+        owner_id: 1
+        repo_id: 3
+        uses: ['EXAMPLE/ACTION@v1']
+LOCK
+expect 1 'multi-record cycles normalize repository case'
+good_lock
+cat >> "$wf/actions.lock" <<'LOCK'
+        uses: ['example/left@v1', 'example/right@v1']
+    'example/left@v1':
+        ref: 'v1'
+        commit: 'sha1-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'
+        owner_id: 1
+        repo_id: 3
+        uses: ['example/shared@v1']
+    'example/right@v1':
+        ref: 'v1'
+        commit: 'sha1-cccccccccccccccccccccccccccccccccccccccc'
+        owner_id: 1
+        repo_id: 4
+        uses: ['example/shared@v1']
+    'example/shared@v1':
+        ref: 'v1'
+        commit: 'sha1-dddddddddddddddddddddddddddddddddddddddd'
+        owner_id: 1
+        repo_id: 5
+LOCK
+expect 0 'a shared acyclic child is not mistaken for a cycle'
+good_lock
+cat >> "$wf/actions.lock" <<'LOCK'
+        uses: ['example/helper/subdir@v2']
+    'example/helper@v2':
+        ref: 'v2'
+        commit: 'sha1-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'
+        owner_id: 1
+        repo_id: 3
+LOCK
+expect 1 'transitive pins must be repository coordinates'
+cat > "$wf/probe.yml" <<'YAML'
+jobs:
+  test:
+    steps:
+      - uses: "example/action@release'2026"
+YAML
+cat > "$wf/actions.lock" <<'LOCK'
+version: v0.0.3
+workflows:
+    '.github/workflows/probe.yml':
+        - 'example/action@release''2026'
+dependencies:
+    'example/action@release''2026':
+        ref: 'release''2026'
+        commit: 'sha1-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+        owner_id: 1
+        repo_id: 2
+LOCK
+expect 0 'valid apostrophes in ref names remain supported'
 printf 'passed %s controls\n' "$passed"

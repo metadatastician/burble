@@ -138,8 +138,19 @@ LOCK_ROWS="$TMP/lock.tsv"
 REF_ROWS="$TMP/uses.tsv"
 lock_yaml_json "$LOCK" > "$TMP/lock.json" || exit 1
 jq -e '
-  def reference: type == "string" and test("^[^/@:[:space:]]+/[^/@:[:space:]]+@[^:[:space:]]+$");
-  def coordinate: type == "string" and test("^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+@[^:[:space:]]+$");
+  def coordinate: type == "string" and test("^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+@[^:]+$");
+  def full_sha: test("^([0-9a-fA-F]{40}|[0-9a-fA-F]{64})$");
+  def recordable_ref:
+    type == "string" and length > 0 and . != "@" and
+    (startswith("-") or startswith("/") or startswith("refs/") or endswith("/") or endswith(".") or contains("..") or contains("@{") or contains("//") or full_sha or test("-g[0-9a-fA-F]{4,}$") | not) and
+    (explode | all(.[]; . as $c | $c >= 32 and $c != 127 and ([32,126,94,58,63,42,91,92] | index($c) | not))) and
+    all(split("/")[]; (startswith(".") or endswith(".lock") | not));
+  def matches_ref($key):
+    ($key | index("@")) as $at | $key[$at + 1:] as $pin |
+    if ($pin | full_sha) then
+      (.commit | ascii_downcase) == ("sha1-" + ($pin | ascii_downcase)) and
+      ((.ref | recordable_ref) or .ref == $pin)
+    else .ref == $pin and (.ref | recordable_ref) end;
   def positive_id: type == "number" and . > 0 and floor == .;
   def only_keys($allowed): (keys - $allowed | length) == 0;
   def hostname: type == "string" and test("^(github\\.com|[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\\.ghe\\.com)$");
@@ -149,17 +160,32 @@ jq -e '
   (.workflows | type == "object") and (.dependencies | type == "object") and
   all(.workflows | to_entries[];
     (.key | test("^\\.github/workflows/[^/]+\\.ya?ml$")) and
-    (.value | type == "array" and all(.[]; reference))) and
+    (.value | type == "array" and all(.[]; coordinate))) and
   all(.dependencies | to_entries[];
     (.key | coordinate) and
-    (.value | type == "object" and
+    (.key as $key | .value | type == "object" and
       only_keys(["ref", "commit", "owner_id", "repo_id", "uses"] + (if $schema == "v0.0.3" then ["hostname"] else [] end)) and
       (.ref | type == "string" and length > 0) and
       (.commit | type == "string" and test("^sha1-[0-9a-fA-F]{40}$")) and
       (.owner_id | positive_id) and (.repo_id | positive_id) and
       (if has("hostname") then .hostname | hostname else true end) and
-      (if has("uses") then .uses | type == "array" and all(.[]; reference) else true end)))
+      matches_ref($key) and
+      (if has("uses") then .uses | type == "array" and all(.[]; coordinate) else true end)))
 ' "$TMP/lock.json" >/dev/null || { echo 'actions-lock: unsupported schema or malformed workflow/dependency records' >&2; exit 1; }
+# Keep parent/child relations for cycle detection; membership alone only proves
+# closure. Memoized three-state DFS visits each normalized record once.
+jq -e '
+  def norm: index("@") as $at | (.[:$at] | ascii_downcase) + .[$at:];
+  def visit($graph; $node):
+    if .[$node] == 1 then error("dependency cycle at " + $node)
+    elif .[$node] == 2 then .
+    else .[$node] = 1 |
+      reduce ($graph[$node] // [])[] as $child (.; visit($graph; $child)) |
+      .[$node] = 2
+    end;
+  (.dependencies | to_entries | map({key:(.key | norm), value:(.value.uses // [] | map(norm))}) | from_entries) as $graph |
+  reduce ($graph | keys[]) as $node ({}; visit($graph; $node)) | true
+' "$TMP/lock.json" >/dev/null || { echo 'actions-lock: cyclic dependency graph' >&2; exit 1; }
 jq -r '
   (.workflows | to_entries[] | . as $wf |
     (["W", $wf.key, ($wf.value | length == 0)] | @tsv),
