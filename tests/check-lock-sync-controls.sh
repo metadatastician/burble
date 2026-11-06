@@ -7,6 +7,11 @@ trap 'rm -rf -- "$fixture"' EXIT
 wf="$fixture/repo/.github/workflows"
 mkdir -p "$wf"
 passed=0
+edit_file() {
+  local expression=$1 file=$2
+  sed -E "$expression" "$file" > "$fixture/edited"
+  mv "$fixture/edited" "$file"
+}
 expect() {
   local wanted=$1 label=$2 status=0
   bash "$repo/scripts/check-lock-sync.sh" "$wf" > "$fixture/output" 2>&1 || status=$?
@@ -145,28 +150,55 @@ for value in null '' false '[null]'; do
   printf "workflows:\n    '.github/workflows/probe.yml': %s\ndependencies: {}\n" "$value" > "$wf/actions.lock"
   expect 1 "malformed workflow value is refused: $value"
 done
+printf "workflows:\n    '.github/workflows/probe.yml': []\ndependencies: {}\n" > "$wf/actions.lock"
+for suffix in yml yaml; do
+  mkdir -p "$fixture/repo/.github/actions/valid.$suffix"
+  printf 'runs:\n  using: composite\n  steps: []\n' > "$fixture/repo/.github/actions/valid.$suffix/action.yml"
+  printf 'jobs:\n  test:\n    steps:\n      - uses: ./.github/actions/valid.%s\n' "$suffix" > "$wf/probe.yml"
+  expect 0 "local action directory may end in .$suffix"
+done
 action_workflow
 for field in ref commit owner_id repo_id; do
   good_lock
-  sed -i "/^        $field:/d" "$wf/actions.lock"
+  edit_file "/^        $field:/d" "$wf/actions.lock"
   expect 1 "missing required record field: $field"
 done
 good_lock
-sed -i "s/^    'example\/action@v1':$/    'example\/action@v1': null/; /^        \(ref\|commit\|owner_id\|repo_id\):/d" "$wf/actions.lock"
+edit_file "s/^    'example\/action@v1':$/    'example\/action@v1': null/; /^        (ref|commit|owner_id|repo_id):/d" "$wf/actions.lock"
 expect 1 'null dependency record'
 good_lock
-sed -i "s/^        commit:.*/        commit: 'sha1-short'/" "$wf/actions.lock"
+edit_file "s/^        commit:.*/        commit: 'sha1-short'/" "$wf/actions.lock"
 expect 1 'malformed commit digest'
 good_lock
-sed -i "s/^        owner_id:.*/        owner_id: '1'/" "$wf/actions.lock"
+edit_file "s/^        owner_id:.*/        owner_id: '1'/" "$wf/actions.lock"
 expect 1 'quoted owner id is not an integer'
 good_lock
-sed -i "/^        ref:/a\\        ref: 'v1'" "$wf/actions.lock"
+edit_file "/^        ref:/p" "$wf/actions.lock"
 expect 1 'duplicate required record field'
 good_lock
-sed -i 's/example\/action@v1/example\/action@Release@2026/g' "$wf/probe.yml" "$wf/actions.lock"
-sed -i "s/ref: 'v1'/ref: 'Release@2026'/" "$wf/actions.lock"
+edit_file 's/example\/action@v1/example\/action@Release@2026/g' "$wf/probe.yml"
+edit_file 's/example\/action@v1/example\/action@Release@2026/g' "$wf/actions.lock"
+edit_file "s/ref: 'v1'/ref: 'Release@2026'/" "$wf/actions.lock"
 expect 0 'embedded at-sign preserves the complete ref'
-sed -i "s/^    'example\/action@Release@2026':/    'example\/action@release@2026':/" "$wf/actions.lock"
+edit_file "s/^    'example\/action@Release@2026':/    'example\/action@release@2026':/" "$wf/actions.lock"
 expect 1 'embedded at-sign does not hide a ref-case mismatch'
+action_workflow
+good_lock
+edit_file '/^        (ref|commit|owner_id|repo_id):/s/$/ # provenance/' "$wf/actions.lock"
+expect 0 'inline comments on required fields are accepted'
+edit_file 's/example\/action@v1/example\/action@v#1/g' "$wf/probe.yml"
+good_lock
+edit_file "s/example\/action@v1/example\/action@v#1/g; s/ref: 'v1'/ref: 'v#1' # literal hash/" "$wf/actions.lock"
+expect 0 'hash inside a quoted ref is preserved'
+action_workflow
+for value in "'''" "'unclosed" '"v1"junk' '"\q"' '"\U00110000"' '"\uD800"'; do
+  good_lock
+  edit_file '/^        ref:/d' "$wf/actions.lock"
+  printf '        ref: %s\n' "$value" >> "$wf/actions.lock"
+  expect 1 "malformed quoted scalar is refused: $value"
+done
+good_lock
+edit_file '/^        ref:/d' "$wf/actions.lock"
+printf '        ref: "%s"\n' '\u0076\u0031' >> "$wf/actions.lock"
+expect 0 'valid escaped Unicode ref scalar is accepted'
 printf 'passed %s controls\n' "$passed"
