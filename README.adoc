@@ -267,13 +267,30 @@ server. Jitsi and Matrix bridges are roadmap items, not code.
 **Embeddable client library** — Drop Burble voice into your game, workspace, or
 app. Used in IDApTIK (asymmetric co-op game) and PanLL (panel workspace).
 
+== Implementation languages and outstanding debt
+
+The server is Elixir; the native kernel tests use Zig 0.15.2. The browser
+client includes existing ReScript sources and generated `.res.mjs` modules
+under `client/lib/` and `client/web/`. Bun is the supported package manager;
+the build commands are documented in those directories. ReScript remains
+legacy implementation debt, not an undocumented new language dependency.
+
+The separate link:admin/README.adoc[admin dashboard] is quarantined reference
+code: its declared build entry points and Gossamer host are absent. It is
+not part of the runnable P2P client. Do not infer a working admin application
+from the presence of its sources.
+
+link:DEBT.md[The debt register] records LIC-1: nine existing files declare
+AGPL while the repository licence is MPL-2.0. Existing declarations require
+manual owner review under `burble_chora.deed`; the mismatch remains open.
+
 == Quick Start
 
 === One-command container deployment
 
 [source,bash]
 ----
-git clone --recurse-submodules https://github.com/hyperpolymath/burble && cd burble
+git clone https://github.com/metadatastician/burble && cd burble
 just deploy       # builds selur-compose if needed (~3 min first run), then brings up the stack
 # Server:     http://localhost:4000
 # Web client: http://localhost:8080
@@ -291,11 +308,11 @@ To stop the stack:
 just down
 ----
 
-NOTE: `--recurse-submodules` is required. VeriSimDB is integrated as a
-submodule under `tools/nextgen-databases` (paralleling `tools/affinescript`)
-because Burble's anti-purpose forbids vendoring it in-tree. If you already
-cloned without it, run `git submodule update --init --recursive` — or just
-run `./setup.sh`, which now does that automatically.
+NOTE: This checkout has no `.gitmodules` file. The server obtains the
+VeriSimDB Elixir SDK through the Git dependency in `server/mix.exs`, pinned
+to the same revision as `server/mix.lock`. `mix deps.get` fetches the SDK;
+it does not start a database service. The container service is a separate
+deployment concern; inspect the compose configuration before deploying it.
 
 === Development setup
 
@@ -306,7 +323,7 @@ for the full package list and per-distro install commands.
 
 [source,bash]
 ----
-# Prerequisites: Elixir 1.17+, Zig 0.15+, Bun
+# Prerequisites: Elixir 1.17+, Zig 0.15.2 (the CI-tested build API), Bun
 # (plus system packages — see CONTRIBUTING.md)
 
 # Test Zig kernel sources in the estate-required safety mode

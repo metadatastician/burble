@@ -367,7 +367,11 @@ doctor:
     }
     check "just"              just      "1.25"
     check "git"               git       "2.40"
-    check "Zig"               zig       "0.13"
+    if bash ./scripts/check-zig-version.sh; then
+        PASS=$((PASS + 1))
+    else
+        FAIL=$((FAIL + 1))
+    fi
     check "cmake"             cmake     "3.20"
     check "perl"              perl      "5.30"
     check "make"              make      "4.0"
