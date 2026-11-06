@@ -147,10 +147,10 @@ YAML
 done
 printf 'jobs: {}\n' > "$wf/probe.yml"
 for value in null '' false '[null]'; do
-  printf "workflows:\n    '.github/workflows/probe.yml': %s\ndependencies: {}\n" "$value" > "$wf/actions.lock"
+  printf "version: 'v0.0.3'\nworkflows:\n    '.github/workflows/probe.yml': %s\ndependencies: {}\n" "$value" > "$wf/actions.lock"
   expect 1 "malformed workflow value is refused: $value"
 done
-printf "workflows:\n    '.github/workflows/probe.yml': []\ndependencies: {}\n" > "$wf/actions.lock"
+printf "version: 'v0.0.3'\nworkflows:\n    '.github/workflows/probe.yml': []\ndependencies: {}\n" > "$wf/actions.lock"
 for suffix in yml yaml; do
   mkdir -p "$fixture/repo/.github/actions/valid.$suffix"
   printf 'runs:\n  using: composite\n  steps: []\n' > "$fixture/repo/.github/actions/valid.$suffix/action.yml"
@@ -226,7 +226,7 @@ env:
   uses: ./ordinary-environment-data
 YAML
 expect 0 'ordinary uses keys in environment and action inputs are ignored'
-printf "workflows:\n    '.github/workflows/probe.yml': []\ndependencies: {}\n" > "$wf/actions.lock"
+printf "version: 'v0.0.3'\nworkflows:\n    '.github/workflows/probe.yml': []\ndependencies: {}\n" > "$wf/actions.lock"
 for scalar in '|' '>-'; do
   cat > "$wf/probe.yml" <<YAML
 jobs:
@@ -258,6 +258,16 @@ mv "$fixture/cut" "$wf/actions.lock"
 printf 'dependencies: {}\n' >> "$wf/actions.lock"
 expect 1 'root composite cannot hide a missing remote dependency record'
 rm "$fixture/repo/action.yml"
-printf "workflows:\n    '.github/workflows/probe.yml': []\ndependencies: {}\n" > "$wf/actions.lock"
+printf "version: 'v0.0.3'\nworkflows:\n    '.github/workflows/probe.yml': []\ndependencies: {}\n" > "$wf/actions.lock"
 expect 1 'root local action without metadata is refused'
+action_workflow
+good_lock
+edit_file '/^version:/d' "$wf/actions.lock"
+expect 1 'missing lock schema version is refused'
+good_lock
+edit_file "s/v0.0.3/v9.9.9/" "$wf/actions.lock"
+expect 1 'unsupported lock schema version is refused'
+good_lock
+edit_file "s/v0.0.3/v0.0.2/" "$wf/actions.lock"
+expect 0 'the reviewed v0.0.2 schema remains supported'
 printf 'passed %s controls\n' "$passed"

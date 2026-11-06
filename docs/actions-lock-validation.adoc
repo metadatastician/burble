@@ -11,6 +11,7 @@ inputs and shell examples named `uses` are ordinary data. Every workflow
 needs a lock entry, including `[]` for no recorded dependencies. Every recorded
 edge requires complete provenance at every depth. Flow lists, comments,
 quoting and aliases are decoded; duplicate keys and multiple documents fail.
+Only reviewed schema versions `v0.0.2` and `v0.0.3` are accepted.
 
 Unrecorded reusable calls retain the estate's measured callee-owned-lock
 policy. They do not waive the workflow key, recorded step dependencies or
