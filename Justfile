@@ -367,7 +367,11 @@ doctor:
     }
     check "just"              just      "1.25"
     check "git"               git       "2.40"
-    check "Zig"               zig       "0.13"
+    if bash {{quote(justfile_directory() + "/scripts/check-zig-version.sh")}}; then
+        PASS=$((PASS + 1))
+    else
+        FAIL=$((FAIL + 1))
+    fi
     check "cmake"             cmake     "3.20"
     check "perl"              perl      "5.30"
     check "make"              make      "4.0"
@@ -384,7 +388,8 @@ doctor:
     echo ""
     echo "  Result: $PASS passed, $FAIL failed, $WARN warnings"
     if [ "$FAIL" -gt 0 ]; then
-        echo "  Run 'just heal' to attempt automatic repair."
+        echo "  Install or select the required tool versions above, including Zig 0.15.2."
+        echo "  'just heal' only attempts to install just."
         exit 1
     fi
     echo "  All required tools present."

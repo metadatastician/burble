@@ -44,3 +44,4 @@ updates:
       - "/scripts"
     schedule:
       interval: "weekly"
+    open-pull-requests-limit: 3

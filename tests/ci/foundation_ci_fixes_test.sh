@@ -126,12 +126,12 @@ assert_equals \
     "3" \
     "$(dependabot_limit mix)"
 assert_equals \
-    "npm updates are capped at three open pull requests" \
+    "Bun updates are capped at three open pull requests" \
     "3" \
-    "$(dependabot_limit npm)"
+    "$(dependabot_limit bun)"
 assert_equals \
-    "pip updates are capped at three open pull requests" \
-    "3" \
+    "No inactive pip update entry is introduced" \
+    "" \
     "$(dependabot_limit pip)"
 
 assert_equals \

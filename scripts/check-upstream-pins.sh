@@ -63,7 +63,7 @@ fi
 # Prints the file and returns 0, or returns 1 without printing.
 fetch() {
   local repo="$1" sha="$2" path="$3"
-  if [ -n "$STANDARDS_SRC" ] && [ "$repo" = "hyperpolymath/standards" ]; then
+  if [ -n "$STANDARDS_SRC" ] && { [ "$repo" = "hyperpolymath/standards" ] || [ "$repo" = "metadatastician/standards" ]; }; then
     git -C "$STANDARDS_SRC" cat-file -e "${sha}^{commit}" 2>/dev/null || return 1
     git -C "$STANDARDS_SRC" show "${sha}:${path}" 2>/dev/null
     return $?

@@ -178,7 +178,9 @@ defmodule Burble.MixProject do
       # For Hex: {:verisim_client, "~> 0.1"}
       # For development: path dep to local checkout.
       {:verisim_client,
-       git: "https://github.com/hyperpolymath/verisimdb.git", sparse: "connectors/clients/elixir"},
+       git: "https://github.com/hyperpolymath/verisimdb.git",
+       ref: "df526526a7813870127360a5d1fdbaa766202a3c",
+       sparse: "connectors/clients/elixir"},
 
       # Formally verified safety functions (optional — falls back to stdlib).
       # For Hex: {:proven, "~> 0.10", optional: true}
