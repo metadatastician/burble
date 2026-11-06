@@ -201,4 +201,41 @@ good_lock
 edit_file '/^        ref:/d' "$wf/actions.lock"
 printf '        ref: "%s"\n' '\u0076\u0031' >> "$wf/actions.lock"
 expect 0 'valid escaped Unicode ref scalar is accepted'
+good_lock
+printf 'dependencies: {}\n' >> "$wf/actions.lock"
+expect 1 'duplicate dependency section is refused'
+good_lock
+printf 'workflows: {}\n' >> "$wf/actions.lock"
+expect 1 'duplicate workflow section is refused'
+good_lock
+printf "        uses: ['example/helper@v2']\n" >> "$wf/actions.lock"
+expect 1 'flow-style transitive dependency cannot omit its record'
+cat >> "$wf/actions.lock" <<'LOCK'
+    'example/helper@v2':
+        ref: 'v2'
+        commit: 'sha1-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'
+        owner_id: 1
+        repo_id: 3
+LOCK
+expect 0 'flow-style transitive dependency with its record passes'
+good_lock
+cat >> "$wf/probe.yml" <<'YAML'
+        with:
+          uses: ./ordinary-input-data
+env:
+  uses: ./ordinary-environment-data
+YAML
+expect 0 'ordinary uses keys in environment and action inputs are ignored'
+printf "workflows:\n    '.github/workflows/probe.yml': []\ndependencies: {}\n" > "$wf/actions.lock"
+for scalar in '|' '>-'; do
+  cat > "$wf/probe.yml" <<YAML
+jobs:
+  test:
+    steps:
+      - run: $scalar
+          echo 'sample YAML'
+          uses: example/not-a-dependency@v1
+YAML
+  expect 0 "sample external use in block scalar is ignored: $scalar"
+done
 printf 'passed %s controls\n' "$passed"

@@ -28,6 +28,7 @@
 # Exit 0 only when every workflow's `uses:` set equals its lockfile set exactly.
 # Any mismatch exits 1. There is no warn-only mode: a desync means GitHub will
 # refuse to start the run, so it must fail the job.
+# Requires Bash 4+, jq and Mike Farah yq v4; see docs/actions-lock-validation.adoc.
 
 set -euo pipefail
 
@@ -60,35 +61,51 @@ fi
 # so it is not followed. Paths resolve from the repository root, as GitHub
 # resolves them from the workspace.
 LC_ROOT="$(cd "$WF_DIR/../.." 2>/dev/null && pwd)" || LC_ROOT=.
-# local_action_paths FILE: the path after `./` of every local `uses:` in FILE.
-local_action_paths() {
-  awk -v q="'" 'BEGIN { block = -1 } {
-    # A uses: inside a literal/folded scalar is sample text, not a YAML field.
-    indent = match($0, /[^ ]/) - 1
-    if (indent < 0) next
-    if (block >= 0) { if (indent > block) next; block = -1 }
-    line = $0; sub(/[[:space:]]+#.*$/, "", line)
-    if (line ~ /:[[:space:]]*[|>][1-9+-]*[[:space:]]*$/ || line ~ /^[[:space:]]*-[[:space:]]*[|>][1-9+-]*[[:space:]]*$/) {
-      block = indent
-      if (line ~ /:[[:space:]]*[|>]/ && match(line, /^[ ]*-[ ]+/)) block = RLENGTH
-      next
+# Parse one YAML document and reject duplicate mapping keys before converting
+# to JSON. yq exposes node keys without discarding duplicates; JSON alone does
+# not. jq handles typed fields after YAML comments, aliases and quoting decode.
+lock_yaml_json() {
+  command -v yq >/dev/null && command -v jq >/dev/null || {
+    echo 'actions-lock: requires Mike Farah yq v4 and jq' >&2; return 1;
+  }
+  yq --version | grep -Eq 'github.com/mikefarah/yq/.*version v4\.' || {
+    echo 'actions-lock: requires Mike Farah yq v4' >&2; return 1;
+  }
+  yq -o=json '[... | select(tag == "!!map") | keys]' "$1" |
+    jq -se 'length == 1 and all(.[0][]; length == (unique | length))' >/dev/null || {
+      echo "actions-lock: malformed YAML, multiple documents or duplicate mapping keys: $1" >&2; return 1;
     }
-    if (!match(line, /^[[:space:]]*-?[[:space:]]*uses:[[:space:]]*/)) next
-    raw = substr(line, RLENGTH + 1)
-    sub("[\"" q "],[[:space:]]*$", "", raw)
-    gsub("^[\"" q "]|[\"" q "]$", "", raw); sub(/[[:space:]]+$/, "", raw)
-    if (substr(raw, 1, 2) == "./") print substr(raw, 3)
-  }' "$1"
+  yq -o=json '.' "$1" | jq -sce 'if length == 1 then .[0] else error("expected one YAML document") end'
+}
+# Only actual job/step fields count. Ordinary env/input maps, strings and
+# block scalars can contain the word uses without declaring a dependency.
+lock_uses() {
+  lock_yaml_json "$1" | jq -r '
+    def emit($kind):
+      if has("uses") then .uses |
+        if type != "string" or length == 0 or test("[\t\r\n]") then error("uses must be a nonempty single-line string")
+        else [$kind, .] | @tsv end
+      else empty end;
+    if type != "object" then error("workflow/action must be a mapping") else
+      (.jobs // {} | .[] | emit("job")),
+      (.jobs // {} | .[] | .steps // [] | .[] | emit("step")),
+      (.runs.steps? // [] | .[] | emit("step"))
+    end'
+}
+local_action_paths() {
+  lock_uses "$1" | awk -F'\t' 'substr($2, 1, 2) == "./" { print substr($2, 3) }'
 }
 reach_files() {
   local -A seen=()
-  local queue=("$1") f rel a found
+  local queue=("$1") f rel a found paths
   while [ "${#queue[@]}" -gt 0 ]; do
     f="${queue[0]}"; queue=("${queue[@]:1}")
     [ -n "${seen[$f]:-}" ] && continue
     seen[$f]=1
     printf '%s\n' "$f"
+    paths=$(local_action_paths "$f") || return 1
     while IFS= read -r rel; do
+      [ -n "$rel" ] || continue
       rel="${rel%/}"
       found=false
       for a in "$LC_ROOT/$rel/action.yml" "$LC_ROOT/$rel/action.yaml"; do
@@ -101,20 +118,56 @@ reach_files() {
           continue ;;
       esac
       echo "actions-lock: missing local action metadata: $rel" >&2; return 1
-    done < <(local_action_paths "$f")
+    done <<< "$paths"
   done
 }
 # ── end of the shared block ───────────────────────────────────────────────────
 
 # reach map: "file<TAB>workflow" — each file whose uses: count for that workflow.
-MAP="$(mktemp)"; trap 'rm -f "$MAP"' EXIT
+TMP="$(mktemp -d)"; trap 'rm -rf -- "$TMP"' EXIT
+MAP="$TMP/reach.tsv"
 for wf in "${WORKFLOWS[@]}"; do
   reached=$(reach_files "$wf") || exit 1
   while IFS= read -r f; do printf '%s\t%s\n' "$f" "$wf"; done <<< "$reached"
 done > "$MAP"
 mapfile -t SCAN < <(cut -f1 "$MAP" | LC_ALL=C sort -u)
 
-awk -v lockfile="$LOCK" -v mapfile="$MAP" -v closurefile="$CLOSURE" '
+# Materialize typed YAML fields for the relational comparison below. No YAML
+# spelling (block/flow, quoting or comments) can omit a dependency edge.
+LOCK_ROWS="$TMP/lock.tsv"
+REF_ROWS="$TMP/uses.tsv"
+lock_yaml_json "$LOCK" > "$TMP/lock.json" || exit 1
+jq -e '
+  def reference: type == "string" and test("^[^/@[:space:]]+/[^@[:space:]]+@[^[:space:]]+$");
+  def positive_id: type == "number" and . > 0 and floor == .;
+  type == "object" and (.workflows | type == "object") and (.dependencies | type == "object") and
+  all(.workflows | to_entries[];
+    (.key | test("^\\.github/workflows/[^/]+\\.ya?ml$")) and
+    (.value | type == "array" and all(.[]; reference))) and
+  all(.dependencies | to_entries[];
+    (.key | reference) and
+    (.value | type == "object" and
+      (.ref | type == "string" and length > 0) and
+      (.commit | type == "string" and test("^sha1-[0-9a-fA-F]{40}$")) and
+      (.owner_id | positive_id) and (.repo_id | positive_id) and
+      (if has("uses") then .uses | type == "array" and all(.[]; reference) else true end)))
+' "$TMP/lock.json" >/dev/null || { echo 'actions-lock: malformed workflow/dependency records' >&2; exit 1; }
+jq -r '
+  (.workflows | to_entries[] | . as $wf |
+    (["W", $wf.key, ($wf.value | length == 0)] | @tsv),
+    ($wf.value[] | ["L", $wf.key, .] | @tsv)),
+  (.dependencies | to_entries[] |
+    (["R", .key] | @tsv), (.value.uses[]? | ["E", .] | @tsv))
+' "$TMP/lock.json" > "$LOCK_ROWS"
+: > "$REF_ROWS"
+for f in "${SCAN[@]}"; do
+  refs=$(lock_uses "$f") || exit 1
+  while IFS= read -r ref; do
+    [ -n "$ref" ] && printf '%s\t%s\n' "$f" "$ref"
+  done <<< "$refs"
+done > "$REF_ROWS"
+
+awk -F'\t' -v lockfile="$LOCK_ROWS" -v refsfile="$REF_ROWS" -v mapfile="$MAP" -v closurefile="$CLOSURE" '
 BEGIN {
   # owners[file]: the workflows whose uses: set includes this file. WFS: the
   # workflows themselves, in glob order (a workflow is its own first owner).
@@ -154,149 +207,39 @@ function norm(r,   at, path, ref, n, parts) {
   return tolower(parts[1] "/" parts[2]) "@" ref
 }
 
-# Validate required scalar fields in the block-record format the generator emits.
-# Pin/ref correspondence is additionally checked by check-lock-pin-contract.sh.
-function quoted_value(s,   q, i, c, e, digits, hex, tail, code, j) {
-  q = substr(s, 1, 1)
-  if (q != "\047" && q != "\"") return ""
-  for (i = 2; i <= length(s); i++) {
-    c = substr(s, i, 1)
-    if (c ~ /[[:cntrl:]]/) return ""
-    if (q == "\047" && c == q && substr(s, i + 1, 1) == q) { i++; continue }
-    if (q == "\"" && c == "\\") {
-      e = substr(s, ++i, 1)
-      if (e == "") return ""
-      digits = e == "x" ? 2 : (e == "u" ? 4 : (e == "U" ? 8 : 0))
-      if (digits) {
-        hex = substr(s, i + 1, digits)
-        if (length(hex) != digits || hex !~ /^[0-9a-fA-F]+$/) return ""
-        code = 0
-        for (j = 1; j <= digits; j++) code = code * 16 + index("0123456789abcdef", tolower(substr(hex, j, 1))) - 1
-        if (code > 1114111 || (code >= 55296 && code <= 57343)) return ""
-        i += digits
-      } else if (e != "\\" && e != "\"" && e != "/" && index("0abtnvfre N_LP", e) == 0) return ""
-      continue
-    }
-    if (c == q) {
-      tail = substr(s, i + 1)
-      if (tail !~ /^([[:space:]]+(#.*)?)?$/) return ""
-      return substr(s, 2, i - 2)
-    }
-  }
-  return ""
-}
-function finish_record(   valid, f) {
-  if (record_name == "") return
-  valid = mapping_ok && dep != "" && record_seen[dep] == 1
-  for (f in required_field) if (field_count[f] != 1 || !field_ok[f]) valid = 0
-  if (valid) haverec[dep] = 1
-  else {
-    if (dep != "") delete haverec[dep]
-    bad_record[record_name] = 1
-  }
-  record_name = ""; dep = ""
-}
-BEGIN {
-  required_field["ref"] = 1; required_field["commit"] = 1
-  required_field["owner_id"] = 1; required_field["repo_id"] = 1
-}
-
-# ---------- pass 1: the lockfile ----------
+# ---------- parsed lock relations ----------
 FILENAME == lockfile {
-  if ($0 ~ /^workflows:[[:space:]]*$/) { finish_record(); inwf = 1; indep = 0; next }
-  if ($0 ~ /^dependencies:[[:space:]]*$/) { finish_record(); inwf = 0; indep = 1; next }
-  if ($0 ~ /^[a-z_]+:/) { finish_record(); inwf = 0; indep = 0; next }
-  if (indep) {
-    if (match($0, /^    \047[^\047]+\047:/)) {
-      finish_record()
-      mapping_ok = substr($0, RLENGTH + 1) ~ /^[[:space:]]*(#.*)?$/
-      s = substr($0, 6); i = index(s, "\047")
-      record_name = substr(s, 1, i - 1)
-      dep = norm(record_name)
-      record_seen[dep]++
-      delete field_count; delete field_ok
-    } else if (record_name != "" && match($0, /^        (ref|commit|owner_id|repo_id):/)) {
-      f = substr($0, 9, RLENGTH - 9)
-      value = substr($0, RLENGTH + 1)
-      sub(/^[[:space:]]*/, "", value); sub(/[[:space:]]*$/, "", value)
-      field_count[f]++
-      if (f == "ref") field_ok[f] = quoted_value(value) != ""
-      else if (f == "commit") {
-        value = quoted_value(value)
-        field_ok[f] = length(value) == 45 && substr(value, 1, 5) == "sha1-" && substr(value, 6) ~ /^[0-9a-fA-F]+$/
-      } else field_ok[f] = value ~ /^[1-9][0-9]*([[:space:]]+#.*)?$/
-    } else if (match($0, /^            - \047/)) {
-      s = substr($0, RLENGTH + 1); i = index(s, "\047")
-      if (i > 0) {
-        r = norm(substr(s, 1, i - 1))
-        if (r != "") want[r] = 1
-      }
-    }
+  split($0, row, "\t")
+  if (row[1] == "W") { seen_path[row[2]]++; empty_path[row[2]] = row[3] == "true" }
+  else if (row[1] == "L") {
+    r = norm(row[3]); lock[row[2], r] = 1; want[r] = 1; lockcount[row[2]]++
+  } else if (row[1] == "R") {
+    r = norm(row[2]); record_seen[r]++
+    if (record_seen[r] == 1) haverec[r] = 1
+    else { delete haverec[r]; bad_record[r] = 1 }
+  } else if (row[1] == "E") want[norm(row[2])] = 1
+  next
+}
+# ---------- parsed job/step uses, attributed to every calling workflow ----------
+FILENAME == refsfile {
+  split($0, row, "\t")
+  nown = split(substr(owners[row[1]], 2), own, SUBSEP)
+  raw = row[3]
+  if (raw ~ /^\$\//) {
+    for (i = 1; i <= nown; i++) dollar[own[i]] = dollar[own[i]] " " raw
     next
   }
-  if (!inwf) next
-
-  # "    '.github/workflows/x.yml':"  or  "... : []"
-  # POSIX awk only: mawk has no 3-argument match(), so the key is extracted
-  # by hand (drop the indent and the opening quote, then cut at the next quote).
-  if (match($0, /^    \047[^\047]+\047:/)) {
-    s = substr($0, 6)
-    i = index(s, "\047")
-    cur = substr(s, 1, i - 1)
-    seen_path[cur]++
-    value = substr($0, RLENGTH + 1)
-    if (value ~ /^[[:space:]]*\[\][[:space:]]*(#.*)?$/) empty_path[cur] = 1
-    else if (value !~ /^[[:space:]]*(#.*)?$/) bad_workflow[cur] = 1
-    next
+  n = norm(raw)
+  if (n == "") next
+  for (i = 1; i <= nown; i++) {
+    uses[own[i], n] = 1
+    if (row[2] == "job") joblist[own[i]] = joblist[own[i]] " " n
+    else useslist[own[i]] = useslist[own[i]] " " n
   }
-  if (cur != "" && match($0, /^        - \047/)) {
-    s = substr($0, RLENGTH + 1)
-    i = index(s, "\047")
-    if (i > 0 && substr(s, i + 1) ~ /^[[:space:]]*$/) {
-      r = norm(substr(s, 1, i - 1))
-      if (r == "" || empty_path[cur]) bad_workflow[cur] = 1
-      lock[cur, r] = 1
-      if (r != "") want[r] = 1
-      lockcount[cur]++
-    } else bad_workflow[cur] = 1
-    next
-  }
-  if (cur != "" && $0 !~ /^[[:space:]]*(#.*)?$/) bad_workflow[cur] = 1
   next
 }
 
-# ---------- pass 2: the workflow YAML and the local composites it reaches ----------
-# Each file credits its uses: to every workflow that reaches it.
-FNR == 1 { nown = split(substr(owners[FILENAME], 2), own, SUBSEP) }
-{
-  line = $0
-  sub(/[[:space:]]+#.*$/, "", line)              # strip trailing comment
-  if (match(line, /^[[:space:]]*-?[[:space:]]*uses:[[:space:]]*/)) {
-    raw = substr(line, RSTART + RLENGTH)
-    # KYAML puts a comma after a quoted scalar. Strip the YAML delimiter
-    # before unquoting, otherwise the closing quote becomes part of the ref.
-    sub(/["\047],[[:space:]]*$/, "", raw)
-    gsub(/^["\047]|["\047]$/, "", raw)
-    gsub(/[[:space:]]+$/, "", raw)
-    if (raw ~ /^\$\//) {                           # known corruption
-      for (i = 1; i <= nown; i++) dollar[own[i]] = dollar[own[i]] " " raw
-      next
-    }
-    n = norm(raw)
-    if (n == "") next
-    for (i = 1; i <= nown; i++) {
-      uses[own[i], n] = 1
-      # A job-level reusable call is owner/repo/.github/workflows/<f>@ref; a
-      # step-level action is anything else. The split is load-bearing: clause 1
-      # requires only the second kind (see the note on clause 1 below).
-      if (raw ~ /\/\.github\/workflows\/[^@]+\.ya?ml@/) joblist[own[i]] = joblist[own[i]] " " n
-      else                                                    useslist[own[i]] = useslist[own[i]] " " n
-    }
-  }
-}
-
 END {
-  finish_record()
   bad = 0
   for (key in seen_path) {
     if (seen_path[key] != 1 || (!empty_path[key] && lockcount[key] == 0)) bad_workflow[key] = 1
@@ -396,7 +339,7 @@ END {
     }
   }
   for (r in bad_record) {
-    printf "FAIL actions.lock\n     malformed dependency record: %s (require ref, sha1 commit, and positive integer owner_id/repo_id exactly once)\n", r
+    printf "FAIL actions.lock\n     ambiguous dependency record coordinate: %s\n", r
     bad = 1
   }
   if (jnote != "") print "NOTE: job-level reusable refs absent from the lockfile (not fatal; see standards#968):" jnote
@@ -415,4 +358,4 @@ END {
   print "and every lockfile entry is referenced. Job-level reusable-workflow refs and"
   print "refs used through local composite actions included."
 }
-' "$LOCK" "${SCAN[@]}"
+' "$LOCK_ROWS" "$REF_ROWS"
