@@ -427,7 +427,12 @@
       rooms.forEach(room => {
         const btn = document.createElement('button');
         btn.className = 'room-btn' + (state.currentRoom === room.id ? ' active' : '');
-        btn.innerHTML = `${room.name} <span class="count">${room.participant_count}</span>`;
+        // Room labels come from other users. Keep them out of the HTML parser.
+        btn.textContent = room.name;
+        const count = document.createElement('span');
+        count.className = 'count';
+        count.textContent = String(room.participant_count);
+        btn.append(' ', count);
         btn.onclick = () => joinRoom(room.id, room.name);
         list.appendChild(btn);
       });
