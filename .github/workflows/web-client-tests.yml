@@ -6,7 +6,7 @@
 # web-client-tests.yml — web-client test suite (Bun)
 #
 # Bun is the estate's default runner as of 2026-10. This is the only runner
-# here: one job, the whole suite at client/web/tests/ — 12 files, 97 tests —
+# here: one job for the whole suite at client/web/tests/,
 # including the four suites that spawn helper servers (relay rendezvous, AI
 # bridge API, bridge security, bridge round-trip). Those used to be Deno-only
 # because they called `new Deno.Command("deno", …)`; they now go through
@@ -34,6 +34,7 @@ on:
       - 'client/web/**'
       - 'client/lib/**'
       - 'signaling/**'
+      - 'server/priv/static/index.html'
       - '.github/workflows/web-client-tests.yml'
   push:
     branches: [main, master]
@@ -41,6 +42,7 @@ on:
       - 'client/web/**'
       - 'client/lib/**'
       - 'signaling/**'
+      - 'server/priv/static/index.html'
       - '.github/workflows/web-client-tests.yml'
   workflow_dispatch:
 permissions:
