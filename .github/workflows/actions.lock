@@ -18,7 +18,7 @@ workflows:
         - 'haskell-actions/setup@v2.12.1'
     '.github/workflows/codeql.yml':
         - 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1'
-        - 'github/codeql-action@9b3254085494b55a0f7c4c2b3d2d52cc712ce370'
+        - 'github/codeql-action@1fc58d04a4d4374f921bdac573c3811c240f9c26'
     '.github/workflows/conformance.yml':
         - 'actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333'
     '.github/workflows/dependency-audit.yml':
@@ -33,7 +33,7 @@ workflows:
         - 'actions/checkout@v7.0.1'
         - 'erlef/setup-beam@v1.24.1'
         - 'mlugg/setup-zig@v2.2.1'
-        - 'taiki-e/install-action@682ce6c3c696a4cd5168a05f98e51aa02b877941'
+        - 'taiki-e/install-action@b80e2bb2635f28eb98b9fce1e2f0887e1535c6b2'
     '.github/workflows/governance.yml': []
     '.github/workflows/hypatia-scan.yml':
         - 'actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333'
@@ -58,7 +58,7 @@ workflows:
         - 'actions/checkout@v7.0.1'
     '.github/workflows/oikosbot.yml':
         - 'actions/checkout@v7.0.1'
-        - 'github/codeql-action@9b3254085494b55a0f7c4c2b3d2d52cc712ce370'
+        - 'github/codeql-action@1fc58d04a4d4374f921bdac573c3811c240f9c26'
         - 'hyperpolymath/oikosbot@3fdad0c2b027f328e784ecf08caf62bf80a784c1'
     '.github/workflows/publish-verisimdb.yml':
         - 'actions/attest-build-provenance@v4.2.2'
@@ -192,9 +192,9 @@ dependencies:
         commit: 'sha1-54075bcc5e249e4758d363f27d099f55d843f124'
         owner_id: 47606891
         repo_id: 331103973
-    'github/codeql-action@9b3254085494b55a0f7c4c2b3d2d52cc712ce370':
-        ref: 'v4.39.1'
-        commit: 'sha1-9b3254085494b55a0f7c4c2b3d2d52cc712ce370'
+    'github/codeql-action@1fc58d04a4d4374f921bdac573c3811c240f9c26':
+        ref: 'v4.39.2'
+        commit: 'sha1-1fc58d04a4d4374f921bdac573c3811c240f9c26'
         owner_id: 9919
         repo_id: 259445878
     'haskell-actions/setup@v2.12.1':
@@ -266,8 +266,8 @@ dependencies:
         commit: 'sha1-efb35369e0ad2afab669f228072c1b0d510eae64'
         owner_id: 2242
         repo_id: 204253808
-    'taiki-e/install-action@682ce6c3c696a4cd5168a05f98e51aa02b877941':
-        ref: 'v2.89.1'
-        commit: 'sha1-682ce6c3c696a4cd5168a05f98e51aa02b877941'
+    'taiki-e/install-action@b80e2bb2635f28eb98b9fce1e2f0887e1535c6b2':
+        ref: 'v2.90.0'
+        commit: 'sha1-b80e2bb2635f28eb98b9fce1e2f0887e1535c6b2'
         owner_id: 43724913
         repo_id: 442947557
