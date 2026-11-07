@@ -57,6 +57,15 @@ jobs:
           git checkout -q FETCH_HEAD
           echo "checked out ${SHA}"
 
+      - name: Install pinned YAML parser
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/lock-tools"
+          curl --proto '=https' --proto-redir '=https' --tlsv1.2 -fsSL --retry 3 https://github.com/mikefarah/yq/releases/download/v4.54.1/yq_linux_amd64 -o "$RUNNER_TEMP/lock-tools/yq"
+          echo "8e34fc298390875de416e6a4afcb8cabeceb25d9aa8506c1a2f9353cf702ea5f  $RUNNER_TEMP/lock-tools/yq" | sha256sum --check
+          chmod u+x "$RUNNER_TEMP/lock-tools/yq"
+          echo "$RUNNER_TEMP/lock-tools" >> "$GITHUB_PATH"
+
       - name: Verify lockfile synchronisation
         run: |
           set -euo pipefail

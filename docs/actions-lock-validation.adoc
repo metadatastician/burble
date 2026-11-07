@@ -1,0 +1,21 @@
+// SPDX-License-Identifier: CC-BY-SA-4.0
+= Actions lock validation
+
+Run `bash scripts/check-lock-sync.sh` from the repository root. The checker
+requires Bash 4 or later, jq and Mike Farah yq v4. Lock CI installs yq 4.54.1
+from the official release and verifies its SHA-256 digest before use.
+
+The checker parses YAML before comparing actual job/step `uses` fields and
+local-composite dependencies with the lock. Environment variables, action
+inputs and shell examples named `uses` are ordinary data. Every workflow
+needs a lock entry, including `[]` for no recorded dependencies. Every recorded
+edge requires complete provenance at every depth. Flow lists, comments,
+quoting and aliases are decoded; duplicate keys and multiple documents fail.
+Only reviewed schema versions `v0.0.2` and `v0.0.3` are accepted.
+
+Unrecorded reusable calls retain the estate's measured callee-owned-lock
+policy. They do not waive the workflow key, recorded step dependencies or
+transitive records. Reviewed remote closure remains separate evidence.
+
+Refresh the lock with the official generator, review its diff and rerun the
+checker. Do not invent dependency digests or repository IDs to satisfy a gate.
