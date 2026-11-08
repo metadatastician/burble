@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: CC-BY-SA-4.0
 
 = Issue Templates
-:description: Standardized issue reporting for paint-type
+:description: Standardized issue reporting for burble
 
 This directory contains GitHub issue templates that provide structure and guidance
 for reporting bugs, requesting features, asking questions, and submitting other
-types of issues to the paint-type repository.
+types of issues to the burble repository.
 
 == Purpose
 

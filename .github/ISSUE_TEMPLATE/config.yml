@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-# Issue template chooser configuration for metadatastician/paint-type
+# Issue template chooser configuration for metadatastician/burble
 blank_issues_enabled: true
 contact_links:
   - name: Discussions
-    url: https://github.com/metadatastician/paint-type/discussions
+    url: https://github.com/metadatastician/burble/discussions
     about: Ask questions, share ideas, or start a conversation in Discussions.
   - name: Security Vulnerabilities
-    url: https://github.com/metadatastician/paint-type/security/advisories/new
+    url: https://github.com/metadatastician/burble/security/advisories/new
     about: Report security vulnerabilities privately via GitHub Security Advisories.

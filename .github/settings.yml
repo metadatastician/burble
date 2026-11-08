@@ -7,14 +7,14 @@
 # applied by the probot/settings app when changes are pushed to the default
 # branch. Install the app at: https://github.com/apps/settings
 #
-# Repository settings — configured for paint-type.
+# Repository settings — configured for metadatastician/burble.
 
 # ─── Repository Settings ───────────────────────────────────────────────────────
 
 repository:
-  name: "paint-type"
-  description: "Cross-platform open-source image editor — capable enough for real work, simple enough to reach for without thinking"
-  homepage: "https://github.com/metadatastician/paint-type"
+  name: "burble"
+  description: "Voice first. Friction last. Complexity optional. Pre-production, self-hosted voice communications platform with browser-based WebRTC joining and spatial audio, designed for low latency, privacy and operator control."
+  homepage: "https://metadatastician.github.io/burble/"
   private: false
   has_issues: true
   has_projects: true
@@ -112,25 +112,9 @@ labels:
     description: "Formal proof has been completed and verified"
 
 # ─── Branch Protection ─────────────────────────────────────────────────────────
-
-branches:
-  - name: "main"
-    protection:
-      required_pull_request_reviews:
-        required_approving_review_count: 1
-        dismiss_stale_reviews: true
-        require_code_owner_reviews: true
-        require_last_push_approval: true
-        required_review_thread_resolution: true
-      required_status_checks:
-        strict: true
-        contexts:
-          - "Cargo check + clippy + fmt"
-          - "Cargo test"
-          - "analyze (javascript-typescript, none)"
-          - "openssf-compliance"
-      enforce_admins: true
-      required_signatures: true
-      restrictions: null
-      allow_force_pushes: false
-      allow_deletions: false
+#
+# The active repository ruleset "Secret-Scan-Floor" (24310509) is authoritative
+# for branch protection: https://github.com/metadatastician/burble/rules/24310509
+# It requires "scan / gitleaks" on the default branch. Organization rulesets also
+# apply. Do not duplicate or override those rules with a probot/settings
+# `branches:` block; the copied status checks do not belong here.

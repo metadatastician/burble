@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: CC-BY-SA-4.0
 
 = Discussion Templates
-:description: Structured community discussions for paint-type
+:description: Structured community discussions for burble
 
 This directory contains GitHub discussion templates that provide structure and
-context for community conversations in the paint-type repository.
+context for community conversations in the burble repository.
 
 == Purpose
 

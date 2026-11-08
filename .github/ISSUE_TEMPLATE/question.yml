@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-# Question issue template for metadatastician/paint-type
+# Question issue template for metadatastician/burble
 name: Question
 description: Ask a question about usage or behaviour
 title: "[Question]: "
@@ -10,7 +10,7 @@ body:
     attributes:
       value: |
         Have a question? You can also ask in
-        [Discussions](https://github.com/metadatastician/paint-type/discussions)
+        [Discussions](https://github.com/metadatastician/burble/discussions)
         for broader conversations.
 
   - type: textarea
