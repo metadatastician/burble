@@ -1,6 +1,6 @@
 # AI Manifest - Level 2: .github/DISCUSSION_TEMPLATE
 
-This is the AI manifest for the `.github/DISCUSSION_TEMPLATE/` directory (Level 2) of paint-type.
+This is the AI manifest for the `.github/DISCUSSION_TEMPLATE/` directory (Level 2) of burble.
 
 ## Purpose
 
@@ -10,7 +10,7 @@ community conversations and provide context for different discussion topics.
 ## Authority Split
 
 - **Central protocol authority:** `standards/` repository discussion template standards
-- **Local integration authority (this directory):** paint-type specific discussion templates
+- **Local integration authority (this directory):** burble specific discussion templates
 
 ## Canonical Files
 

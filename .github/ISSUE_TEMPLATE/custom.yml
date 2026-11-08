@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-# Custom issue template for metadatastician/paint-type
+# Custom issue template for metadatastician/burble
 name: Other
 description: Report an issue that does not fit the other categories
 title: ""
