@@ -194,7 +194,7 @@ defmodule Burble.MixProject do
       {:phoenix_live_dashboard, "~> 0.8"},
 
       # Rate limiting
-      {:hammer, "~> 6.2"},
+      {:hammer, "~> 7.5"},
 
       # Optional native dependencies — disabled in this build because
       # Mix's :optional flag is a parent-application hint, not a skip-if-
