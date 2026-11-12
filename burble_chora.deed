@@ -3,7 +3,7 @@
 (repo-deed
   :schema-version "1.0.0"
   :canonical-name "burble"
-  :repo-uuid #u8"gv-clade-index:github.com/metadatastician/burble"
+  :repo-uuid #uuid"1e207a32-dd26-8c8a-b8d9-5f77f88dbd58"
   :beholding-chora #u5"estate/chora"
   (identity :owner "metadatastician" :primary-forge github)
   (front-doors :human "README.adoc" :agent ".machine_readable/0-AI-MANIFEST.a2ml")
