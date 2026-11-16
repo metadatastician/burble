@@ -26,14 +26,14 @@ workflows:
         - 'dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8'
     '.github/workflows/dogfood-gate.yml':
         - 'actions/checkout@v7.0.1'
-        - 'hyperpolymath/deed-ecosystem@f7a40a4d5cc82b2e73f861119baa6818d77a448d'
-        - 'hyperpolymath/k9-ecosystem@89f3c2702f4f650a92aa7411502f38da06abd562'
+        - 'hyperpolymath/deed-ecosystem@4cb8886be67cf0d67e150679d1213ea519c3806f'
+        - 'hyperpolymath/k9-ecosystem@20f6be5b5a14a48680b236955b5c4ad9033d00d4'
     '.github/workflows/elixir-ci.yml':
         - 'actions/cache@v6.1.0'
         - 'actions/checkout@v7.0.1'
         - 'erlef/setup-beam@v1.24.1'
         - 'mlugg/setup-zig@v2.2.1'
-        - 'taiki-e/install-action@3a3daafd3b7f23b8f65d9f5ba2db203fb59b79e2'
+        - 'taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39'
     '.github/workflows/governance.yml': []
     '.github/workflows/hypatia-scan.yml':
         - 'actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333'
@@ -196,14 +196,14 @@ dependencies:
         commit: 'sha1-0f8e8c99d88aeb3fbfd523f1ef2c6f762d10d64d'
         owner_id: 75048950
         repo_id: 623796603
-    'hyperpolymath/deed-ecosystem@f7a40a4d5cc82b2e73f861119baa6818d77a448d':
+    'hyperpolymath/deed-ecosystem@4cb8886be67cf0d67e150679d1213ea519c3806f':
         ref: 'main'
-        commit: 'sha1-f7a40a4d5cc82b2e73f861119baa6818d77a448d'
+        commit: 'sha1-4cb8886be67cf0d67e150679d1213ea519c3806f'
         owner_id: 6759885
         repo_id: 1275649586
-    'hyperpolymath/k9-ecosystem@89f3c2702f4f650a92aa7411502f38da06abd562':
+    'hyperpolymath/k9-ecosystem@20f6be5b5a14a48680b236955b5c4ad9033d00d4':
         ref: 'main'
-        commit: 'sha1-89f3c2702f4f650a92aa7411502f38da06abd562'
+        commit: 'sha1-20f6be5b5a14a48680b236955b5c4ad9033d00d4'
         owner_id: 6759885
         repo_id: 1275650185
     'hyperpolymath/oikosbot@3fdad0c2b027f328e784ecf08caf62bf80a784c1':
@@ -241,8 +241,8 @@ dependencies:
         commit: 'sha1-8a0cd651e5b2365bd640854a3fa5dfc70e4875f3'
         owner_id: 2242
         repo_id: 204253808
-    'taiki-e/install-action@3a3daafd3b7f23b8f65d9f5ba2db203fb59b79e2':
-        ref: 'v2.90.2'
-        commit: 'sha1-3a3daafd3b7f23b8f65d9f5ba2db203fb59b79e2'
+    'taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39':
+        ref: 'v2.90.3'
+        commit: 'sha1-cfdb7ed4ccc7c7dce37759eae89dc5674b469b39'
         owner_id: 43724913
         repo_id: 442947557
