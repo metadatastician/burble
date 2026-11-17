@@ -4,7 +4,7 @@
   :schema-version "1.0.0"
   :canonical-name "burble"
   :repo-uuid #uuid"1e207a32-dd26-8c8a-b8d9-5f77f88dbd58"
-  :beholding-chora #u5"estate/chora"
+  :beholding-chora #uuid"1642c392-8eac-8e3f-b762-2898b9344228"
   (identity :owner "metadatastician" :primary-forge github)
   (front-doors :human "README.adoc" :agent ".machine_readable/0-AI-MANIFEST.a2ml")
   (authority
